@@ -245,7 +245,7 @@ async fn overview(
         JOIN environments e ON e.id = s.environment_id
         JOIN projects p ON p.id = e.project_id
         LEFT JOIN rudder_images i ON i.service_id = s.id
-        WHERE s.kind = 'application'
+        WHERE s.kind IN ('application', 'compose')
         GROUP BY s.id, p.name, e.name, s.name, s.image_auto_deploy
         HAVING COUNT(i.id) > 0 OR s.image_auto_deploy
         ORDER BY MAX(i.created_at) DESC NULLS LAST, path

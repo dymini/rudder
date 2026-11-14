@@ -454,7 +454,10 @@ function Panel({
       return service.kind === "database" ? (
         <DatabasePanel service={service as unknown as Schemas["ServiceView"]} />
       ) : service.kind === "compose" ? (
-        <StackOverview serviceId={id} />
+        <>
+          <StackOverview serviceId={id} />
+          <RudderImagesCard service={service} />
+        </>
       ) : (
         <>
           <DeployImageCard service={service} />

@@ -81,13 +81,23 @@ A plain *Deploy* never builds on its own: compose reuses an image it already has
 
 ### Following and stopping an action
 
-Actions run in the background and appear under Deployments. Only one runs per stack at a time. The output of `docker compose` (image pulls, build steps, container start-up) is written to the deployment while the command runs, so the Deployments tab shows it live, opens the running deployment's log by itself and follows the newest line. Environment values are masked in it. Each deployment keeps the last 1 MiB of its output; the list shows the last 200 000 characters and `GET /api/v1/services/{id}/deployments/{deployment}/logs` returns all of it. Logs for each compose service are on the Logs tab.
+Actions run in the background and appear under Deployments. Only one runs per stack at a time; if another start or Rudder Image deploy arrives while an action is already running, the newest request is queued (replacing any earlier queued deploy) and runs immediately when the active action finishes. The output of `docker compose` (image pulls, build steps, container start-up) is written to the deployment while the command runs, so the Deployments tab shows it live, opens the running deployment's log by itself and follows the newest line. Environment values are masked in it. Each deployment keeps the last 1 MiB of its output; the list shows the last 200 000 characters and `GET /api/v1/services/{id}/deployments/{deployment}/logs` returns all of it. Logs for each compose service are on the Logs tab.
 
 **Cancel** (or `POST /api/v1/services/{id}/stack/cancel`) stops the `docker compose` process; the deployment ends as `cancelled`. Containers that had already been replaced stay as they are, and the stack goes back to `running` when it was running before. A stack that was not running before (a first deploy that is cancelled, or one that had been stopped) is `stopped`. The stack status changes in the same moment as the deployment, so it does not stay on Deploying after the action is already over. An action that runs longer than `RUDDER_STACK_TIMEOUT_SECS` (default 3600, `0` for no limit) is stopped the same way and recorded as `failed`. Stacks on remote servers show their output when the agent finishes the command, not line by line, and cancelling them stops waiting rather than killing the remote process. If the panel restarts during an action, the deployment is marked `failed` ("interrupted by process restart").
 
 ### Deploy a pushed image (Rudder Image)
 
-`rudder push` also works for a Compose service. The image is stored in the Image Store as for an application, and a deploy loads it onto the stack's server and runs `docker compose up -d`, which recreates the services whose image changed. Name the pushed image in the compose file (by default `rudder-image/<service name>:<tag>`, or the `image_ref` you pass to the push). The service's image policy decides whether a push deploys at once or waits for `rudder deploy`.
+`rudder push`, `rudder deploy [--image <tag>]`, and `rudder images rollback <tag>` work seamlessly for Compose stacks. The image archive is stored in Cloudflare R2 as for an application; on deploy, Rudder loads the archive onto the stack's server, writes `RUDDER_IMAGE_TAG` and `RUDDER_IMAGE_REF` (plus per-image `RUDDER_IMAGE_TAG_<SLUG>` and `RUDDER_IMAGE_REF_<SLUG>`) into the stack's generated `.env`, and runs `docker compose up -d`, recreating only the compose services whose image changed.
+
+Reference the injected variable once in your Compose file so you never have to edit YAML tags manually on each release:
+
+```yaml
+services:
+  api:
+    image: rudder-image/my-api:${RUDDER_IMAGE_TAG}
+```
+
+Rudder recognizes `RUDDER_IMAGE_TAG` and `RUDDER_IMAGE_REF` (and their `_<SLUG>` variants) as built-in variables so they are never flagged as missing, records the deployed image on the service and deployment history, and protects the active image from R2 retention pruning. The **Rudder Image** card on the stack's General tab lets you configure `auto_deploy`, retention, and deploy any stored version.
 
 ### Deploy on push
 

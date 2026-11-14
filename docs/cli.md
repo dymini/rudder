@@ -176,6 +176,7 @@ When `rudder push` runs:
 - Otherwise, `rudder push` streams the archive with upload progress and automatic retry on transient network or `502`/`503`/`504` errors.
 - Rudder verifies the `expected_sha256` digest on the panel before registering the version in the database (deleting the R2 object if the digest mismatches, so a failed push never leaves a half-registered image version).
 - Rudder prunes older objects in R2 beyond `r2_keep_count` while protecting both the newest image and the image currently deployed on the service.
+- `rudder deploy [<service>] [--image TAG]` deploys the latest (or specified) version from Cloudflare R2 for both **application** and **compose** services — and automatically re-uploads a local version if it was pruned from R2. On Compose stacks, Rudder injects `RUDDER_IMAGE_TAG` and `RUDDER_IMAGE_REF` into `.env` before running `docker compose up -d` and streams deployment logs until completion.
 - If your panel is protected by **Cloudflare Access**, either add a Bypass policy for `/api/v1/*` (Rudder still requires `Authorization: Bearer rdr_...` on every API endpoint) or export `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` from a Cloudflare Access Service Token.
 
 ---
