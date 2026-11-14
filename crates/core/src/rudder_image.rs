@@ -257,10 +257,7 @@ pub fn compose_image_env_vars(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|img| {
-            let tag = img
-                .rsplit_once(':')
-                .map_or(img, |(_, tag)| tag)
-                .to_owned();
+            let tag = img.rsplit_once(':').map_or(img, |(_, tag)| tag).to_owned();
             (tag, img.to_owned())
         })
         .or_else(|| recent_images.first().cloned());
@@ -370,10 +367,7 @@ mod tests {
                 "rudder-image/knotree-api:20261113-old".to_owned(),
             ),
         ];
-        let vars = compose_image_env_vars(
-            Some("rudder-image/knotree-api:20261113-old"),
-            &recent,
-        );
+        let vars = compose_image_env_vars(Some("rudder-image/knotree-api:20261113-old"), &recent);
         assert_eq!(
             vars,
             vec![

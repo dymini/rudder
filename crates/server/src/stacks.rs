@@ -220,11 +220,7 @@ impl StackRuns {
     /// Queue `next` behind the currently running action for `id`, replacing any previously
     /// queued run (`Ok(Some(prev))`). Returns `Err(())` if no action is currently running in
     /// [`StackRuns`] for `id`.
-    fn enqueue(
-        &self,
-        id: Uuid,
-        next: QueuedStackRun,
-    ) -> Result<Option<QueuedStackRun>, ()> {
+    fn enqueue(&self, id: Uuid, next: QueuedStackRun) -> Result<Option<QueuedStackRun>, ()> {
         let mut running = self.running.lock().map_err(|_| ())?;
         let Some(run) = running.get_mut(&id) else {
             return Err(());
@@ -672,14 +668,13 @@ pub(crate) async fn load_rudder_image_vars(
     state: &AppState,
     id: Uuid,
 ) -> Result<Vec<(String, String)>, ApiError> {
-    let current_image: Option<String> = sqlx::query_scalar(
-        "SELECT current_image FROM services WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(ApiError::database)?
-    .flatten();
+    let current_image: Option<String> =
+        sqlx::query_scalar("SELECT current_image FROM services WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(ApiError::database)?
+            .flatten();
 
     let recent_images: Vec<(String, String)> = sqlx::query_as::<_, (String, String)>(
         r#"

@@ -319,8 +319,7 @@ async fn stack_view(state: &AppState, id: Uuid) -> Result<StackView, ApiError> {
     let keys = stacks::env_keys(state, id).await?;
     let refs = compose_variable_refs(&stack.spec.compose_yaml);
     let variables: Vec<String> = refs.iter().map(|variable| variable.name.clone()).collect();
-    let is_provided =
-        |name: &str| keys.iter().any(|k| k == name) || is_rudder_image_env_var(name);
+    let is_provided = |name: &str| keys.iter().any(|k| k == name) || is_rudder_image_env_var(name);
     let missing_variables = refs
         .iter()
         .filter(|variable| !variable.has_default && !is_provided(&variable.name))

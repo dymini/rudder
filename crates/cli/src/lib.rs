@@ -1662,8 +1662,10 @@ async fn images_cmd(
                 &service,
                 &service_spec,
                 Some(&tag),
-                true,
-                Duration::from_secs(1800),
+                WaitOptions {
+                    wait: true,
+                    timeout: Duration::from_secs(1800),
+                },
                 ctx,
                 out,
             )
@@ -1732,13 +1734,18 @@ async fn images_cmd(
     }
 }
 
+#[derive(Clone, Copy)]
+struct WaitOptions {
+    wait: bool,
+    timeout: Duration,
+}
+
 async fn deploy_or_repush_r2_image(
     api: &Api,
     service: &Service,
     service_spec: &str,
     tag: Option<&str>,
-    wait: bool,
-    timeout: Duration,
+    wait_opts: WaitOptions,
     ctx: &Context,
     out: &mut (dyn Write + Send),
 ) -> anyhow::Result<()> {
@@ -1774,9 +1781,9 @@ async fn deploy_or_repush_r2_image(
                     service_spec.to_owned(),
                     "--deploy".into(),
                     "--timeout".into(),
-                    timeout.as_secs().to_string(),
+                    wait_opts.timeout.as_secs().to_string(),
                 ];
-                if !wait {
+                if !wait_opts.wait {
                     push_args.push("--no-wait".into());
                 }
                 return push_cmd(api, push_args, ctx, out).await;
@@ -1796,7 +1803,16 @@ async fn deploy_or_repush_r2_image(
             json!({ "tag": tag }),
         )
         .await?;
-    wait_for_deployment(api, &service.id, &done, wait, timeout, ctx, out).await
+    wait_for_deployment(
+        api,
+        &service.id,
+        &done,
+        wait_opts.wait,
+        wait_opts.timeout,
+        ctx,
+        out,
+    )
+    .await
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -2138,7 +2154,13 @@ async fn deploy(
                     .as_deref()
                     .map(|img| img.rsplit_once(':').map_or(img, |(_, tag)| tag));
                 return deploy_or_repush_r2_image(
-                    api, &service, &spec, tag_arg, wait, timeout, ctx, out,
+                    api,
+                    &service,
+                    &spec,
+                    tag_arg,
+                    WaitOptions { wait, timeout },
+                    ctx,
+                    out,
                 )
                 .await;
             }
@@ -2167,8 +2189,7 @@ async fn deploy(
                     &service,
                     &spec,
                     image.as_deref(),
-                    wait,
-                    timeout,
+                    WaitOptions { wait, timeout },
                     ctx,
                     out,
                 )
@@ -2739,13 +2760,17 @@ mod tests {
         .unwrap();
         let text = String::from_utf8(out).unwrap();
         assert!(
-            text.contains("Deploying knotree/prod/knotree-api from Cloudflare R2 (prod-20261114-abc)"),
+            text.contains(
+                "Deploying knotree/prod/knotree-api from Cloudflare R2 (prod-20261114-abc)"
+            ),
             "{text}"
         );
         assert!(text.contains("wrote rudder-compose.yml and .env"), "{text}");
         assert!(text.contains("Container started"), "{text}");
         assert!(
-            text.contains("Deployment dep-1 succeeded (rudder-image/knotree-api:prod-20261114-abc)"),
+            text.contains(
+                "Deployment dep-1 succeeded (rudder-image/knotree-api:prod-20261114-abc)"
+            ),
             "{text}"
         );
 
