@@ -8,6 +8,8 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-14
+
 ### Added
 - **Automatic `RUDDER_IMAGE_TAG` and `RUDDER_IMAGE_REF` injection for Compose stacks.** Reference `image: rudder-image/<service>:${RUDDER_IMAGE_TAG}` (or `${RUDDER_IMAGE_REF}`, plus per-image `${RUDDER_IMAGE_TAG_<SLUG>}`) in your Compose file once; every Rudder Image deploy automatically writes the active tag into the stack's `.env` file, records the deployed image on the stack and deployment history, and protects the active image from R2 retention pruning without manual YAML or environment edits.
 - **Overlapping Compose deployments are queued and coalesced instead of failing.** Triggering a deploy (including `rudder push --deploy` or `auto_deploy`) while a stack action is already running now queues the newest deploy to run immediately after the current action finishes, superseding any older queued deploy instead of rejecting the request with `409 deploy_in_progress`.
