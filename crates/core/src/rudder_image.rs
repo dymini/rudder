@@ -196,6 +196,101 @@ pub fn select_images_to_prune_protecting(
     prune
 }
 
+/// Returns `true` when `name` is a built-in Rudder Image variable automatically
+/// injected into a Compose stack's `.env` file (`RUDDER_IMAGE_TAG`, `RUDDER_IMAGE_REF`,
+/// or a per-image variant `RUDDER_IMAGE_TAG_<SLUG>` / `RUDDER_IMAGE_REF_<SLUG>`).
+pub fn is_rudder_image_env_var(name: &str) -> bool {
+    matches!(name, "RUDDER_IMAGE_TAG" | "RUDDER_IMAGE_REF")
+        || name
+            .strip_prefix("RUDDER_IMAGE_TAG_")
+            .or_else(|| name.strip_prefix("RUDDER_IMAGE_REF_"))
+            .is_some_and(|slug| {
+                !slug.is_empty()
+                    && slug
+                        .bytes()
+                        .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+            })
+}
+
+/// Convert an image reference (such as `rudder-image/knotree-api:20261114-abc`) into an
+/// uppercase environment variable suffix slug (such as `KNOTREE_API`).
+pub fn image_env_slug(image_ref: &str) -> Option<String> {
+    let without_tag = image_ref
+        .rsplit_once(':')
+        .map_or(image_ref, |(repo, _)| repo);
+    let repo_name = without_tag
+        .rsplit_once('/')
+        .map_or(without_tag, |(_, name)| name)
+        .trim();
+    if repo_name.is_empty() {
+        return None;
+    }
+    let mut slug = String::with_capacity(repo_name.len());
+    let mut prev_underscore = false;
+    for ch in repo_name.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_uppercase());
+            prev_underscore = false;
+        } else if !prev_underscore && !slug.is_empty() {
+            slug.push('_');
+            prev_underscore = true;
+        }
+    }
+    while slug.ends_with('_') {
+        slug.pop();
+    }
+    (!slug.is_empty()).then_some(slug)
+}
+
+/// Compute the built-in Rudder Image environment variables (`RUDDER_IMAGE_TAG`,
+/// `RUDDER_IMAGE_REF`, and per-image `RUDDER_IMAGE_TAG_<SLUG>` / `RUDDER_IMAGE_REF_<SLUG>`)
+/// to inject into a Compose stack's `.env` file.
+///
+/// `current_image` is the service's active `current_image` (if any), and `recent_images`
+/// are `(tag, image_ref)` pairs ordered newest-first from `rudder_images`.
+pub fn compose_image_env_vars(
+    current_image: Option<&str>,
+    recent_images: &[(String, String)],
+) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    let primary: Option<(String, String)> = current_image
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|img| {
+            let tag = img
+                .rsplit_once(':')
+                .map_or(img, |(_, tag)| tag)
+                .to_owned();
+            (tag, img.to_owned())
+        })
+        .or_else(|| recent_images.first().cloned());
+
+    let Some((primary_tag, primary_ref)) = primary else {
+        return out;
+    };
+
+    out.push(("RUDDER_IMAGE_TAG".to_owned(), primary_tag.clone()));
+    out.push(("RUDDER_IMAGE_REF".to_owned(), primary_ref.clone()));
+
+    let mut seen_slugs = std::collections::BTreeSet::new();
+    if let Some(slug) = image_env_slug(&primary_ref) {
+        seen_slugs.insert(slug.clone());
+        out.push((format!("RUDDER_IMAGE_TAG_{slug}"), primary_tag));
+        out.push((format!("RUDDER_IMAGE_REF_{slug}"), primary_ref));
+    }
+
+    for (tag, image_ref) in recent_images {
+        let Some(slug) = image_env_slug(image_ref) else {
+            continue;
+        };
+        if seen_slugs.insert(slug.clone()) {
+            out.push((format!("RUDDER_IMAGE_TAG_{slug}"), tag.clone()));
+            out.push((format!("RUDDER_IMAGE_REF_{slug}"), image_ref.clone()));
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,6 +343,62 @@ mod tests {
         assert_eq!(
             select_images_to_prune_protecting(&entries, Some(2), None, Some("v3"), now),
             vec!["img-2", "img-4"]
+        );
+    }
+
+    #[test]
+    fn compose_image_env_vars_derive_tag_ref_and_per_image_slugs() {
+        assert!(is_rudder_image_env_var("RUDDER_IMAGE_TAG"));
+        assert!(is_rudder_image_env_var("RUDDER_IMAGE_REF"));
+        assert!(is_rudder_image_env_var("RUDDER_IMAGE_TAG_KNOTREE_API"));
+        assert!(is_rudder_image_env_var("RUDDER_IMAGE_REF_DOC_QUEST"));
+        assert!(!is_rudder_image_env_var("RUDDER_IMAGE_TAG_"));
+        assert!(!is_rudder_image_env_var("RUDDER_IMAGE_TAG_lower"));
+        assert!(!is_rudder_image_env_var("DATABASE_URL"));
+
+        let recent = vec![
+            (
+                "20261114-abc".to_owned(),
+                "rudder-image/knotree-api:20261114-abc".to_owned(),
+            ),
+            (
+                "20261114-def".to_owned(),
+                "rudder-image/doc-quest:20261114-def".to_owned(),
+            ),
+            (
+                "20261113-old".to_owned(),
+                "rudder-image/knotree-api:20261113-old".to_owned(),
+            ),
+        ];
+        let vars = compose_image_env_vars(
+            Some("rudder-image/knotree-api:20261113-old"),
+            &recent,
+        );
+        assert_eq!(
+            vars,
+            vec![
+                ("RUDDER_IMAGE_TAG".to_owned(), "20261113-old".to_owned()),
+                (
+                    "RUDDER_IMAGE_REF".to_owned(),
+                    "rudder-image/knotree-api:20261113-old".to_owned()
+                ),
+                (
+                    "RUDDER_IMAGE_TAG_KNOTREE_API".to_owned(),
+                    "20261113-old".to_owned()
+                ),
+                (
+                    "RUDDER_IMAGE_REF_KNOTREE_API".to_owned(),
+                    "rudder-image/knotree-api:20261113-old".to_owned()
+                ),
+                (
+                    "RUDDER_IMAGE_TAG_DOC_QUEST".to_owned(),
+                    "20261114-def".to_owned()
+                ),
+                (
+                    "RUDDER_IMAGE_REF_DOC_QUEST".to_owned(),
+                    "rudder-image/doc-quest:20261114-def".to_owned()
+                ),
+            ]
         );
     }
 }

@@ -14,9 +14,9 @@ use std::time::Duration;
 
 use axum::http::StatusCode;
 use rudder_core::{
-    redact, render_env_file, transform_compose, validate_branch, validate_compose_service,
-    validate_git_url, validate_name, validate_rel_path, ComposeAction, ComposeOptions, LogSink,
-    NodeDriver, RegistryAuth, MAX_COMPOSE_BYTES,
+    compose_image_env_vars, redact, render_env_file, transform_compose, validate_branch,
+    validate_compose_service, validate_git_url, validate_name, validate_rel_path, ComposeAction,
+    ComposeOptions, LogSink, NodeDriver, RegistryAuth, MAX_COMPOSE_BYTES,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -606,13 +606,52 @@ pub(crate) async fn load_env(
 }
 
 pub async fn env_keys(state: &AppState, id: Uuid) -> Result<Vec<String>, ApiError> {
-    sqlx::query_scalar!(
+    let mut keys = sqlx::query_scalar!(
         r#"SELECT key FROM env_vars WHERE service_id = $1 AND is_build_secret = FALSE ORDER BY key"#,
         id
     )
     .fetch_all(&state.pool)
     .await
-    .map_err(ApiError::database)
+    .map_err(ApiError::database)?;
+    for (k, _) in load_rudder_image_vars(state, id).await? {
+        if !keys.contains(&k) {
+            keys.push(k);
+        }
+    }
+    Ok(keys)
+}
+
+pub(crate) async fn load_rudder_image_vars(
+    state: &AppState,
+    id: Uuid,
+) -> Result<Vec<(String, String)>, ApiError> {
+    let current_image: Option<String> = sqlx::query_scalar(
+        "SELECT current_image FROM services WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(ApiError::database)?
+    .flatten();
+
+    let recent_images: Vec<(String, String)> = sqlx::query_as::<_, (String, String)>(
+        r#"
+        SELECT tag, image_ref
+        FROM rudder_images
+        WHERE service_id = $1
+        ORDER BY created_at DESC
+        LIMIT 50
+        "#,
+    )
+    .bind(id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(ApiError::database)?;
+
+    Ok(compose_image_env_vars(
+        current_image.as_deref(),
+        &recent_images,
+    ))
 }
 
 fn secret_values(env: &[(String, String)]) -> Vec<&str> {
@@ -629,6 +668,17 @@ pub async fn start_action(
     action: StackAction,
     trigger: &str,
 ) -> Result<DeploymentView, ApiError> {
+    start_action_with_image(state, id, action, trigger, None).await
+}
+
+/// Same as [`start_action`], with an optional `image_ref` recorded on the deployment row.
+pub async fn start_action_with_image(
+    state: &AppState,
+    id: Uuid,
+    action: StackAction,
+    trigger: &str,
+    image_ref: Option<&str>,
+) -> Result<DeploymentView, ApiError> {
     let stack = load(state, id).await?;
     if stack.spec.project.is_empty() {
         return Err(conflict("not_configured", "save a compose file first"));
@@ -640,6 +690,15 @@ pub async fn start_action(
         ));
     }
     driver_for(state, stack.server_id).await?;
+    let effective_image: Option<String> = match image_ref {
+        Some(img) => Some(img.to_owned()),
+        None => sqlx::query_scalar("SELECT current_image FROM services WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(ApiError::database)?
+            .flatten(),
+    };
     let previous = sqlx::query_scalar!(
         r#"
         WITH old AS (
@@ -657,15 +716,16 @@ pub async fn start_action(
     .await
     .map_err(ApiError::database)?
     .ok_or_else(|| conflict("deploy_in_progress", "a stack action is already running"))?;
-    let inserted = sqlx::query_scalar!(
+    let inserted = sqlx::query_scalar::<_, Uuid>(
         r#"
-        INSERT INTO deployments (service_id, status, trigger, logs, started_at)
-        VALUES ($1, 'running', $2, '', now())
+        INSERT INTO deployments (service_id, image_ref, status, trigger, logs, started_at)
+        VALUES ($1, $2, 'running', $3, '', now())
         RETURNING id
         "#,
-        id,
-        format!("{trigger}:{}", action.as_str())
     )
+    .bind(id)
+    .bind(effective_image.as_deref())
+    .bind(format!("{trigger}:{}", action.as_str()))
     .fetch_one(&state.pool)
     .await;
     let deployment_id = match inserted {
@@ -950,11 +1010,18 @@ async fn run(state: &AppState, id: Uuid, action: StackAction, log: &LiveLog) -> 
     let mut stack = load(state, id)
         .await
         .map_err(|error| error.public_message())?;
-    let env = load_env(state, id)
+    let mut env = load_env(state, id)
         .await
         .map_err(|error| error.public_message())?;
     let mut secrets: Vec<String> = env.iter().map(|(_, value)| value.clone()).collect();
     log.set_secrets(secrets.clone());
+    if let Ok(image_vars) = load_rudder_image_vars(state, id).await {
+        for (key, value) in image_vars {
+            if !env.iter().any(|(existing, _)| existing == &key) {
+                env.push((key, value));
+            }
+        }
+    }
     let driver = driver_for(state, stack.server_id)
         .await
         .map_err(|error| error.public_message())?;

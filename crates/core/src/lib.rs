@@ -131,7 +131,8 @@ pub use rollout::{
     retire_container, rollout, HealthKind, HealthSpec, RolloutOutput, RolloutPlan, StartedContainer,
 };
 pub use rudder_image::{
-    generate_device_code, image_object_key, normalize_device_code, select_images_to_prune,
+    compose_image_env_vars, generate_device_code, image_env_slug, image_object_key,
+    is_rudder_image_env_var, normalize_device_code, select_images_to_prune,
     select_images_to_prune_protecting, validate_cli_callback_url, validate_image_tag,
     ImageVersionEntry,
 };

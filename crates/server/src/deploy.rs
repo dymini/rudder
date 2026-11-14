@@ -400,16 +400,25 @@ pub(crate) async fn deploy_r2_stream(
         ));
     }
     if compose {
-        // A stack has no single container to swap: load the image onto its server, then run
-        // `docker compose up -d`, which recreates the services whose image changed. The
-        // compose file refers to the pushed image by its reference.
+        // A stack has no single container to swap: load the image onto its server, update
+        // `current_image` so Rudder injects `RUDDER_IMAGE_TAG` / `RUDDER_IMAGE_REF` into `.env`
+        // and protects the active image from R2 retention pruning, then run `docker compose up -d`.
         let driver = crate::nodes::driver_for(state, service.server_id).await?;
         driver.load_image(tar_stream).await.map_err(core_error)?;
-        return crate::stacks::start_action(
+        sqlx::query(
+            "UPDATE services SET current_image = $2, updated_at = now() WHERE id = $1",
+        )
+        .bind(service_id)
+        .bind(&image)
+        .execute(&state.pool)
+        .await
+        .map_err(ApiError::database)?;
+        return crate::stacks::start_action_with_image(
             state,
             service_id,
             crate::stacks::StackAction::Up,
             &trigger,
+            Some(&image),
         )
         .await;
     }
