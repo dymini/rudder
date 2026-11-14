@@ -169,6 +169,15 @@ struct StackRun {
     local_build: bool,
     /// Why the action was stopped, when something other than a person stopped it.
     reason: Option<String>,
+    /// Coalesced next start action queued while the current action is running.
+    queued: Option<QueuedStackRun>,
+}
+
+#[derive(Debug, Clone)]
+pub struct QueuedStackRun {
+    pub deployment_id: Uuid,
+    pub action: StackAction,
+    pub local_build: bool,
 }
 
 /// Removes a stack from [`StackRuns`] when its action ends, however it ends.
@@ -195,6 +204,7 @@ impl StackRuns {
                     token: token.clone(),
                     local_build,
                     reason: None,
+                    queued: None,
                 },
             );
         }
@@ -205,6 +215,43 @@ impl StackRuns {
                 id,
             },
         )
+    }
+
+    /// Queue `next` behind the currently running action for `id`, replacing any previously
+    /// queued run (`Ok(Some(prev))`). Returns `Err(())` if no action is currently running in
+    /// [`StackRuns`] for `id`.
+    fn enqueue(
+        &self,
+        id: Uuid,
+        next: QueuedStackRun,
+    ) -> Result<Option<QueuedStackRun>, ()> {
+        let mut running = self.running.lock().map_err(|_| ())?;
+        let Some(run) = running.get_mut(&id) else {
+            return Err(());
+        };
+        Ok(run.queued.replace(next))
+    }
+
+    /// Promote the queued run (if any) to the active run for `id` with a fresh
+    /// [`CancellationToken`], keeping the existing [`RunGuard`] alive.
+    fn advance(&self, id: Uuid) -> Option<(QueuedStackRun, CancellationToken)> {
+        let mut running = self.running.lock().ok()?;
+        let run = running.get_mut(&id)?;
+        let next = run.queued.take()?;
+        let token = CancellationToken::new();
+        run.token = token.clone();
+        run.local_build = next.local_build;
+        run.reason = None;
+        Some((next, token))
+    }
+
+    /// Take and clear any queued run for `id` without promoting it (used when the active
+    /// run is cancelled).
+    fn take_queued(&self, id: Uuid) -> Option<QueuedStackRun> {
+        self.running
+            .lock()
+            .ok()
+            .and_then(|mut running| running.get_mut(&id)?.queued.take())
     }
 
     /// Ask the running action of `id` to stop. False when nothing is running.
@@ -699,6 +746,11 @@ pub async fn start_action_with_image(
             .map_err(ApiError::database)?
             .flatten(),
     };
+    let local = server_kind(state, stack.server_id).await? == "local";
+    let builds = matches!(
+        action.compose(stack.spec.build_on_deploy),
+        ComposeAction::UpBuild
+    ) || (action.starts() && stack.spec.services.iter().any(|service| service.build));
     let previous = sqlx::query_scalar!(
         r#"
         WITH old AS (
@@ -714,8 +766,66 @@ pub async fn start_action_with_image(
     )
     .fetch_optional(&state.pool)
     .await
-    .map_err(ApiError::database)?
-    .ok_or_else(|| conflict("deploy_in_progress", "a stack action is already running"))?;
+    .map_err(ApiError::database)?;
+
+    let Some(previous) = previous else {
+        if action.starts() {
+            let queued_id = sqlx::query_scalar::<_, Uuid>(
+                r#"
+                INSERT INTO deployments (service_id, image_ref, status, trigger, logs)
+                VALUES ($1, $2, 'queued', $3, 'queued behind running stack action\n')
+                RETURNING id
+                "#,
+            )
+            .bind(id)
+            .bind(effective_image.as_deref())
+            .bind(format!("{trigger}:{}", action.as_str()))
+            .fetch_one(&state.pool)
+            .await
+            .map_err(ApiError::database)?;
+
+            match state.stack_runs.enqueue(
+                id,
+                QueuedStackRun {
+                    deployment_id: queued_id,
+                    action,
+                    local_build: local && builds,
+                },
+            ) {
+                Ok(superseded) => {
+                    if let Some(old_queued) = superseded {
+                        let _ = sqlx::query(
+                            r#"
+                            UPDATE deployments
+                            SET status = 'cancelled',
+                                error = 'superseded by a newer deployment',
+                                logs = logs || 'superseded by a newer deployment\n',
+                                finished_at = now()
+                            WHERE id = $1
+                            "#,
+                        )
+                        .bind(old_queued.deployment_id)
+                        .execute(&state.pool)
+                        .await;
+                    }
+                    return load_deployment(state, queued_id).await;
+                }
+                Err(()) => {
+                    // The running action just finished between the status check and enqueue;
+                    // clean up the temporary queued row and fall back to conflict or retry.
+                    let _ = sqlx::query("DELETE FROM deployments WHERE id = $1")
+                        .bind(queued_id)
+                        .execute(&state.pool)
+                        .await;
+                }
+            }
+        }
+        return Err(conflict(
+            "deploy_in_progress",
+            "a stack action is already running",
+        ));
+    };
+
     let inserted = sqlx::query_scalar::<_, Uuid>(
         r#"
         INSERT INTO deployments (service_id, image_ref, status, trigger, logs, started_at)
@@ -742,11 +852,6 @@ pub async fn start_action_with_image(
             return Err(ApiError::database(error));
         }
     };
-    let local = server_kind(state, stack.server_id).await? == "local";
-    let builds = matches!(
-        action.compose(stack.spec.build_on_deploy),
-        ComposeAction::UpBuild
-    ) || (action.starts() && stack.spec.services.iter().any(|service| service.build));
     let (cancel, guard) = state.stack_runs.begin(id, local && builds);
     let task_state = state.clone();
     tokio::spawn(async move {
@@ -832,128 +937,213 @@ enum Ended {
 async fn execute(
     state: &AppState,
     id: Uuid,
-    deployment_id: Uuid,
-    action: StackAction,
+    mut deployment_id: Uuid,
+    mut action: StackAction,
     previous: &str,
-    cancel: CancellationToken,
+    mut cancel: CancellationToken,
     guard: RunGuard,
 ) {
-    let log = LiveLog::default();
-    let flusher = spawn_flusher(state, deployment_id, &log);
-    let limit = state.config.stack_timeout_secs;
-    let ended = {
-        let work = run(state, id, action, &log);
-        tokio::pin!(work);
-        let timeout = async {
-            if limit == 0 {
-                std::future::pending::<()>().await;
-            } else {
-                tokio::time::sleep(Duration::from_secs(limit)).await;
+    let mut previous = previous.to_owned();
+    loop {
+        let log = LiveLog::default();
+        let flusher = spawn_flusher(state, deployment_id, &log);
+        let limit = state.config.stack_timeout_secs;
+        let ended = {
+            let work = run(state, id, action, &log);
+            tokio::pin!(work);
+            let timeout = async {
+                if limit == 0 {
+                    std::future::pending::<()>().await;
+                } else {
+                    tokio::time::sleep(Duration::from_secs(limit)).await;
+                }
+            };
+            // Dropping `work` at the end of this block stops the docker compose process.
+            tokio::select! {
+                result = &mut work => match result {
+                    Ok(()) => Ended::Finished,
+                    Err(message) => Ended::Failed(message),
+                },
+                () = cancel.cancelled() => Ended::Cancelled,
+                () = timeout => Ended::TimedOut(limit),
             }
         };
-        // Dropping `work` at the end of this block stops the docker compose process.
-        tokio::select! {
-            result = &mut work => match result {
-                Ok(()) => Ended::Finished,
-                Err(message) => Ended::Failed(message),
-            },
-            () = cancel.cancelled() => Ended::Cancelled,
-            () = timeout => Ended::TimedOut(limit),
+        flusher.abort();
+        let stop_reason = state.stack_runs.reason(id);
+        let (status, error, service_status) = match &ended {
+            Ended::Finished => (
+                "succeeded",
+                None,
+                match action {
+                    StackAction::Down => "stopped",
+                    StackAction::Pull => previous.as_str(),
+                    _ => "running",
+                },
+            ),
+            Ended::Failed(message) => (
+                "failed",
+                Some(message.clone()),
+                if action.starts() {
+                    "failed"
+                } else {
+                    previous.as_str()
+                },
+            ),
+            Ended::TimedOut(secs) => (
+                "failed",
+                Some(format!(
+                    "stopped after {} minutes; raise RUDDER_STACK_TIMEOUT_SECS for slower builds",
+                    secs.div_ceil(60)
+                )),
+                if action.starts() {
+                    "failed"
+                } else {
+                    previous.as_str()
+                },
+            ),
+            Ended::Cancelled => (
+                "cancelled",
+                Some(stop_reason.unwrap_or_else(|| "cancelled".to_owned())),
+                // The old containers keep running when the build never got that far.
+                if !action.starts() {
+                    previous.as_str()
+                } else if previous == "running" {
+                    "running"
+                } else {
+                    "stopped"
+                },
+            ),
+        };
+        if let Some(message) = &error {
+            log.push(&format!("{message}\n"));
         }
-    };
-    flusher.abort();
-    let stop_reason = state.stack_runs.reason(id);
-    // The action is over: a Cancel from here on is answered "not running". The service stays
-    // `deploying` until the final status below, so no new action can start in between.
-    drop(guard);
-    let (status, error, service_status) = match &ended {
-        Ended::Finished => (
-            "succeeded",
-            None,
-            match action {
-                StackAction::Down => "stopped",
-                StackAction::Pull => previous,
-                _ => "running",
-            },
-        ),
-        Ended::Failed(message) => (
-            "failed",
-            Some(message.clone()),
-            if action.starts() { "failed" } else { previous },
-        ),
-        Ended::TimedOut(secs) => (
-            "failed",
-            Some(format!(
-                "stopped after {} minutes; raise RUDDER_STACK_TIMEOUT_SECS for slower builds",
-                secs.div_ceil(60)
-            )),
-            if action.starts() { "failed" } else { previous },
-        ),
-        Ended::Cancelled => (
-            "cancelled",
-            Some(stop_reason.unwrap_or_else(|| "cancelled".to_owned())),
-            // The old containers keep running when the build never got that far.
-            if !action.starts() {
-                previous
-            } else if previous == "running" {
-                "running"
-            } else {
-                "stopped"
-            },
-        ),
-    };
-    if let Some(message) = &error {
-        log.push(&format!("{message}\n"));
-    }
-    let logs = log.snapshot();
-    // One commit, so a reader that sees the deployment finished also sees the
-    // stack leave `deploying`. Two separate updates let a poll observe
-    // `cancelled` while the service is still `deploying`, and the next action
-    // is then refused.
-    let saved = async {
-        let mut tx = state.pool.begin().await?;
-        sqlx::query!(
-            r#"
+        let logs = log.snapshot();
+
+        if matches!(ended, Ended::Cancelled) {
+            if let Some(queued) = state.stack_runs.take_queued(id) {
+                let _ = sqlx::query(
+                    r#"
+                    UPDATE deployments
+                    SET status = 'cancelled',
+                        error = 'cancelled',
+                        logs = logs || 'cancelled\n',
+                        finished_at = now()
+                    WHERE id = $1
+                    "#,
+                )
+                .bind(queued.deployment_id)
+                .execute(&state.pool)
+                .await;
+            }
+        } else if let Some((next, next_cancel)) = state.stack_runs.advance(id) {
+            let promoted = async {
+                let mut tx = state.pool.begin().await?;
+                sqlx::query(
+                    r#"
+                    UPDATE deployments
+                    SET status = $2, error = $3, logs = $4, finished_at = now()
+                    WHERE id = $1
+                    "#,
+                )
+                .bind(deployment_id)
+                .bind(status)
+                .bind(&error)
+                .bind(&logs)
+                .execute(&mut *tx)
+                .await?;
+                sqlx::query(
+                    r#"
+                    UPDATE deployments
+                    SET status = 'running', logs = '', started_at = now()
+                    WHERE id = $1
+                    "#,
+                )
+                .bind(next.deployment_id)
+                .execute(&mut *tx)
+                .await?;
+                tx.commit().await
+            }
+            .await;
+            if let Err(save_error) = promoted {
+                tracing::error!(%save_error, "could not promote queued stack deployment");
+            }
+            let event = match &ended {
+                Ended::Finished => crate::events::Event::info(
+                    &format!("stack.{}", action.as_str()),
+                    format!("Stack {} finished", action.as_str()),
+                ),
+                Ended::Cancelled => crate::events::Event::warning(
+                    "stack.cancelled",
+                    format!("Stack {} was cancelled", action.as_str()),
+                ),
+                Ended::Failed(_) | Ended::TimedOut(_) => crate::events::Event::warning(
+                    "stack.failed",
+                    format!("Stack {} failed", action.as_str()),
+                )
+                .message(error.clone().unwrap_or_default()),
+            };
+            crate::events::record(&state.pool, event.service(id)).await;
+            previous = service_status.to_owned();
+            deployment_id = next.deployment_id;
+            action = next.action;
+            cancel = next_cancel;
+            continue;
+        }
+
+        // The action is over and nothing is queued: a Cancel from here on is answered "not
+        // running". The service stays `deploying` until the final status below, so no new
+        // action can start in between.
+        drop(guard);
+        // One commit, so a reader that sees the deployment finished also sees the
+        // stack leave `deploying`. Two separate updates let a poll observe
+        // `cancelled` while the service is still `deploying`, and the next action
+        // is then refused.
+        let saved = async {
+            let mut tx = state.pool.begin().await?;
+            sqlx::query!(
+                r#"
         UPDATE deployments
         SET status = $2, error = $3, logs = $4, finished_at = now()
         WHERE id = $1
         "#,
-            deployment_id,
-            status,
-            error,
-            logs
-        )
-        .execute(&mut *tx)
-        .await?;
-        sqlx::query!(
-            r#"UPDATE services SET status = $2, updated_at = now() WHERE id = $1"#,
-            id,
-            service_status
-        )
-        .execute(&mut *tx)
-        .await?;
-        tx.commit().await
+                deployment_id,
+                status,
+                error,
+                logs
+            )
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query!(
+                r#"UPDATE services SET status = $2, updated_at = now() WHERE id = $1"#,
+                id,
+                service_status
+            )
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await
+        }
+        .await;
+        if let Err(save_error) = saved {
+            tracing::error!(%save_error, "could not finish the stack deployment");
+        }
+        let event = match &ended {
+            Ended::Finished => crate::events::Event::info(
+                &format!("stack.{}", action.as_str()),
+                format!("Stack {} finished", action.as_str()),
+            ),
+            Ended::Cancelled => crate::events::Event::warning(
+                "stack.cancelled",
+                format!("Stack {} was cancelled", action.as_str()),
+            ),
+            Ended::Failed(_) | Ended::TimedOut(_) => crate::events::Event::warning(
+                "stack.failed",
+                format!("Stack {} failed", action.as_str()),
+            )
+            .message(error.clone().unwrap_or_default()),
+        };
+        crate::events::record(&state.pool, event.service(id)).await;
+        break;
     }
-    .await;
-    if let Err(save_error) = saved {
-        tracing::error!(%save_error, "could not finish the stack deployment");
-    }
-    let event = match &ended {
-        Ended::Finished => crate::events::Event::info(
-            &format!("stack.{}", action.as_str()),
-            format!("Stack {} finished", action.as_str()),
-        ),
-        Ended::Cancelled => crate::events::Event::warning(
-            "stack.cancelled",
-            format!("Stack {} was cancelled", action.as_str()),
-        ),
-        Ended::Failed(_) | Ended::TimedOut(_) => crate::events::Event::warning(
-            "stack.failed",
-            format!("Stack {} failed", action.as_str()),
-        )
-        .message(error.clone().unwrap_or_default()),
-    };
-    crate::events::record(&state.pool, event.service(id)).await;
 }
 
 /// Registry logins for the images a stack pulls. Images from a registry without a
@@ -1448,5 +1638,65 @@ mod tests {
             ..git
         })
         .is_err());
+    }
+
+    #[test]
+    fn stack_runs_coalesce_and_advance_queued_deploys() {
+        let runs = Arc::new(StackRuns::default());
+        let stack_id = Uuid::new_v4();
+        let dep1 = Uuid::new_v4();
+        let dep2 = Uuid::new_v4();
+
+        // Cannot enqueue when nothing is running.
+        assert!(runs
+            .enqueue(
+                stack_id,
+                QueuedStackRun {
+                    deployment_id: dep1,
+                    action: StackAction::Up,
+                    local_build: false,
+                }
+            )
+            .is_err());
+
+        let (_token, guard) = runs.begin(stack_id, false);
+        assert_eq!(runs.counts(), (1, 0));
+
+        // First queued deploy has no predecessor.
+        let prev = runs
+            .enqueue(
+                stack_id,
+                QueuedStackRun {
+                    deployment_id: dep1,
+                    action: StackAction::Up,
+                    local_build: false,
+                },
+            )
+            .unwrap();
+        assert!(prev.is_none());
+
+        // Second queued deploy supersedes the first.
+        let prev = runs
+            .enqueue(
+                stack_id,
+                QueuedStackRun {
+                    deployment_id: dep2,
+                    action: StackAction::Rebuild,
+                    local_build: true,
+                },
+            )
+            .unwrap();
+        assert_eq!(prev.unwrap().deployment_id, dep1);
+
+        // Advancing promotes the latest queued deploy and updates local_build.
+        let (promoted, next_token) = runs.advance(stack_id).unwrap();
+        assert_eq!(promoted.deployment_id, dep2);
+        assert_eq!(promoted.action, StackAction::Rebuild);
+        assert!(!next_token.is_cancelled());
+        assert_eq!(runs.counts(), (1, 1));
+        assert!(runs.advance(stack_id).is_none());
+
+        drop(guard);
+        assert_eq!(runs.counts(), (0, 0));
     }
 }
