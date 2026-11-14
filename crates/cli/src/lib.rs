@@ -350,6 +350,8 @@ Options:
   -t, --tag <TAG>             Tag to push (default: most recently built local image)
       --deploy                Deploy the image immediately after upload completes
       --no-deploy             Store the image in R2 without deploying, even if auto-deploy is enabled
+      --no-wait               Return as soon as the deployment is queued
+      --timeout <SECONDS>     Maximum time to wait for deployment completion (default: 1800)
       --r2-keep <N>           Retain the newest N versions in R2 (never prunes the deployed image)
   -f, --file <PATH>           Path to project config file (default: rudder.toml)
   -h, --help                  Print this help message"
@@ -1308,6 +1310,8 @@ async fn push_cmd(
     let mut deploy_now = None;
     let mut r2_keep = None;
     let mut file_path = None;
+    let mut wait = true;
+    let mut timeout = Duration::from_secs(1800);
 
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
@@ -1322,6 +1326,15 @@ async fn push_cmd(
             "--tag" | "-t" => tag = Some(iter.next().context("--tag needs a value")?),
             "--deploy" => deploy_now = Some(true),
             "--no-deploy" => deploy_now = Some(false),
+            "--no-wait" => wait = false,
+            "--timeout" => {
+                timeout = Duration::from_secs(
+                    iter.next()
+                        .context("--timeout needs seconds")?
+                        .parse()
+                        .context("--timeout needs seconds")?,
+                )
+            }
             "--r2-keep" => {
                 r2_keep = Some(
                     iter.next()
@@ -1423,7 +1436,7 @@ async fn push_cmd(
                     json!({ "tag": record.tag }),
                 )
                 .await?;
-            return report(&done, &mut 0, out);
+            return wait_for_deployment(api, &service.id, &done, wait, timeout, ctx, out).await;
         }
         writeln!(
             out,
@@ -1506,7 +1519,7 @@ async fn push_cmd(
     }
     if resp["deployed"].as_bool() == Some(true) {
         if let Some(dep) = resp.get("deployment") {
-            report(dep, &mut 0, out)?;
+            wait_for_deployment(api, &service.id, dep, wait, timeout, ctx, out).await?;
         }
     } else if let Some(err) = resp["deploy_error"].as_str() {
         bail!("image stored in R2, but deployment failed: {err}");
@@ -1644,7 +1657,17 @@ async fn images_cmd(
         }
         "rollback" => {
             let tag = target_tag.context("usage: rudder images <service> rollback <tag>")?;
-            deploy_or_repush_r2_image(api, &service, &service_spec, Some(&tag), ctx, out).await
+            deploy_or_repush_r2_image(
+                api,
+                &service,
+                &service_spec,
+                Some(&tag),
+                true,
+                Duration::from_secs(1800),
+                ctx,
+                out,
+            )
+            .await
         }
         _ => {
             let remote_val = api
@@ -1714,6 +1737,8 @@ async fn deploy_or_repush_r2_image(
     service: &Service,
     service_spec: &str,
     tag: Option<&str>,
+    wait: bool,
+    timeout: Duration,
     ctx: &Context,
     out: &mut (dyn Write + Send),
 ) -> anyhow::Result<()> {
@@ -1743,18 +1768,18 @@ async fn deploy_or_repush_r2_image(
                     out,
                     "Tag '{requested_tag}' is not currently in R2; re-uploading from local store..."
                 )?;
-                return push_cmd(
-                    api,
-                    vec![
-                        requested_tag.to_owned(),
-                        "--service".into(),
-                        service_spec.to_owned(),
-                        "--deploy".into(),
-                    ],
-                    ctx,
-                    out,
-                )
-                .await;
+                let mut push_args = vec![
+                    requested_tag.to_owned(),
+                    "--service".into(),
+                    service_spec.to_owned(),
+                    "--deploy".into(),
+                    "--timeout".into(),
+                    timeout.as_secs().to_string(),
+                ];
+                if !wait {
+                    push_args.push("--no-wait".into());
+                }
+                return push_cmd(api, push_args, ctx, out).await;
             }
         }
     }
@@ -1771,7 +1796,7 @@ async fn deploy_or_repush_r2_image(
             json!({ "tag": tag }),
         )
         .await?;
-    report(&done, &mut 0, out)
+    wait_for_deployment(api, &service.id, &done, wait, timeout, ctx, out).await
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -2079,7 +2104,17 @@ async fn deploy(
             },
             out,
         )?;
-        let mut push_args = vec![record.tag, "--service".into(), spec, "--deploy".into()];
+        let mut push_args = vec![
+            record.tag,
+            "--service".into(),
+            spec,
+            "--deploy".into(),
+            "--timeout".into(),
+            timeout.as_secs().to_string(),
+        ];
+        if !wait {
+            push_args.push("--no-wait".into());
+        }
         if let Some(keep) = cfg.r2_keep_count {
             push_args.push("--r2-keep".into());
             push_args.push(keep.to_string());
@@ -2091,8 +2126,21 @@ async fn deploy(
     let id = &service.id;
     let deployment = match service.kind.as_str() {
         "compose" => {
-            if image.is_some() {
-                bail!("--image does not apply to compose stacks");
+            let r2_images = api
+                .get(&format!("/api/v1/services/{id}/images"), &[])
+                .await
+                .ok()
+                .and_then(|v| v.as_array().cloned())
+                .unwrap_or_default();
+            let has_r2 = !r2_images.is_empty();
+            if image.is_some() || has_r2 {
+                let tag_arg = image
+                    .as_deref()
+                    .map(|img| img.rsplit_once(':').map_or(img, |(_, tag)| tag));
+                return deploy_or_repush_r2_image(
+                    api, &service, &spec, tag_arg, wait, timeout, ctx, out,
+                )
+                .await;
             }
             writeln!(out, "Starting stack {}", service.path())?;
             api.post(&format!("/api/v1/services/{id}/stack/up"), json!({}))
@@ -2114,8 +2162,17 @@ async fn deploy(
                 .as_deref()
                 .is_some_and(|img| !img.contains('/') && !img.contains(':'));
             if has_r2 && (image.is_none() || image_looks_like_tag) {
-                return deploy_or_repush_r2_image(api, &service, &spec, image.as_deref(), ctx, out)
-                    .await;
+                return deploy_or_repush_r2_image(
+                    api,
+                    &service,
+                    &spec,
+                    image.as_deref(),
+                    wait,
+                    timeout,
+                    ctx,
+                    out,
+                )
+                .await;
             }
 
             let detail = api.get(&format!("/api/v1/services/{id}"), &[]).await?;
@@ -2148,7 +2205,7 @@ async fn deploy(
                         json!({ "image": image }),
                     )
                     .await?;
-                return report(&done, &mut 0, out);
+                return wait_for_deployment(api, id, &done, wait, timeout, ctx, out).await;
             }
         }
         other => bail!(
@@ -2156,21 +2213,60 @@ async fn deploy(
             service.path()
         ),
     };
+    wait_for_deployment(
+        api,
+        id,
+        &json!({ "id": deployment, "status": "running" }),
+        wait,
+        timeout,
+        ctx,
+        out,
+    )
+    .await
+}
+
+async fn wait_for_deployment(
+    api: &Api,
+    service_id: &str,
+    initial: &Value,
+    wait: bool,
+    timeout: Duration,
+    ctx: &Context,
+    out: &mut (dyn Write + Send),
+) -> anyhow::Result<()> {
+    let status = initial["status"].as_str().unwrap_or("unknown");
+    let finished = initial["finished_at"].is_string()
+        || matches!(status, "succeeded" | "failed" | "cancelled");
+    if finished {
+        return report(initial, &mut 0, out);
+    }
+    let deployment = initial["id"]
+        .as_str()
+        .or_else(|| initial["deployment_id"].as_str())
+        .unwrap_or_default()
+        .to_owned();
+    if deployment.is_empty() {
+        return report(initial, &mut 0, out);
+    }
     if !wait {
         writeln!(out, "Queued deployment {deployment}")?;
         return Ok(());
     }
     let deadline = tokio::time::Instant::now() + timeout;
     let mut printed = 0;
+    print_new_logs(initial, &mut printed, out)?;
     loop {
         let list = api
-            .get(&format!("/api/v1/services/{id}/deployments"), &[])
+            .get(&format!("/api/v1/services/{service_id}/deployments"), &[])
             .await?;
         if let Some(current) = list
             .as_array()
             .and_then(|items| items.iter().find(|d| d["id"] == deployment.as_str()))
         {
-            if current["finished_at"].is_string() {
+            let cur_status = current["status"].as_str().unwrap_or("unknown");
+            if current["finished_at"].is_string()
+                || matches!(cur_status, "succeeded" | "failed" | "cancelled")
+            {
                 return report(current, &mut printed, out);
             }
             print_new_logs(current, &mut printed, out)?;
@@ -2549,6 +2645,108 @@ mod tests {
         assert!(
             whoami_text.contains("admin@example.com (owner)"),
             "{whoami_text}"
+        );
+
+        server.abort();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn compose_deploy_with_image_polls_running_deployment_and_streams_logs() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let base = format!("http://{addr}");
+        let polls = Arc::new(AtomicU64::new(0));
+        let polls_srv = polls.clone();
+
+        let server = tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else {
+                    break;
+                };
+                let polls_req = polls_srv.clone();
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 8192];
+                    let n = stream.read(&mut buf).await.unwrap_or(0);
+                    let req = String::from_utf8_lossy(&buf[..n]);
+                    let first_line = req.lines().next().unwrap_or_default();
+                    let mut parts = first_line.split_whitespace();
+                    let method = parts.next().unwrap_or("");
+                    let path = parts.next().unwrap_or("/");
+                    let (status, body) = match (method, path) {
+                        ("GET", "/api/v1/services") => (
+                            "200 OK",
+                            r#"[{"id":"svc-1","name":"knotree-api","kind":"compose","status":"running","project_name":"knotree","environment_name":"prod"}]"#.to_owned(),
+                        ),
+                        ("GET", "/api/v1/services/svc-1/images") => (
+                            "200 OK",
+                            r#"[{"id":"img-1","tag":"prod-20261114-abc","r2_present":true}]"#.to_owned(),
+                        ),
+                        ("POST", "/api/v1/services/svc-1/images/deploy") => (
+                            "202 Accepted",
+                            r#"{"id":"dep-1","status":"queued","image_ref":"rudder-image/knotree-api:prod-20261114-abc","logs":"queued behind running stack action\n"}"#.to_owned(),
+                        ),
+                        ("GET", "/api/v1/services/svc-1/deployments") => {
+                            let count = polls_req.fetch_add(1, Ordering::SeqCst);
+                            if count == 0 {
+                                (
+                                    "200 OK",
+                                    r#"[{"id":"dep-1","status":"running","image_ref":"rudder-image/knotree-api:prod-20261114-abc","logs":"queued behind running stack action\nwrote rudder-compose.yml and .env\n"}]"#.to_owned(),
+                                )
+                            } else {
+                                (
+                                    "200 OK",
+                                    r#"[{"id":"dep-1","status":"succeeded","image_ref":"rudder-image/knotree-api:prod-20261114-abc","logs":"queued behind running stack action\nwrote rudder-compose.yml and .env\nContainer started\n","finished_at":"2026-11-14T10:00:00Z"}]"#.to_owned(),
+                                )
+                            }
+                        }
+                        _ => ("404 Not Found", String::new()),
+                    };
+                    let reply = format!(
+                        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = stream.write_all(reply.as_bytes()).await;
+                    let _ = stream.shutdown().await;
+                });
+            }
+        });
+
+        let dir = std::env::temp_dir().join(format!(
+            "rudder-compose-deploy-test-{}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(1)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let ctx = Context {
+            config_path: dir.join("config.json"),
+            url: Some(base),
+            token: Some("rdr_testtoken123456".into()),
+            read_token: Box::new(|| Ok(String::new())),
+            poll: Duration::from_millis(10),
+        };
+        let mut out = Vec::new();
+        run(
+            vec![
+                "deploy".into(),
+                "knotree/prod/knotree-api".into(),
+                "--image".into(),
+                "prod-20261114-abc".into(),
+            ],
+            &ctx,
+            &mut out,
+        )
+        .await
+        .unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(
+            text.contains("Deploying knotree/prod/knotree-api from Cloudflare R2 (prod-20261114-abc)"),
+            "{text}"
+        );
+        assert!(text.contains("wrote rudder-compose.yml and .env"), "{text}");
+        assert!(text.contains("Container started"), "{text}");
+        assert!(
+            text.contains("Deployment dep-1 succeeded (rudder-image/knotree-api:prod-20261114-abc)"),
+            "{text}"
         );
 
         server.abort();
