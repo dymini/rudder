@@ -8,6 +8,8 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-15
+
 ### Changed
 - **Container logs work for Compose stacks and need only the `logs` scope.** `GET /api/v1/services/{id}/logs` (MCP tool `get_v1_services__id__logs`) now returns the logs of every compose service under `==> name <==` headers instead of failing with `not_deployed`, and moved from the `databases` scope to `logs`: an MCP grant that read container logs through `databases:read` now needs `logs:read`.
 - **Compose stack logs without picking a service.** `GET /api/v1/services/{id}/stack/logs` makes `service` optional (omit it to get every service combined) and always returns the stack's service names in `services`.
