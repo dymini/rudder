@@ -122,13 +122,17 @@ pub struct StackVariableView {
 
 #[derive(Serialize, ToSchema)]
 pub struct StackLogsView {
-    pub service: String,
+    /// The compose service asked for, or `None` when the logs of every service are combined.
+    pub service: Option<String>,
+    /// Every compose service in the stack, so a caller can pick one without loading the stack.
+    pub services: Vec<String>,
+    /// Without `service`, each service's tail under a `==> name <==` header.
     pub logs: String,
 }
 
 #[derive(Deserialize)]
 pub struct StackLogsQuery {
-    pub service: String,
+    pub service: Option<String>,
     pub tail: Option<u32>,
 }
 
@@ -546,11 +550,9 @@ async fn stack_logs(
     Path(id): Path<Uuid>,
     Query(query): Query<StackLogsQuery>,
 ) -> Result<Json<StackLogsView>, ApiError> {
-    let logs = stacks::service_logs(&state, id, &query.service, query.tail.unwrap_or(200)).await?;
-    Ok(Json(StackLogsView {
-        service: query.service,
-        logs,
-    }))
+    Ok(Json(
+        stacks::logs_view(&state, id, query.service, query.tail).await?,
+    ))
 }
 
 async fn delete_stack(

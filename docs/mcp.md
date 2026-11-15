@@ -25,6 +25,10 @@ The address Rudder gives agents is the panel domain saved under **Certificates â
 
 Only an administrator can approve an agent, and only from a signed-in browser. An agent cannot approve a wider grant for itself.
 
+## Reading container logs
+
+With `logs:read`, `get_v1_services__id__logs` returns recent container logs of any service (`tail`, default 200). For a Compose stack it combines every compose service under `==> name <==` headers. To read one compose service, call `get_v1_services__id__stack_logs` (`stacks:read`) with `service=<name>`; omit `service` to get the combined logs, and read the stack's service names from `services`. Values of the service's environment variables are masked. Live tail and the container terminal are browser-only (WebSocket) and are not MCP tools.
+
 ## How refresh works
 
 - The access token lasts 15 minutes.

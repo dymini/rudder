@@ -950,6 +950,33 @@ async fn docker_stack_lifecycle(pool: PgPool) {
         tokio::time::sleep(Duration::from_millis(300)).await;
     }
 
+    // Without `service`, both log routes combine every compose service.
+    let all = client
+        .ok(
+            "GET",
+            &format!("/api/v1/services/{id}/stack/logs?tail=50"),
+            None,
+        )
+        .await;
+    assert!(all["service"].is_null(), "{all}");
+    assert!(
+        all["services"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("worker")),
+        "{all}"
+    );
+    let text = all["logs"].as_str().unwrap();
+    assert!(text.contains("==> worker <=="), "{text}");
+    assert!(!text.contains("tok-'$x'-value"));
+    let generic = client
+        .ok("GET", &format!("/api/v1/services/{id}/logs?tail=50"), None)
+        .await;
+    assert!(
+        generic["logs"].as_str().unwrap().contains("==> worker <=="),
+        "{generic}"
+    );
+
     client
         .expect(
             StatusCode::CREATED,

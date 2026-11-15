@@ -1434,6 +1434,40 @@ pub async fn service_logs(
     Ok(redact(&logs, &secret_values(&env)))
 }
 
+/// Logs of one compose service, or of all of them when `service` is `None`.
+/// The combined form tails each service (100 lines by default) under a header.
+pub async fn logs_view(
+    state: &AppState,
+    id: Uuid,
+    service: Option<String>,
+    tail: Option<u32>,
+) -> Result<crate::routes::stacks::StackLogsView, ApiError> {
+    let stack = load(state, id).await?;
+    let services: Vec<String> = stack.spec.containers.keys().cloned().collect();
+    let logs = match &service {
+        Some(name) => service_logs(state, id, name, tail.unwrap_or(200)).await?,
+        None => {
+            let mut out = String::new();
+            for name in &services {
+                out.push_str(&format!("==> {name} <==\n"));
+                match service_logs(state, id, name, tail.unwrap_or(100)).await {
+                    Ok(logs) => out.push_str(&logs),
+                    Err(err) => out.push_str(&format!("(no logs: {})\n", err.public_message())),
+                }
+                if !out.ends_with('\n') {
+                    out.push('\n');
+                }
+            }
+            out
+        }
+    };
+    Ok(crate::routes::stacks::StackLogsView {
+        service,
+        services,
+        logs,
+    })
+}
+
 /// Whether each compose service's container is running. `None` when the node is unreachable.
 pub async fn running_states(state: &AppState, stack: &StackRow) -> Vec<Option<bool>> {
     let Ok(driver) = driver_for(state, stack.server_id).await else {

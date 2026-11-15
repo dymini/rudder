@@ -4815,13 +4815,13 @@
     "/api/v1/services/{id}/logs": {
       "get": {
         "tags": [
-          "databases"
+          "logs"
         ],
-        "summary": "Recent container logs",
+        "summary": "Recent container logs of any service (?tail=); a compose stack combines every service under `==> name <==` headers",
         "operationId": "get_v1_services__id__logs",
         "responses": {
           "200": {
-            "description": "Recent container logs",
+            "description": "Recent container logs of any service (?tail=); a compose stack combines every service under `==> name <==` headers",
             "content": {
               "application/json": {
                 "schema": {
@@ -5073,11 +5073,11 @@
         "tags": [
           "stacks"
         ],
-        "summary": "Logs of one compose service (?service=&tail=)",
+        "summary": "Logs of one compose service (?service=&tail=), or of every service when service is omitted; lists the stack's service names",
         "operationId": "get_v1_services__id__stack_logs",
         "responses": {
           "200": {
-            "description": "Logs of one compose service (?service=&tail=)",
+            "description": "Logs of one compose service (?service=&tail=), or of every service when service is omitted; lists the stack's service names",
             "content": {
               "application/json": {
                 "schema": {
@@ -12719,15 +12719,27 @@
       "StackLogsView": {
         "type": "object",
         "required": [
-          "service",
+          "services",
           "logs"
         ],
         "properties": {
           "logs": {
-            "type": "string"
+            "type": "string",
+            "description": "Without `service`, each service's tail under a `==> name <==` header."
           },
           "service": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The compose service asked for, or `None` when the logs of every service are combined."
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every compose service in the stack, so a caller can pick one without loading the stack."
           }
         }
       },

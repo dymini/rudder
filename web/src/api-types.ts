@@ -2763,7 +2763,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Recent container logs */
+        /** Recent container logs of any service (?tail=); a compose stack combines every service under `==> name <==` headers */
         get: operations["get_v1_services__id__logs"];
         put?: never;
         post?: never;
@@ -2902,7 +2902,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Logs of one compose service (?service=&tail=) */
+        /** Logs of one compose service (?service=&tail=), or of every service when service is omitted; lists the stack's service names */
         get: operations["get_v1_services__id__stack_logs"];
         put?: never;
         post?: never;
@@ -5557,8 +5557,12 @@ export interface components {
             repo: string;
         };
         StackLogsView: {
+            /** @description Without `service`, each service's tail under a `==> name <==` header. */
             logs: string;
-            service: string;
+            /** @description The compose service asked for, or `None` when the logs of every service are combined. */
+            service?: string | null;
+            /** @description Every compose service in the stack, so a caller can pick one without loading the stack. */
+            services: string[];
         };
         StackServiceView: {
             /** @description Built from a `build:` section, so a plain deploy does not pick up new code. */
@@ -10348,7 +10352,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Recent container logs */
+            /** @description Recent container logs of any service (?tail=); a compose stack combines every service under `==> name <==` headers */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -10584,7 +10588,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Logs of one compose service (?service=&tail=) */
+            /** @description Logs of one compose service (?service=&tail=), or of every service when service is omitted; lists the stack's service names */
             200: {
                 headers: {
                     [name: string]: unknown;

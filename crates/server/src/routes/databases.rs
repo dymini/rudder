@@ -787,6 +787,12 @@ async fn logs(
     Query(query): Query<LogsQuery>,
 ) -> Result<Json<LogsView>, ApiError> {
     let row = service_row(&state, id).await?;
+    if row.kind == "compose" {
+        // A stack has one container per compose service: combine them so the
+        // same call works for every kind of service.
+        let view = crate::stacks::logs_view(&state, id, None, query.tail).await?;
+        return Ok(Json(LogsView { logs: view.logs }));
+    }
     let driver = driver_for(&state, row.server_id).await?;
     let container = row
         .current_container_id
