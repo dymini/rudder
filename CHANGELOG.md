@@ -8,6 +8,8 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-11-15
+
 ### Fixed
 - **Log masking no longer hides ordinary words.** Secrets are now masked only where they stand as a whole token, so a value like `auto` no longer turns `automatic` into `***matic`, and booleans, `null` and short numbers are never masked, so `{"ok":true}` stays readable.
 
