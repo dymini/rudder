@@ -8,6 +8,12 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Fixed
+- **Log masking no longer hides ordinary words.** Secrets are now masked only where they stand as a whole token, so a value like `auto` no longer turns `automatic` into `***matic`, and booleans, `null` and short numbers are never masked, so `{"ok":true}` stays readable.
+
+### Changed
+- **Which environment values are masked in logs.** Container logs, stack deploy output and the central log store now mask a service's environment values only when the key names a credential (`*_PASSWORD`, `*_TOKEN`, `*_SECRET`, `*_KEY`, `DATABASE_URL`, …) or the value looks generated (long and mixing letters, digits and symbols); passwords inside connection URLs are masked too. Plain settings like `NODE_ENV=production` or `LOG_LEVEL=info` now show as written. If you keep a short, simple secret under a neutral key name, rename the key (for example `ADMIN_PASSWORD`) so it stays masked.
+
 ## [0.10.1] - 2026-11-15
 
 ### Changed

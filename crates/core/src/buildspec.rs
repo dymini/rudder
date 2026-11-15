@@ -171,16 +171,6 @@ pub fn static_dockerfile(publish_dir: &str) -> Result<String, Error> {
     ))
 }
 
-pub fn redact(text: &str, secrets: &[&str]) -> String {
-    let mut out = text.to_owned();
-    for secret in secrets {
-        if secret.len() >= 4 {
-            out = out.replace(secret, "***");
-        }
-    }
-    out
-}
-
 fn dockerfile_path(plan: &BuildPlan) -> Result<String, Error> {
     if plan.strategy == BuildStrategy::Static {
         return Ok(if plan.context == "." {

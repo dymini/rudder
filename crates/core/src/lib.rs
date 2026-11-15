@@ -46,8 +46,9 @@ pub use backup::{
     validate_extra_args, validate_prefix, validate_tool_options, Compression, Consistency,
     DumpCredentials, KeyVars, RedisPersistence, RetentionSpec, ToolCommand, ToolOptions,
 };
+pub mod redact;
 pub use buildspec::{
-    can_start, docker_build_argv, git_clone_argv, nixpacks_argv, redact, static_dockerfile,
+    can_start, docker_build_argv, git_clone_argv, nixpacks_argv, static_dockerfile,
     validate_branch, validate_git_url, validate_rel_path, BuildPlan, BuildStrategy,
 };
 pub use cache::{
@@ -120,6 +121,7 @@ pub use metrics::{
 pub use ratelimit::{
     decide as decide_rate, validate_rate_rule, Bucket, RateDecision, RateKey, RateRequest, RateRule,
 };
+pub use redact::{env_secrets, redact};
 pub use release::{
     in_maintenance_window, newer_releases, parse_maintenance_window, parse_sha256sums,
     parse_version, pick_release, sha256_hex, validate_pinned_image, verify_minisign,

@@ -696,11 +696,14 @@ pub(crate) async fn load_rudder_image_vars(
     ))
 }
 
-fn secret_values(env: &[(String, String)]) -> Vec<&str> {
-    env.iter()
-        .map(|(_, value)| value.as_str())
-        .filter(|value| value.len() >= 4)
-        .collect()
+fn secret_values(env: &[(String, String)]) -> Vec<String> {
+    rudder_core::env_secrets(env)
+}
+
+fn redact_env(text: &str, env: &[(String, String)]) -> String {
+    let secrets = secret_values(env);
+    let refs: Vec<&str> = secrets.iter().map(String::as_str).collect();
+    redact(text, &refs)
 }
 
 /// Lock the stack, record a deployment, and run the action in the background.
@@ -1198,7 +1201,7 @@ async fn run(state: &AppState, id: Uuid, action: StackAction, log: &LiveLog) -> 
     let mut env = load_env(state, id)
         .await
         .map_err(|error| error.public_message())?;
-    let mut secrets: Vec<String> = env.iter().map(|(_, value)| value.clone()).collect();
+    let mut secrets: Vec<String> = secret_values(&env);
     log.set_secrets(secrets.clone());
     if let Ok(image_vars) = load_rudder_image_vars(state, id).await {
         for (key, value) in image_vars {
@@ -1431,7 +1434,7 @@ pub async fn service_logs(
         .await
         .map_err(core_error)?;
     let env = load_env(state, id).await?;
-    Ok(redact(&logs, &secret_values(&env)))
+    Ok(redact_env(&logs, &env))
 }
 
 /// Logs of one compose service, or of all of them when `service` is `None`.
@@ -1506,7 +1509,7 @@ pub async fn destroy(state: &AppState, id: Uuid, volumes: bool) -> Result<(), Ap
                 ApiError::new(
                     StatusCode::BAD_GATEWAY,
                     "node",
-                    redact(&error.to_string(), &secret_values(&env)),
+                    redact_env(&error.to_string(), &env),
                 )
             })?;
         if let Some((dir, _)) = stack.spec.compose_path.rsplit_once('/') {

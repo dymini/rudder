@@ -181,7 +181,7 @@ fn system_target(source: &'static str) -> Target {
 async fn service_secrets(state: &AppState, service_id: Uuid) -> Vec<String> {
     let mut out: Vec<String> = crate::stacks::load_env(state, service_id)
         .await
-        .map(|env| env.into_iter().map(|(_, value)| value).collect())
+        .map(|env| rudder_core::env_secrets(&env))
         .unwrap_or_default();
     if let Ok(info) = crate::routes::databases::load_database(state, service_id).await {
         out.extend(info.secrets().into_iter().map(str::to_owned));
