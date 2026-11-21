@@ -391,8 +391,12 @@ done
 
 if [ -n "$restore" ]; then
 	info "restored; sign in with the accounts from the backup at $public_url"
+elif [ -s "$DATA/setup-token" ]; then
+	# The panel writes a one-time token while it has no users; setup refuses requests without it.
+	info "Rudder is running. Create the first admin account at $public_url/setup?token=$(tr -d '[:space:]' <"$DATA/setup-token")"
+	info "the setup token is also in $DATA/setup-token; keep it private until setup is done"
 else
-	info "Rudder is running at $public_url; open it to sign in, or to create the first admin account on a new install"
+	info "Rudder is running at $public_url; open it to sign in"
 fi
 [ -z "$domain" ] || info "set the panel domain to $domain under Certificates so Traefik serves it over HTTPS"
 [ "$ports_closed" -eq 0 ] || info "ports 80, 443, and 3000 are closed; the panel is reachable only through Cloudflare, or on 127.0.0.1:3000 from this server. Run with --open-ports to undo"

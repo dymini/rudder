@@ -94,6 +94,9 @@ export const vi: Record<string, string> = {
   "Setup failed": "Thiết lập thất bại",
   "Create the owner": "Tạo chủ sở hữu",
   "This account administers the panel.": "Tài khoản này quản trị toàn bộ bảng điều khiển.",
+  "Setup token": "Mã thiết lập",
+  "The installer prints it. It is also in setup-token in the panel's data directory.":
+    "Trình cài đặt in mã này. Mã cũng nằm trong tệp setup-token ở thư mục dữ liệu của bảng điều khiển.",
   Email: "Email",
   "Display name": "Tên hiển thị",
   "Use at least 12 characters. A short phrase works well.":

@@ -16,6 +16,7 @@ fn config(database_url: &str, siteverify: &str) -> rudder_server::Config {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), database_url.to_owned()),
         ("RUDDER_MASTER_KEY".into(), "bb".repeat(32)),
+        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
         ("RUDDER_COOKIE_SECURE".into(), "false".into()),
         ("RUDDER_LOG_FORMAT".into(), "pretty".into()),
         (
@@ -113,6 +114,7 @@ async fn access_blocks_unknown_people_and_limits_a_host(pool: PgPool) {
         None,
         None,
         Some(json!({
+            "setup_token": "test-setup-token",
             "email": "owner@example.com",
             "password": "correct-horse-battery"
         })),
@@ -354,7 +356,7 @@ async fn parallel_code_guesses_share_five_attempts(pool: PgPool) {
         "/api/v1/setup",
         None,
         None,
-        Some(json!({ "email": "owner@example.com", "password": "correct-horse-battery" })),
+        Some(json!({ "setup_token": "test-setup-token", "email": "owner@example.com", "password": "correct-horse-battery" })),
     )
     .await;
     let panel_cookie = setup.cookie.unwrap();
@@ -504,6 +506,7 @@ async fn google_callback_requires_the_browser_that_started_sign_in(pool: PgPool)
         None,
         None,
         Some(json!({
+            "setup_token": "test-setup-token",
             "email": "owner@example.com",
             "password": "correct-horse-battery"
         })),

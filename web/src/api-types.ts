@@ -5520,6 +5520,8 @@ export interface components {
             display_name?: string | null;
             email: string;
             password: string;
+            /** @description One-time token from `setup-token` in the data directory, or `RUDDER_SETUP_TOKEN`. */
+            setup_token: string;
         };
         SetupSsh: {
             /**

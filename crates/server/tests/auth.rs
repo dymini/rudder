@@ -15,6 +15,7 @@ fn test_config(database_url: &str) -> rudder_server::Config {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), database_url.to_owned()),
         ("RUDDER_MASTER_KEY".into(), "bb".repeat(32)),
+        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
         ("RUDDER_COOKIE_SECURE".into(), "false".into()),
         ("RUDDER_LOG_FORMAT".into(), "pretty".into()),
     ]);
@@ -103,6 +104,7 @@ async fn setup_login_logout_and_csrf(pool: PgPool) {
         None,
         None,
         Some(json!({
+            "setup_token": "test-setup-token",
             "email": "Owner@Example.com",
             "password": "correct-horse-battery",
             "display_name": "Owner"
@@ -122,6 +124,7 @@ async fn setup_login_logout_and_csrf(pool: PgPool) {
         None,
         None,
         Some(json!({
+            "setup_token": "test-setup-token",
             "email": "other@example.com",
             "password": "correct-horse-battery"
         })),
@@ -229,6 +232,7 @@ async fn totp_setup_enable_and_login(pool: PgPool) {
         None,
         None,
         Some(json!({
+            "setup_token": "test-setup-token",
             "email": "owner@example.com",
             "password": "correct-horse-battery"
         })),
@@ -345,6 +349,7 @@ async fn roles_and_api_tokens(pool: PgPool) {
         None,
         None,
         Some(json!({
+            "setup_token": "test-setup-token",
             "email": "owner@example.com",
             "password": "correct-horse-battery"
         })),
@@ -484,6 +489,7 @@ async fn audit_log_records_mutations(pool: PgPool) {
         None,
         None,
         Some(json!({
+            "setup_token": "test-setup-token",
             "email": "owner@example.com",
             "password": "correct-horse-battery"
         })),
@@ -536,6 +542,7 @@ async fn cli_auth_device_code_browser_and_revocation(pool: PgPool) {
         None,
         None,
         Some(json!({
+            "setup_token": "test-setup-token",
             "email": "owner@example.com",
             "password": "correct-horse-battery"
         })),
@@ -768,4 +775,140 @@ fn current_code(secret_b32: &str, email: &str) -> String {
         .build()
         .unwrap();
     totp.generate_current().to_string()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn setup_requires_the_setup_token(pool: PgPool) {
+    let app = app(pool.clone());
+    for token in [json!(null), json!("wrong-token"), json!("")] {
+        let mut body = json!({
+            "email": "mallory@example.com",
+            "password": "correct-horse-battery"
+        });
+        if !token.is_null() {
+            body["setup_token"] = token;
+        }
+        let reply = call(&app, "POST", "/api/v1/setup", None, None, None, Some(body)).await;
+        assert!(reply.status.is_client_error(), "{}", reply.status);
+        assert!(reply.cookie.is_none());
+    }
+    let users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(users, 0);
+
+    let data_dir = std::env::temp_dir().join(format!("rudder-setup-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&data_dir).unwrap();
+    let vars = HashMap::from([
+        (
+            "DATABASE_URL".into(),
+            "postgres://localhost/rudder".to_owned(),
+        ),
+        ("RUDDER_MASTER_KEY".into(), "bb".repeat(32)),
+        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
+        ("RUDDER_LOG_FORMAT".into(), "pretty".into()),
+        ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
+    ]);
+    let config =
+        rudder_server::Config::from_map(&vars, |_| unreachable!("no key file")).expect("config");
+    let from_file = rudder_server::router(AppState::new(pool.clone(), config));
+    let reply = call(
+        &from_file,
+        "POST",
+        "/api/v1/setup",
+        None,
+        None,
+        None,
+        Some(json!({
+            "setup_token": "",
+            "email": "mallory@example.com",
+            "password": "correct-horse-battery"
+        })),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::FORBIDDEN);
+    assert_eq!(reply.body["error"]["code"], "setup_token_missing");
+
+    std::fs::write(data_dir.join("setup-token"), "file-token\n").unwrap();
+    let wrong = call(
+        &from_file,
+        "POST",
+        "/api/v1/setup",
+        None,
+        None,
+        None,
+        Some(json!({
+            "setup_token": "test-setup-token",
+            "email": "mallory@example.com",
+            "password": "correct-horse-battery"
+        })),
+    )
+    .await;
+    assert_eq!(wrong.status, StatusCode::FORBIDDEN);
+    assert_eq!(wrong.body["error"]["code"], "invalid_setup_token");
+    let reply = call(
+        &from_file,
+        "POST",
+        "/api/v1/setup",
+        None,
+        None,
+        None,
+        Some(json!({
+            "setup_token": "file-token",
+            "email": "owner@example.com",
+            "password": "correct-horse-battery"
+        })),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert!(!data_dir.join("setup-token").exists());
+    std::fs::remove_dir_all(&data_dir).ok();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn parallel_setup_creates_one_owner(pool: PgPool) {
+    let app = app(pool.clone());
+    let attempts = (0..8).map(|n| {
+        let app = app.clone();
+        async move {
+            call(
+                &app,
+                "POST",
+                "/api/v1/setup",
+                None,
+                None,
+                None,
+                Some(json!({
+                    "setup_token": "test-setup-token",
+                    "email": format!("owner{n}@example.com"),
+                    "password": "correct-horse-battery"
+                })),
+            )
+            .await
+            .status
+        }
+    });
+    let statuses = futures_util::future::join_all(attempts).await;
+    assert_eq!(
+        statuses.iter().filter(|s| **s == StatusCode::OK).count(),
+        1,
+        "{statuses:?}"
+    );
+    assert!(statuses
+        .iter()
+        .all(|s| *s == StatusCode::OK || *s == StatusCode::CONFLICT));
+    let users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(users, 1);
+
+    let second_owner = sqlx::query(
+        "INSERT INTO users (email, display_name, password_hash, role, is_owner) \
+         VALUES ('x@example.com', 'x', 'x', 'admin', TRUE)",
+    )
+    .execute(&pool)
+    .await;
+    assert!(second_owner.is_err());
 }

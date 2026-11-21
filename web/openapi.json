@@ -12481,6 +12481,7 @@
       "SetupRequest": {
         "type": "object",
         "required": [
+          "setup_token",
           "email",
           "password"
         ],
@@ -12496,6 +12497,10 @@
           },
           "password": {
             "type": "string"
+          },
+          "setup_token": {
+            "type": "string",
+            "description": "One-time token from `setup-token` in the data directory, or `RUDDER_SETUP_TOKEN`."
           }
         }
       },
