@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Security
+- **Checkout copies no longer follow symlinks on the server.** When a Git stack is copied to a remote server, files are written and stale files removed without following symlinks already in the checkout folder, so a link planted there (for example by a container that bind-mounts the checkout) can no longer redirect writes or deletes outside it. A deploy that would write through such a link now fails with an error naming the path.
+
 ## [0.10.5] - 2026-11-21
 
 ### Fixed

@@ -3920,6 +3920,7 @@ dependencies = [
  "hex",
  "reqwest",
  "rudder-core",
+ "rustix",
  "serde",
  "serde_json",
  "tar",
