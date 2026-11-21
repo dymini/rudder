@@ -126,6 +126,6 @@ For a Compose stack, published `ports` become container-only `expose` entries on
 
 ## Panel owner and authenticator
 
-The first account created at setup is the panel owner. Other administrators can do everything else, but they cannot delete the owner or change the owner's role.
+The first account created at setup is the panel owner. Setup needs the one-time token the panel writes to `setup-token` in its data directory while it has no users (or `RUDDER_SETUP_TOKEN`, when set); `install.sh` prints a setup link that includes it, and the file is removed once the owner exists. Only one account can be the owner. Other administrators can do everything else, but they cannot delete the owner or change the owner's role.
 
 The authenticator on **Account** is the second factor for the panel account. When you enable it, Rudder shows eight recovery codes shaped like `abcde-fghij`. Each code works once at sign-in, in the same field as the authenticator code. Store them somewhere safe. They are not shown again.

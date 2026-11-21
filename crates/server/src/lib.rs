@@ -79,6 +79,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     db::recover_interrupted(&pool)
         .await
         .context("recover interrupted work")?;
+    routes::account::prepare_setup_token(&pool, &config).await?;
     let settings = db::load_panel_settings(&pool).await?;
     tracing::info!(
         github_repo = %settings.github_repo,

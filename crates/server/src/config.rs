@@ -132,6 +132,8 @@ pub struct Config {
     pub cloudflare_api_url: String,
     /// Image the tunnel replicas run.
     pub cloudflared_image: String,
+    /// Token first-run setup requires. `None` uses `setup-token` in the data directory.
+    pub setup_token: Option<String>,
 }
 
 /// Release signing key compiled into official builds.
@@ -355,6 +357,10 @@ impl Config {
             .cloned()
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| rudder_core::DEFAULT_CLOUDFLARED_IMAGE.to_owned());
+        let setup_token = vars
+            .get("RUDDER_SETUP_TOKEN")
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty());
         Ok(Self {
             database_url,
             bind,
@@ -386,6 +392,7 @@ impl Config {
             google_userinfo_url,
             cloudflare_api_url,
             cloudflared_image,
+            setup_token,
         })
     }
 }
@@ -421,6 +428,10 @@ impl fmt::Debug for Config {
             .field("database_url", &redact_database_url(&self.database_url))
             .field("bind", &self.bind)
             .field("master_key", &"[redacted]")
+            .field(
+                "setup_token",
+                &self.setup_token.as_ref().map(|_| "[redacted]"),
+            )
             .field("data_dir", &self.data_dir)
             .field("public_url", &self.public_url)
             .field("github_repo", &self.github_repo)

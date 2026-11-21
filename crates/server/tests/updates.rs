@@ -229,6 +229,7 @@ impl Panel {
         let mut vars = HashMap::from([
             ("DATABASE_URL".to_owned(), url),
             ("RUDDER_MASTER_KEY".to_owned(), "dd".repeat(32)),
+            ("RUDDER_SETUP_TOKEN".to_owned(), "test-setup-token".into()),
             ("RUDDER_COOKIE_SECURE".to_owned(), "false".to_owned()),
             (
                 "RUDDER_DATA_DIR".to_owned(),
@@ -262,6 +263,7 @@ impl Panel {
             "/api/v1/setup",
             None,
             Some(json!({
+                "setup_token": "test-setup-token",
                 "email": "owner@example.com",
                 "password": "correct-horse-battery",
                 "display_name": "Owner"
