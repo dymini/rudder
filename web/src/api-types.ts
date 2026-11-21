@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/.well-known/oauth-authorization-server/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** OAuth authorization-server metadata for agent login */
+        get: operations["get__.well-known_oauth-authorization-server_mcp"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/.well-known/oauth-protected-resource": {
         parameters: {
             query?: never;
@@ -30,6 +47,23 @@ export interface paths {
         };
         /** OAuth protected-resource metadata for the MCP server */
         get: operations["get__.well-known_oauth-protected-resource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/oauth-protected-resource/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** OAuth protected-resource metadata for the MCP server */
+        get: operations["get__.well-known_oauth-protected-resource_mcp"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3386,7 +3420,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Register a public OAuth client for an agent (dynamic client registration) */
+        /** Register an OAuth client for an agent (dynamic client registration) */
         post: operations["post__oauth_register"];
         delete?: never;
         options?: never;
@@ -5083,10 +5117,17 @@ export interface components {
         };
         RuleAction: {
             /**
-             * @description Requests carrying a cookie whose name starts with one of these skip the cache.
+             * @description With `cache_cookies`, requests carrying a cookie whose name starts with one
+             *     of these still skip the cache.
              * @default []
              */
             bypass_cookies: string[];
+            /**
+             * @description Look up and store requests that carry a `Cookie` header. Off by default:
+             *     any request with a cookie skips the cache.
+             * @default false
+             */
+            cache_cookies: boolean;
             /**
              * @description Drop the query string from the cache key.
              * @default false
@@ -5971,7 +6012,43 @@ export interface operations {
             };
         };
     };
+    "get__.well-known_oauth-authorization-server_mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OAuth authorization-server metadata for agent login */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     "get__.well-known_oauth-protected-resource": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OAuth protected-resource metadata for the MCP server */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "get__.well-known_oauth-protected-resource_mcp": {
         parameters: {
             query?: never;
             header?: never;
@@ -11272,7 +11349,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Register a public OAuth client for an agent (dynamic client registration) */
+            /** @description Register an OAuth client for an agent (dynamic client registration) */
             201: {
                 headers: {
                     [name: string]: unknown;
