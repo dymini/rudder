@@ -9,6 +9,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Security
+- **Checkout copies no longer follow symlinks on the server.** When a Git stack is copied to a remote server, files are written and stale files removed without following symlinks already in the checkout folder, so a link planted there (for example by a container that bind-mounts the checkout) can no longer redirect writes or deletes outside it. A deploy that would write through such a link now fails with an error naming the path.
 - **Google sign-in for Rudder Access is tied to the browser that started it.** Starting Google sign-in now sets a short-lived cookie, and the callback refuses a sign-in link opened in any other browser, so nobody can send you a link that signs you in as them.
 
 ## [0.10.5] - 2026-11-21
