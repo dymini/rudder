@@ -46,7 +46,7 @@ use tower_http::trace::TraceLayer;
 
 pub use agent::serve as serve_agents;
 pub use build_queue::build_once;
-pub use config::{Config, ConfigError, LogFormat};
+pub use config::{Config, ConfigError, LogFormat, TrustedProxies};
 pub use db::ensure_partitions;
 pub use error::ApiError;
 pub use logs::retention::run_once as apply_log_retention;
