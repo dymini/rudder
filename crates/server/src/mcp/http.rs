@@ -379,8 +379,11 @@ pub(crate) fn validate_login(
     {
         return Err(bad("code_challenge must be the S256 value"));
     }
-    if state.is_empty() || state.len() > 512 {
+    if state.is_empty() {
         return Err(bad("state is required"));
+    }
+    if state.len() > 4096 {
+        return Err(bad("state is too long"));
     }
     if resource.is_some_and(|resource| !resource.is_empty() && !resource.ends_with("/mcp")) {
         return Err(bad("resource must be the panel MCP address"));
