@@ -9,6 +9,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Security
+- **Checkout copies no longer follow symlinks on the server.** When a Git stack is copied to a remote server, files are written and stale files removed without following symlinks already in the checkout folder, so a link planted there (for example by a container that bind-mounts the checkout) can no longer redirect writes or deletes outside it. A deploy that would write through such a link now fails with an error naming the path.
 - **Git stacks stay inside their repository.** A compose file, or a folder on its path, that is a symlink leading outside the cloned repository is now refused, and a deploy fails if the repository commits `rudder-compose.yml` or `.env` as a symlink beside the compose file, so a repository can no longer make the panel read or overwrite files elsewhere on the panel host.
 
 ## [0.10.5] - 2026-11-21
