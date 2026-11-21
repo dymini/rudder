@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Security
+- **Fake credentials no longer bypass the anonymous request limit.** Only requests whose session or token the panel has verified recently skip the 64 anonymous slots; a made-up `Authorization` header or session cookie now waits for a slot and gets `503` when they are busy.
+
 ## [0.10.5] - 2026-11-21
 
 ### Fixed

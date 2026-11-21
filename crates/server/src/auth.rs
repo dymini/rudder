@@ -249,7 +249,7 @@ pub fn clear_session_cookie(secure: bool) -> Cookie<'static> {
         .build()
 }
 
-fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
+pub(crate) fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
     let header = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
     for item in Cookie::split_parse(header) {
         let Ok(cookie) = item else { continue };
@@ -260,7 +260,7 @@ fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
     None
 }
 
-fn bearer(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn bearer(headers: &HeaderMap) -> Option<String> {
     let value = headers
         .get(axum::http::header::AUTHORIZATION)?
         .to_str()
@@ -354,6 +354,7 @@ async fn load_session(state: &AppState, token: &str) -> Result<AuthUser, ApiErro
             "session expired",
         ));
     }
+    state.credentials.remember(&hash);
     Ok(AuthUser {
         id: row.user_id,
         email: row.email,
@@ -405,6 +406,7 @@ async fn load_token(state: &AppState, token: &str) -> Result<AuthUser, ApiError>
     )
     .execute(&state.pool)
     .await;
+    state.credentials.remember(&hash);
     Ok(AuthUser {
         id: row.user_id,
         email: row.email,
