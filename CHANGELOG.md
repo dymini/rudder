@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Security
+- **Git stacks stay inside their repository.** A compose file, or a folder on its path, that is a symlink leading outside the cloned repository is now refused, and a deploy fails if the repository commits `rudder-compose.yml` or `.env` as a symlink beside the compose file, so a repository can no longer make the panel read or overwrite files elsewhere on the panel host.
+
 ## [0.10.5] - 2026-11-21
 
 ### Fixed
