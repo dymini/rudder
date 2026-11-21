@@ -130,7 +130,7 @@ async fn enroll(
     headers: HeaderMap,
     Json(body): Json<EnrollRequest>,
 ) -> Result<Json<EnrollResponse>, ApiError> {
-    let ip = auth::client_ip(&headers, peer, state.config.trust_proxy);
+    let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
     if state
         .login_limiter
         .check_key(&format!("enroll:{ip}"))

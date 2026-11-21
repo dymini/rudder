@@ -342,6 +342,100 @@ async fn gate_secret(pool: &PgPool) -> String {
     String::from_utf8(cipher.decrypt(&bytes).unwrap()).unwrap()
 }
 
+#[sqlx::test(migrations = "./migrations")]
+async fn parallel_code_guesses_share_five_attempts(pool: PgPool) {
+    let siteverify = turnstile().await;
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://rudder:rudder@127.0.0.1:5432/rudder".into());
+    let app = rudder_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
+    let setup = call(
+        &app,
+        "POST",
+        "/api/v1/setup",
+        None,
+        None,
+        Some(json!({ "email": "owner@example.com", "password": "correct-horse-battery" })),
+    )
+    .await;
+    let panel_cookie = setup.cookie.unwrap();
+    let csrf = setup.body["csrf_token"].as_str().unwrap();
+    let settings = call(
+        &app,
+        "PUT",
+        "/api/v1/access/settings",
+        Some(&panel_cookie),
+        Some(csrf),
+        Some(json!({
+            "turnstile_site_key": "0xSITE",
+            "turnstile_secret": "secret-value",
+            "turnstile_hostnames": ["access.example.com"],
+            "email_provider": "none"
+        })),
+    )
+    .await;
+    assert_eq!(settings.status, StatusCode::OK, "{}", settings.body);
+    let created = call(
+        &app,
+        "POST",
+        "/api/v1/access/identities",
+        Some(&panel_cookie),
+        Some(csrf),
+        Some(json!({ "email": "ada@example.com", "display_name": "Ada" })),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    sqlx::query(
+        "INSERT INTO access_codes (email, code_hash, purpose, expires_at)
+         VALUES ($1, encode(digest($2, 'sha256'), 'hex'), 'login', now() + interval '10 minutes')",
+    )
+    .bind("ada@example.com")
+    .bind("123456")
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Each guess comes through the local proxy with its own client address,
+    // so the per-IP limit does not stop any of them.
+    let verify = |code: &'static str, client: usize| {
+        let app = app.clone();
+        async move {
+            let mut request = Request::builder()
+                .method("POST")
+                .uri("/api/v1/access/login/email/verify")
+                .header("content-type", "application/json")
+                .header("x-forwarded-for", format!("203.0.113.{client}"))
+                .body(Body::from(
+                    json!({
+                        "email": "ada@example.com",
+                        "code": code,
+                        "turnstile_token": "token"
+                    })
+                    .to_string(),
+                ))
+                .unwrap();
+            request.extensions_mut().insert(axum::extract::ConnectInfo(
+                std::net::SocketAddr::from(([127, 0, 0, 1], 40000)),
+            ));
+            app.oneshot(request).await.unwrap().status()
+        }
+    };
+    let guesses = (1..=20).map(|client| tokio::spawn(verify("000000", client)));
+    for guess in guesses {
+        let status = guess.await.unwrap();
+        assert_ne!(status, StatusCode::OK);
+        assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
+    }
+    let (attempts, used): (i32, bool) = sqlx::query_as(
+        "SELECT attempts, used_at IS NOT NULL FROM access_codes WHERE email = 'ada@example.com'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(attempts, 5);
+    assert!(used);
+    assert_ne!(verify("123456", 99).await, StatusCode::OK);
+}
+
 async fn google_mock() -> String {
     let app = axum::Router::new()
         .route(

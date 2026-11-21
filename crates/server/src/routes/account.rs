@@ -239,7 +239,7 @@ fn request_ip(
     headers: &axum::http::HeaderMap,
     peer: Option<SocketAddr>,
 ) -> String {
-    auth::client_ip(headers, peer, state.config.trust_proxy)
+    auth::client_ip(headers, peer, &state.config.trusted_proxies)
 }
 
 async fn setup_status(State(state): State<AppState>) -> Result<Json<SetupStatus>, ApiError> {
