@@ -2,11 +2,12 @@
 # Install the Rudder agent on a server and connect it to a panel.
 #
 #   curl -fsSL https://panel.example.com/install-agent.sh | sudo sh -s -- \
-#     --server https://panel.example.com --token join_...
+#     --server https://panel.example.com --ca-sha256 <hex> --token join_...
 #
 # Options:
-#   --server URL       Panel URL (required)
+#   --server URL       Panel URL (required; https://, or http:// only for localhost)
 #   --token TOKEN      One-time join token from the panel (required)
+#   --ca-sha256 HEX    SHA-256 of the panel's agent CA; enrollment fails if it differs
 #   --version VERSION  Release to fetch from GitHub when the panel has no bundled binary
 #   --email EMAIL      Let's Encrypt account email for this server's Traefik
 #   --no-edge          Do not start the rudder-traefik and rudder-cache containers
@@ -24,6 +25,7 @@ CACHE_IMAGE="${RUDDER_CACHE_IMAGE:-ghcr.io/vantanminh/rudder-cache:latest}"
 
 server=""
 token=""
+ca_sha256=""
 version="latest"
 email=""
 edge=1
@@ -49,6 +51,11 @@ while [ $# -gt 0 ]; do
 		token="$2"
 		shift 2
 		;;
+	--ca-sha256)
+		[ $# -ge 2 ] || die "--ca-sha256 needs a value"
+		ca_sha256="$2"
+		shift 2
+		;;
 	--version)
 		[ $# -ge 2 ] || die "--version needs a value"
 		version="$2"
@@ -71,11 +78,20 @@ done
 
 [ -n "$server" ] || die "--server is required"
 [ -n "$token" ] || die "--token is required"
-case "$server" in
-http://* | https://*) ;;
-*) die "--server must start with http:// or https://" ;;
-esac
 server="${server%/}"
+# Enrollment receives the CA the agent trusts from then on, so it must not travel in plain text.
+case "$server" in
+*@*) die "--server must not contain credentials" ;;
+https://*) ;;
+http://localhost | http://localhost[:/]* | http://127.0.0.1 | http://127.0.0.1[:/]* | http://\[::1\] | http://\[::1\][:/]*) ;;
+http://*) die "--server must use https:// (http:// is allowed only for localhost)" ;;
+*) die "--server must start with https://" ;;
+esac
+case "$ca_sha256" in
+"") ;;
+*[!0-9a-fA-F]*) die "--ca-sha256 must be 64 hexadecimal characters" ;;
+*) [ "${#ca_sha256}" -eq 64 ] || die "--ca-sha256 must be 64 hexadecimal characters" ;;
+esac
 case "$version" in
 latest | v[0-9]*) ;;
 *) die "--version must look like v1.2.3" ;;
@@ -129,7 +145,16 @@ info "installed $("$BIN_DIR/rudder-agent" --version)"
 install -d -m 0700 "$AGENT_DATA"
 install -d -m 0755 "$NODE_DATA"
 if [ ! -f "$AGENT_DATA/agent.json" ]; then
-	"$BIN_DIR/rudder-agent" enroll --server "$server" --token "$token" --data-dir "$AGENT_DATA"
+	if [ -n "$ca_sha256" ]; then
+		if "$BIN_DIR/rudder-agent" --help | grep -q -- --ca-sha256; then
+			"$BIN_DIR/rudder-agent" enroll --server "$server" --ca-sha256 "$ca_sha256" --token "$token" --data-dir "$AGENT_DATA"
+		else
+			info "this rudder-agent cannot check --ca-sha256; enrolling over https:// without the CA pin"
+			"$BIN_DIR/rudder-agent" enroll --server "$server" --token "$token" --data-dir "$AGENT_DATA"
+		fi
+	else
+		"$BIN_DIR/rudder-agent" enroll --server "$server" --token "$token" --data-dir "$AGENT_DATA"
+	fi
 else
 	info "already enrolled; keeping $AGENT_DATA (delete it to enroll again)"
 fi

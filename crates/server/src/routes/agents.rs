@@ -88,9 +88,31 @@ fn valid_host(host: &str) -> bool {
 }
 
 /// The one-line installer shown after adding a server. The token is the only secret.
-pub fn join_command(state: &AppState, headers: &HeaderMap, token: &str) -> String {
+/// It pins the agent CA's fingerprint, so enrollment cannot be answered by anyone
+/// else even if the connection to the panel is intercepted.
+pub async fn join_command(
+    state: &AppState,
+    headers: &HeaderMap,
+    token: &str,
+) -> Result<String, ApiError> {
     let panel = panel_url(state, headers);
-    format!("curl -fsSL {panel}/install-agent.sh | sudo sh -s -- --server {panel} --token {token}")
+    let ca = pki::AgentCa::load_or_create(&state.pool, &state.cipher)
+        .await
+        .map_err(ca_unavailable)?;
+    let ca_sha256 = pki::pem_fingerprint(&ca.cert_pem)
+        .ok_or_else(|| ca_unavailable("the agent CA certificate is unreadable"))?;
+    Ok(format!(
+        "curl -fsSL {panel}/install-agent.sh | sudo sh -s -- --server {panel} --ca-sha256 {ca_sha256} --token {token}"
+    ))
+}
+
+fn ca_unavailable(error: impl std::fmt::Display) -> ApiError {
+    tracing::error!(%error, "agent CA unavailable");
+    ApiError::new(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "ca_unavailable",
+        "the agent certificate authority is unavailable",
+    )
 }
 
 fn grpc_url(state: &AppState, headers: &HeaderMap) -> String {
@@ -155,14 +177,7 @@ async fn enroll(
             ),
             EnrollError::BadCsr => bad("invalid_csr", error.to_string()),
             EnrollError::Database(error) => ApiError::database(error),
-            EnrollError::Pki(error) => {
-                tracing::error!(%error, "agent CA unavailable");
-                ApiError::new(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ca_unavailable",
-                    "the agent certificate authority is unavailable",
-                )
-            }
+            EnrollError::Pki(error) => ca_unavailable(error),
         })?;
     audit::record(
         &state.pool,
@@ -223,7 +238,7 @@ async fn rotate_join_token(
     )
     .await;
     Ok(Json(JoinToken {
-        join_command: join_command(&state, &headers, &token),
+        join_command: join_command(&state, &headers, &token).await?,
         join_token: token,
         expires_at,
     }))
