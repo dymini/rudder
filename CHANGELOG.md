@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Security
+- **Google sign-in for Rudder Access is tied to the browser that started it.** Starting Google sign-in now sets a short-lived cookie, and the callback refuses a sign-in link opened in any other browser, so nobody can send you a link that signs you in as them.
+
 ## [0.10.5] - 2026-11-21
 
 ### Fixed
