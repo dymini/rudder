@@ -263,7 +263,7 @@ function PolicyEditor({
           </Field>
           <p className="mt-1 text-xs text-muted">
             {t(
-              "Each rule has {match} (path_prefixes, extensions, path_glob) and {action} (mode cache|bypass, ttl_secs, respect_origin, stale_while_revalidate_secs, stale_if_error_secs, ignore_query, query_keys, bypass_cookies, statuses). Responses with Set-Cookie, private, or no-store are never stored.",
+              "Each rule has {match} (path_prefixes, extensions, path_glob) and {action} (mode cache|bypass, ttl_secs, respect_origin, stale_while_revalidate_secs, stale_if_error_secs, ignore_query, query_keys, cache_cookies, bypass_cookies, statuses). Requests with cookies skip the cache unless cache_cookies is true. Responses with Set-Cookie, private, or no-store are never stored.",
               { match: <code>match</code>, action: <code>action</code> },
             )}
           </p>

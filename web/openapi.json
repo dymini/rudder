@@ -11240,8 +11240,13 @@
             "items": {
               "type": "string"
             },
-            "description": "Requests carrying a cookie whose name starts with one of these skip the cache.",
+            "description": "With `cache_cookies`, requests carrying a cookie whose name starts with one\nof these still skip the cache.",
             "default": []
+          },
+          "cache_cookies": {
+            "type": "boolean",
+            "description": "Look up and store requests that carry a `Cookie` header. Off by default:\nany request with a cookie skips the cache.",
+            "default": false
           },
           "ignore_query": {
             "type": "boolean",
