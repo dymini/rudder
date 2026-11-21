@@ -11,6 +11,7 @@ use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::Json;
+use base64::Engine;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tower::ServiceExt;
@@ -38,6 +39,14 @@ pub fn router() -> axum::Router<AppState> {
             get(authorization_server),
         )
         .route("/oauth/register", post(register))
+        .route(
+            "/.well-known/oauth-protected-resource/mcp",
+            get(protected_resource),
+        )
+        .route(
+            "/.well-known/oauth-authorization-server/mcp",
+            get(authorization_server),
+        )
         .route("/oauth/authorize", get(authorize))
         .route("/oauth/token", post(token))
         .route("/oauth/revoke", post(revoke))
@@ -176,7 +185,8 @@ async fn authorization_server(
             "response_types_supported": ["code"],
             "grant_types_supported": ["authorization_code", "refresh_token"],
             "code_challenge_methods_supported": ["S256"],
-            "token_endpoint_auth_methods_supported": ["none"],
+            "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
+            "revocation_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
             "scopes_supported": scopes_supported(),
         }))
         .into_response(),
@@ -185,7 +195,7 @@ async fn authorization_server(
 
 #[derive(Deserialize)]
 struct RegisterRequest {
-    client_name: String,
+    client_name: Option<String>,
     redirect_uris: Vec<String>,
     #[serde(default)]
     grant_types: Vec<String>,
@@ -204,13 +214,14 @@ async fn register(
     if rate_limited(&state.oauth_limiter, &client_ip(&state, &headers, peer)) {
         return Err(too_many());
     }
-    let name = clean_name(&body.client_name).ok_or_else(|| {
-        ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "invalid_client",
-            "client name must be 1 to 80 characters",
-        )
-    })?;
+    let name =
+        clean_name(body.client_name.as_deref().unwrap_or("MCP client")).ok_or_else(|| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_client",
+                "client name must be 1 to 80 characters",
+            )
+        })?;
     if body.redirect_uris.is_empty() || body.redirect_uris.len() > 8 {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -225,15 +236,15 @@ async fn register(
             "redirect URLs must be https, a loopback http URL, or a private app scheme",
         ));
     }
-    if body
-        .token_endpoint_auth_method
-        .as_deref()
-        .is_some_and(|method| method != "none")
-    {
+    let method = body.token_endpoint_auth_method.as_deref().unwrap_or("none");
+    if !matches!(
+        method,
+        "none" | "client_secret_post" | "client_secret_basic"
+    ) {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "invalid_client",
-            "this server only supports public clients (token_endpoint_auth_method none)",
+            "unsupported token_endpoint_auth_method",
         ));
     }
     if body
@@ -266,31 +277,37 @@ async fn register(
         ));
     }
     let client_id = auth::random_token("rdr_cli");
+    let secret = (method != "none").then(|| auth::random_token("rdr_cs"));
+    let secret_hash = secret.as_deref().map(auth::sha256_hex);
     sqlx::query!(
         r#"
-        INSERT INTO oauth_clients (client_id, client_name, redirect_uris)
-        VALUES ($1, $2, $3)
+        INSERT INTO oauth_clients (client_id, client_name, redirect_uris, token_endpoint_auth_method, client_secret_hash)
+        VALUES ($1, $2, $3, $4, $5)
         "#,
         client_id,
         name,
         &body.redirect_uris,
+        method,
+        secret_hash,
     )
     .execute(&state.pool)
     .await
     .map_err(ApiError::database)?;
+    let mut registration = json!({
+        "client_id": client_id,
+        "client_name": name,
+        "redirect_uris": body.redirect_uris,
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "token_endpoint_auth_method": method,
+        "client_id_issued_at": chrono::Utc::now().timestamp(),
+    });
+    if let Some(secret) = secret {
+        registration["client_secret"] = json!(secret);
+        registration["client_secret_expires_at"] = json!(0);
+    }
     Ok(no_store(
-        (
-            StatusCode::CREATED,
-            Json(json!({
-                "client_id": client_id,
-                "client_name": name,
-                "redirect_uris": body.redirect_uris,
-                "grant_types": ["authorization_code", "refresh_token"],
-                "response_types": ["code"],
-                "token_endpoint_auth_method": "none",
-            })),
-        )
-            .into_response(),
+        (StatusCode::CREATED, Json(registration)).into_response(),
     ))
 }
 
@@ -368,9 +385,82 @@ struct TokenForm {
     #[serde(default)]
     client_id: String,
     #[serde(default)]
+    client_secret: Option<String>,
+    #[serde(default)]
     code_verifier: String,
     #[serde(default)]
     refresh_token: String,
+}
+
+async fn authenticate_client(
+    state: &AppState,
+    headers: &HeaderMap,
+    body_id: &str,
+    body_secret: Option<&str>,
+) -> Result<String, Box<Response>> {
+    let invalid = || {
+        let mut response = oauth_error(
+            StatusCode::UNAUTHORIZED,
+            "invalid_client",
+            "invalid client credentials",
+        );
+        response.headers_mut().insert(
+            header::WWW_AUTHENTICATE,
+            "Basic realm=\"oauth\"".parse().unwrap(),
+        );
+        Box::new(response)
+    };
+    let basic = if let Some(header) = headers.get(header::AUTHORIZATION) {
+        let value = header.to_str().map_err(|_| invalid())?;
+        let (scheme, encoded) = value.split_once(' ').ok_or_else(invalid)?;
+        if !scheme.eq_ignore_ascii_case("Basic") || body_secret.is_some() {
+            return Err(invalid());
+        }
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .map_err(|_| invalid())?;
+        let decoded = String::from_utf8(decoded).map_err(|_| invalid())?;
+        let (id, secret) = decoded.split_once(':').ok_or_else(invalid)?;
+        let decode = |value: &str| -> Result<String, Box<Response>> {
+            percent_encoding::percent_decode_str(&value.replace('+', " "))
+                .decode_utf8()
+                .map(|value| value.into_owned())
+                .map_err(|_| invalid())
+        };
+        Some((decode(id)?, decode(secret)?))
+    } else {
+        None
+    };
+    let (id, secret) = match &basic {
+        Some((id, secret)) => {
+            if !body_id.is_empty() && body_id != id {
+                return Err(invalid());
+            }
+            (id.as_str(), Some(secret.as_str()))
+        }
+        None => (body_id, body_secret),
+    };
+    let row: Option<(String, Option<String>)> = sqlx::query_as(
+        "SELECT token_endpoint_auth_method, client_secret_hash FROM oauth_clients WHERE client_id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|_| Box::new(oauth_error(StatusCode::INTERNAL_SERVER_ERROR, "server_error", "could not authenticate client")))?;
+    let Some((registered_method, hash)) = row else {
+        return Err(invalid());
+    };
+    if registered_method == "none" {
+        if basic.is_some() || body_secret.is_some() {
+            return Err(invalid());
+        }
+    } else if !secret
+        .zip(hash.as_deref())
+        .is_some_and(|(secret, hash)| auth::tokens_eq(&auth::sha256_hex(secret), hash))
+    {
+        return Err(invalid());
+    }
+    Ok(id.to_owned())
 }
 
 async fn token(
@@ -416,20 +506,29 @@ async fn token(
             }
         }
     };
+    let client_id = match authenticate_client(
+        &state,
+        &headers,
+        &form.client_id,
+        form.client_secret.as_deref(),
+    )
+    .await
+    {
+        Ok(id) => id,
+        Err(response) => return *response,
+    };
     let issued = match form.grant_type.as_str() {
         "authorization_code" => {
             tokens::exchange_code(
                 &state,
-                &form.client_id,
+                &client_id,
                 &form.code,
                 &form.redirect_uri,
                 &form.code_verifier,
             )
             .await
         }
-        "refresh_token" => {
-            tokens::exchange_refresh(&state, &form.client_id, &form.refresh_token).await
-        }
+        "refresh_token" => tokens::exchange_refresh(&state, &client_id, &form.refresh_token).await,
         _ => {
             return oauth_error(
                 StatusCode::BAD_REQUEST,
@@ -465,6 +564,8 @@ struct RevokeForm {
     token: String,
     #[serde(default)]
     client_id: String,
+    #[serde(default)]
+    client_secret: Option<String>,
 }
 
 async fn revoke(
@@ -480,15 +581,41 @@ async fn revoke(
         serde_json::from_slice(&body).unwrap_or(RevokeForm {
             token: String::new(),
             client_id: String::new(),
+            client_secret: None,
         })
     } else {
         serde_urlencoded::from_bytes(&body).unwrap_or(RevokeForm {
             token: String::new(),
             client_id: String::new(),
+            client_secret: None,
         })
     };
+    let mut id = form.client_id;
+    if id.is_empty() && !headers.contains_key(header::AUTHORIZATION) && form.client_secret.is_none()
+    {
+        let hash = auth::sha256_hex(&form.token);
+        let found: Result<Option<String>, _> = sqlx::query_scalar(
+            "SELECT g.client_id FROM mcp_grants g JOIN mcp_access_tokens t ON t.grant_id = g.id WHERE t.token_hash = $1 UNION ALL SELECT g.client_id FROM mcp_grants g JOIN mcp_refresh_tokens t ON t.grant_id = g.id WHERE t.token_hash = $1 LIMIT 1",
+        ).bind(hash).fetch_optional(&state.pool).await;
+        match found {
+            Ok(Some(found)) => id = found,
+            Ok(None) => return no_store(StatusCode::OK.into_response()),
+            Err(_) => {
+                return oauth_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "server_error",
+                    "could not authenticate client",
+                )
+            }
+        }
+    }
+    let client_id =
+        match authenticate_client(&state, &headers, &id, form.client_secret.as_deref()).await {
+            Ok(id) => id,
+            Err(response) => return *response,
+        };
     if !form.token.is_empty() {
-        let _ = tokens::revoke(&state, &form.token, &form.client_id).await;
+        let _ = tokens::revoke(&state, &form.token, &client_id).await;
     }
     no_store(StatusCode::OK.into_response())
 }

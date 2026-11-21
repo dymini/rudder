@@ -24,6 +24,20 @@
         }
       }
     },
+    "/.well-known/oauth-authorization-server/mcp": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "OAuth authorization-server metadata for agent login",
+        "operationId": "get__.well-known_oauth-authorization-server_mcp",
+        "responses": {
+          "200": {
+            "description": "OAuth authorization-server metadata for agent login"
+          }
+        }
+      }
+    },
     "/.well-known/oauth-protected-resource": {
       "get": {
         "tags": [
@@ -31,6 +45,20 @@
         ],
         "summary": "OAuth protected-resource metadata for the MCP server",
         "operationId": "get__.well-known_oauth-protected-resource",
+        "responses": {
+          "200": {
+            "description": "OAuth protected-resource metadata for the MCP server"
+          }
+        }
+      }
+    },
+    "/.well-known/oauth-protected-resource/mcp": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "OAuth protected-resource metadata for the MCP server",
+        "operationId": "get__.well-known_oauth-protected-resource_mcp",
         "responses": {
           "200": {
             "description": "OAuth protected-resource metadata for the MCP server"
@@ -5763,11 +5791,11 @@
         "tags": [
           "auth"
         ],
-        "summary": "Register a public OAuth client for an agent (dynamic client registration)",
+        "summary": "Register an OAuth client for an agent (dynamic client registration)",
         "operationId": "post__oauth_register",
         "responses": {
           "201": {
-            "description": "Register a public OAuth client for an agent (dynamic client registration)"
+            "description": "Register an OAuth client for an agent (dynamic client registration)"
           }
         }
       }

@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Fixed
+- **Connect server-side AI agents to MCP.** OAuth registration now supports confidential clients such as Devin with a client secret sent through either HTTP Basic or the request body, regardless of the registered secret method, while public clients keep using PKCE without a secret. MCP discovery also supports path-specific well-known URLs.
+
 ## [0.10.2] - 2026-11-15
 
 ### Fixed
