@@ -2274,13 +2274,20 @@ fn merged_mail(
 }
 
 async fn consume_login_code(state: &AppState, email: &str, code: &str) -> Result<(), ApiError> {
+    // One statement counts the attempt, so parallel guesses cannot share a slot.
     let row = sqlx::query!(
         r#"
-        SELECT id, code_hash, attempts, expires_at
-        FROM access_codes
-        WHERE email = $1 AND purpose = 'login' AND used_at IS NULL
-        ORDER BY created_at DESC
-        LIMIT 1
+        UPDATE access_codes
+        SET attempts = attempts + 1
+        WHERE id = (
+            SELECT id
+            FROM access_codes
+            WHERE email = $1 AND purpose = 'login' AND used_at IS NULL
+            ORDER BY created_at DESC
+            LIMIT 1
+        )
+        AND used_at IS NULL AND attempts < 5
+        RETURNING id, code_hash, attempts, expires_at
         "#,
         email
     )
@@ -2291,21 +2298,19 @@ async fn consume_login_code(state: &AppState, email: &str, code: &str) -> Result
         return Err(invalid_code());
     };
     let matches = auth::tokens_eq(&auth::sha256_hex(code), &row.code_hash);
-    let attempts = row.attempts + 1;
-    sqlx::query!(
-        r#"
-        UPDATE access_codes
-        SET attempts = $2, used_at = CASE WHEN $3 OR $2 >= 5 THEN now() ELSE used_at END
-        WHERE id = $1
-        "#,
+    if !matches && row.attempts < 5 {
+        return Err(invalid_code());
+    }
+    // Spend the code: on a match only one request may claim it.
+    let spent = sqlx::query!(
+        r#"UPDATE access_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL"#,
         row.id,
-        attempts,
-        matches,
     )
     .execute(&state.pool)
     .await
-    .map_err(ApiError::database)?;
-    if !matches || attempts > 5 || row.expires_at <= Utc::now() {
+    .map_err(ApiError::database)?
+    .rows_affected();
+    if !matches || spent != 1 || row.expires_at <= Utc::now() {
         return Err(invalid_code());
     }
     Ok(())

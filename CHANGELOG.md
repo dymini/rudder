@@ -10,6 +10,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ### Security
 - **Rate limits can no longer be dodged with a fake `X-Forwarded-For`.** The panel now reads `X-Forwarded-For` (and, in tunnel mode, `CF-Connecting-IP`) only when the connection comes from a trusted proxy: by default loopback and private networks, where Traefik and the Cloudflare connector live. Requests sent straight to port 3000 from the internet are limited by their real address. If your reverse proxy reaches the panel from a public address, list it in the new `RUDDER_TRUSTED_PROXIES` variable (comma-separated addresses or CIDR networks).
+- **Access email codes allow exactly five guesses.** Parallel verify requests can no longer each get a guess while the attempt counter only goes up once, and a correct code can be used only once.
 
 ## [0.10.5] - 2026-11-21
 
