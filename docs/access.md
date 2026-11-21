@@ -10,7 +10,7 @@ The portal is at `/access` on the panel, for example `https://panel.example.com/
 
 Sign-in offers two methods:
 
-- **Google.** One redirect URI, shown on the Rudder Access page. Put that exact URI in the Google OAuth client. Rudder accepts the Google account only when Google says the email is verified and the email is already on the allow list.
+- **Google.** One redirect URI, shown on the Rudder Access page. Put that exact URI in the Google OAuth client. Rudder accepts the Google account only when Google says the email is verified and the email is already on the allow list. Starting Google sign-in sets a short-lived `rudder_access_google` cookie, and the callback only finishes in the browser that holds it, so a sign-in link opened in another browser is refused.
 - **Email code.** Rudder emails a 6-digit code. The code expires in 10 minutes, and five wrong attempts use it up.
 
 Both methods require a Cloudflare Turnstile token. Rudder checks the token on the server with Cloudflare siteverify. The check fails closed: the token must succeed, the action must be `access_login`, and the hostname Cloudflare returns must be one of the hostnames you saved. Do not put `localhost` in that list on a production panel.
