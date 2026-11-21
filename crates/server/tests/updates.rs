@@ -590,7 +590,7 @@ async fn outdated_agents_receive_the_bundled_binary_and_reconnect(pool: PgPool) 
     let token = created.body["join_token"].as_str().unwrap();
     let agent_dir = TempDir::new();
     let data_dir = agent_dir.path().join("agent");
-    let identity = rudder_agent::enroll(&format!("http://{http_addr}"), token, &data_dir)
+    let identity = rudder_agent::enroll(&format!("http://{http_addr}"), token, None, &data_dir)
         .await
         .unwrap();
 

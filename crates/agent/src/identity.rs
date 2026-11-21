@@ -93,11 +93,20 @@ struct ApiErrorBody {
 }
 
 /// Exchange a join token for a client certificate and save the identity.
-pub async fn enroll(panel_url: &str, token: &str, data_dir: &Path) -> anyhow::Result<Identity> {
+///
+/// The panel URL must use `https://`; plain `http://` is accepted only for a
+/// loopback address, because the reply carries the CA the agent trusts from
+/// then on. When `ca_sha256` is given, the returned CA must have that SHA-256
+/// fingerprint (of its DER encoding) or nothing is saved.
+pub async fn enroll(
+    panel_url: &str,
+    token: &str,
+    ca_sha256: Option<&str>,
+    data_dir: &Path,
+) -> anyhow::Result<Identity> {
     let panel_url = panel_url.trim_end_matches('/');
-    if !(panel_url.starts_with("https://") || panel_url.starts_with("http://")) {
-        anyhow::bail!("--server must start with https:// or http://");
-    }
+    check_panel_url(panel_url)?;
+    let ca_sha256 = ca_sha256.map(parse_fingerprint).transpose()?;
     let key = rcgen::KeyPair::generate().context("generate key")?;
     let csr = rcgen::CertificateParams::new(Vec::<String>::new())
         .context("certificate request")?
@@ -131,6 +140,15 @@ pub async fn enroll(panel_url: &str, token: &str, data_dir: &Path) -> anyhow::Re
     if !body.grpc_url.starts_with("https://") {
         anyhow::bail!("the panel returned a non-TLS agent address");
     }
+    if let Some(expected) = ca_sha256 {
+        let actual = pem_fingerprint(&body.ca_pem)
+            .ok_or_else(|| anyhow::anyhow!("the panel returned an unreadable CA certificate"))?;
+        if actual != expected {
+            anyhow::bail!(
+                "the panel's agent CA has fingerprint {actual}, not the expected {expected}; refusing to enroll"
+            );
+        }
+    }
     let identity = Identity {
         meta: AgentMeta {
             server_id: body.server_id,
@@ -144,6 +162,54 @@ pub async fn enroll(panel_url: &str, token: &str, data_dir: &Path) -> anyhow::Re
     };
     identity.save(data_dir)?;
     Ok(identity)
+}
+
+/// Allow `https://`, or `http://` only to this machine.
+fn check_panel_url(panel_url: &str) -> anyhow::Result<()> {
+    let url = reqwest::Url::parse(panel_url)
+        .with_context(|| format!("--server {panel_url} is not a valid URL"))?;
+    match url.scheme() {
+        "https" => Ok(()),
+        "http" if is_loopback(&url) => Ok(()),
+        "http" => anyhow::bail!(
+            "--server must use https://; plain http:// is allowed only for localhost, \
+             because enrollment receives the CA certificate the agent trusts"
+        ),
+        _ => anyhow::bail!("--server must start with https://"),
+    }
+}
+
+fn is_loopback(url: &reqwest::Url) -> bool {
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
+fn parse_fingerprint(value: &str) -> anyhow::Result<String> {
+    let hex: String = value
+        .trim()
+        .trim_start_matches("sha256:")
+        .chars()
+        .filter(|c| *c != ':')
+        .collect::<String>()
+        .to_ascii_lowercase();
+    if hex.len() != 64 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        anyhow::bail!("--ca-sha256 must be 64 hexadecimal characters");
+    }
+    Ok(hex)
+}
+
+/// SHA-256 (lowercase hex) of the DER encoding of the first certificate in `pem`.
+fn pem_fingerprint(pem: &str) -> Option<String> {
+    use rustls::pki_types::{pem::PemObject, CertificateDer};
+    use sha2::Digest;
+    let der = CertificateDer::from_pem_slice(pem.as_bytes()).ok()?;
+    Some(hex::encode(sha2::Sha256::digest(der.as_ref())))
 }
 
 pub fn create_private_dir(dir: &Path) -> anyhow::Result<()> {
@@ -175,4 +241,70 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
         file.sync_all()?;
     }
     std::fs::rename(&tmp, path).with_context(|| format!("replace {}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn panel_url_must_be_https_unless_loopback() {
+        for ok in [
+            "https://panel.example.com",
+            "https://10.0.0.5:3000",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://127.1.2.3",
+            "http://[::1]:3000",
+        ] {
+            assert!(check_panel_url(ok).is_ok(), "{ok}");
+        }
+        for bad in [
+            "http://panel.example.com",
+            "http://10.0.0.5:3000",
+            "http://localhost.example.com",
+            "http://127.0.0.1.nip.io",
+            "http://[::ffff:10.0.0.1]",
+            "ftp://panel.example.com",
+            "panel.example.com",
+        ] {
+            assert!(check_panel_url(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[tokio::test]
+    async fn plain_http_is_rejected_before_any_request() {
+        let dir = std::env::temp_dir().join("rudder-agent-enroll-http-test");
+        let error = enroll("http://192.0.2.1:9", "join_x", None, &dir)
+            .await
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("https://"), "{error:#}");
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn fingerprints_are_normalized_and_checked() {
+        let hex = "AB".repeat(32);
+        assert_eq!(parse_fingerprint(&hex).unwrap(), "ab".repeat(32));
+        let colons = vec!["ab"; 32].join(":");
+        assert_eq!(
+            parse_fingerprint(&format!("sha256:{colons}")).unwrap(),
+            "ab".repeat(32)
+        );
+        assert!(parse_fingerprint("abc").is_err());
+        assert!(parse_fingerprint(&"zz".repeat(32)).is_err());
+    }
+
+    #[test]
+    fn pem_fingerprint_hashes_the_der() {
+        let key = rcgen::KeyPair::generate().unwrap();
+        let cert = rcgen::CertificateParams::new(Vec::<String>::new())
+            .unwrap()
+            .self_signed(&key)
+            .unwrap();
+        use sha2::Digest;
+        let expected = hex::encode(sha2::Sha256::digest(cert.der()));
+        assert_eq!(pem_fingerprint(&cert.pem()), Some(expected));
+        assert_eq!(pem_fingerprint("not a certificate"), None);
+    }
 }
