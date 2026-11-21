@@ -9,6 +9,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Security
+- **Checkout copies no longer follow symlinks on the server.** When a Git stack is copied to a remote server, files are written and stale files removed without following symlinks already in the checkout folder, so a link planted there (for example by a container that bind-mounts the checkout) can no longer redirect writes or deletes outside it. A deploy that would write through such a link now fails with an error naming the path.
 - **The HTTP cache no longer stores pages for signed-in visitors.** Requests that carry a cookie now skip the cache unless the rule sets the new `cache_cookies` action field, which closes a way to read another visitor's page through a crafted link such as `/account;x.css`. Extension rules no longer match paths containing `;`, and a response is only stored for a path like `.css` or `.png` when its Content-Type matches. Existing extension rules and the Static assets, WordPress, Ghost, and Next.js build asset presets keep caching for visitors with cookies; **custom page rules that relied on `bypass_cookies` must now set `cache_cookies: true`** to keep caching those visitors. The API micro-cache preset now skips any request with a cookie.
 
 ## [0.10.5] - 2026-11-21

@@ -109,6 +109,9 @@ pub fn pack_files(root: &Path, files: &[String]) -> Result<Vec<u8>, Error> {
 
 /// Extract `archive` into `dest`. Files listed in the previous manifest and
 /// absent from this archive are removed. Anything else under `dest` is kept.
+/// Paths are resolved one component at a time without following symlinks, so a
+/// link planted in `dest` (for example from a container that bind-mounts it)
+/// cannot redirect a write or delete outside the checkout.
 pub fn apply_tree(dest: &Path, manifest: &Path, archive: &[u8]) -> Result<(), Error> {
     if archive.len() as u64 > MAX_TREE_BYTES {
         return Err(Error::Validation(
@@ -116,6 +119,7 @@ pub fn apply_tree(dest: &Path, manifest: &Path, archive: &[u8]) -> Result<(), Er
         ));
     }
     fs::create_dir_all(dest).map_err(|error| Error::Node(error.to_string()))?;
+    let root = safe::open_root(dest)?;
     if let Some(parent) = manifest.parent() {
         fs::create_dir_all(parent).map_err(|error| Error::Node(error.to_string()))?;
     }
@@ -135,7 +139,7 @@ pub fn apply_tree(dest: &Path, manifest: &Path, archive: &[u8]) -> Result<(), Er
         check_relative(&rel)?;
         let kind = entry.header().entry_type();
         if kind.is_dir() {
-            fs::create_dir_all(dest.join(&rel)).map_err(|error| Error::Node(error.to_string()))?;
+            safe::open_dir(&root, &rel, true)?;
             continue;
         }
         if !kind.is_file() {
@@ -151,12 +155,7 @@ pub fn apply_tree(dest: &Path, manifest: &Path, archive: &[u8]) -> Result<(), Er
                 "the checkout is larger than 512 MiB, so it was not copied".into(),
             ));
         }
-        let target = dest.join(&rel);
-        if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent).map_err(|error| Error::Node(error.to_string()))?;
-        }
-        let mut file = File::create(&target)
-            .map_err(|error| Error::Node(format!("write {}: {error}", rel.display())))?;
+        let mut file = safe::create_file(&root, &rel)?;
         let copied = std::io::copy(&mut entry, &mut file)
             .map_err(|error| Error::Node(format!("write {}: {error}", rel.display())))?;
         if copied > size {
@@ -164,17 +163,11 @@ pub fn apply_tree(dest: &Path, manifest: &Path, archive: &[u8]) -> Result<(), Er
                 "the checkout archive is larger than it claims".into(),
             ));
         }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&target, fs::Permissions::from_mode(0o644))
-                .map_err(|error| Error::Node(error.to_string()))?;
-        }
         written.insert(normalize(&rel));
     }
     for stale in read_manifest(manifest) {
         if !written.contains(&stale) && check_relative(Path::new(&stale)).is_ok() {
-            let _ = fs::remove_file(dest.join(&stale));
+            let _ = safe::remove_file(&root, Path::new(&stale));
         }
     }
     write_manifest(manifest, &written)
@@ -252,6 +245,204 @@ fn write_manifest(path: &Path, files: &BTreeSet<String>) -> Result<(), Error> {
             .map_err(|error| Error::Node(error.to_string()))?;
     }
     Ok(())
+}
+
+/// Path operations confined to a checkout directory.
+#[cfg(unix)]
+mod safe {
+    use std::fs::File;
+    use std::os::fd::{AsFd, OwnedFd};
+    use std::path::{Component, Path};
+
+    use rudder_core::Error;
+    use rustix::fs::{AtFlags, Mode, OFlags, CWD};
+    use rustix::io::Errno;
+
+    const DIR_FLAGS: OFlags = OFlags::RDONLY
+        .union(OFlags::DIRECTORY)
+        .union(OFlags::NOFOLLOW)
+        .union(OFlags::CLOEXEC);
+
+    pub(super) struct Root(OwnedFd);
+
+    pub(super) fn open_root(dest: &Path) -> Result<Root, Error> {
+        rustix::fs::openat(CWD, dest, DIR_FLAGS, Mode::empty())
+            .map(Root)
+            .map_err(|errno| refuse(dest, errno))
+    }
+
+    fn refuse(rel: &Path, errno: Errno) -> Error {
+        if errno == Errno::LOOP || errno == Errno::NOTDIR {
+            Error::Validation(format!(
+                "{} goes through a symlink or non-directory in the checkout, so it was not written",
+                rel.display()
+            ))
+        } else {
+            Error::Node(format!(
+                "{}: {}",
+                rel.display(),
+                std::io::Error::from(errno)
+            ))
+        }
+    }
+
+    fn parts(rel: &Path) -> Vec<&std::ffi::OsStr> {
+        rel.components()
+            .filter_map(|component| match component {
+                Component::Normal(part) => Some(part),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn step(dir: &OwnedFd, name: &std::ffi::OsStr, create: bool) -> Result<OwnedFd, Errno> {
+        match rustix::fs::openat(dir, name, DIR_FLAGS, Mode::empty()) {
+            Err(Errno::NOENT) if create => {
+                match rustix::fs::mkdirat(dir, name, Mode::from_raw_mode(0o755)) {
+                    Ok(()) | Err(Errno::EXIST) => {}
+                    Err(errno) => return Err(errno),
+                }
+                rustix::fs::openat(dir, name, DIR_FLAGS, Mode::empty())
+            }
+            other => other,
+        }
+    }
+
+    fn walk(
+        root: &Root,
+        rel: &Path,
+        dirs: &[&std::ffi::OsStr],
+        create: bool,
+    ) -> Result<Option<OwnedFd>, Error> {
+        let mut current = root
+            .0
+            .as_fd()
+            .try_clone_to_owned()
+            .map_err(|error| Error::Node(error.to_string()))?;
+        for name in dirs {
+            current = match step(&current, name, create) {
+                Ok(next) => next,
+                Err(Errno::NOENT) if !create => return Ok(None),
+                Err(errno) => return Err(refuse(rel, errno)),
+            };
+        }
+        Ok(Some(current))
+    }
+
+    pub(super) fn open_dir(
+        root: &Root,
+        rel: &Path,
+        create: bool,
+    ) -> Result<Option<OwnedFd>, Error> {
+        walk(root, rel, &parts(rel), create)
+    }
+
+    pub(super) fn create_file(root: &Root, rel: &Path) -> Result<File, Error> {
+        let parts = parts(rel);
+        let Some((name, dirs)) = parts.split_last() else {
+            return Err(Error::Validation(
+                "checkout path must stay inside the repository".into(),
+            ));
+        };
+        let parent = walk(root, rel, dirs, true)?
+            .ok_or_else(|| Error::Node(format!("{}: missing directory", rel.display())))?;
+        let fd = rustix::fs::openat(
+            &parent,
+            *name,
+            OFlags::WRONLY | OFlags::CREATE | OFlags::TRUNC | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            Mode::from_raw_mode(0o644),
+        )
+        .map_err(|errno| refuse(rel, errno))?;
+        rustix::fs::fchmod(&fd, Mode::from_raw_mode(0o644)).map_err(|errno| refuse(rel, errno))?;
+        Ok(File::from(fd))
+    }
+
+    pub(super) fn remove_file(root: &Root, rel: &Path) -> Result<(), Error> {
+        let parts = parts(rel);
+        let Some((name, dirs)) = parts.split_last() else {
+            return Ok(());
+        };
+        let Some(parent) = walk(root, rel, dirs, false)? else {
+            return Ok(());
+        };
+        rustix::fs::unlinkat(&parent, *name, AtFlags::empty()).map_err(|errno| refuse(rel, errno))
+    }
+}
+
+/// Path operations confined to a checkout directory.
+#[cfg(not(unix))]
+mod safe {
+    use std::fs::{self, File};
+    use std::path::{Path, PathBuf};
+
+    use rudder_core::Error;
+
+    pub(super) struct Root(PathBuf);
+
+    pub(super) fn open_root(dest: &Path) -> Result<Root, Error> {
+        let meta = fs::symlink_metadata(dest).map_err(|error| Error::Node(error.to_string()))?;
+        if !meta.is_dir() {
+            return Err(refuse(dest));
+        }
+        Ok(Root(dest.to_path_buf()))
+    }
+
+    fn refuse(rel: &Path) -> Error {
+        Error::Validation(format!(
+            "{} goes through a symlink or non-directory in the checkout, so it was not written",
+            rel.display()
+        ))
+    }
+
+    fn walk(root: &Root, rel: &Path, create: bool) -> Result<Option<PathBuf>, Error> {
+        let mut current = root.0.clone();
+        for part in rel.iter() {
+            current.push(part);
+            match fs::symlink_metadata(&current) {
+                Ok(meta) if meta.is_dir() => {}
+                Ok(_) => return Err(refuse(rel)),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    if !create {
+                        return Ok(None);
+                    }
+                    fs::create_dir(&current).map_err(|error| Error::Node(error.to_string()))?;
+                }
+                Err(error) => return Err(Error::Node(error.to_string())),
+            }
+        }
+        Ok(Some(current))
+    }
+
+    pub(super) fn open_dir(
+        root: &Root,
+        rel: &Path,
+        create: bool,
+    ) -> Result<Option<PathBuf>, Error> {
+        walk(root, rel, create)
+    }
+
+    pub(super) fn create_file(root: &Root, rel: &Path) -> Result<File, Error> {
+        let (Some(name), parent) = (rel.file_name(), rel.parent().unwrap_or(Path::new(""))) else {
+            return Err(refuse(rel));
+        };
+        let dir = walk(root, parent, true)?.ok_or_else(|| refuse(rel))?;
+        let target = dir.join(name);
+        if fs::symlink_metadata(&target).is_ok_and(|meta| !meta.is_file()) {
+            return Err(refuse(rel));
+        }
+        File::create(&target)
+            .map_err(|error| Error::Node(format!("write {}: {error}", rel.display())))
+    }
+
+    pub(super) fn remove_file(root: &Root, rel: &Path) -> Result<(), Error> {
+        let (Some(name), parent) = (rel.file_name(), rel.parent().unwrap_or(Path::new(""))) else {
+            return Ok(());
+        };
+        let Some(dir) = walk(root, parent, false)? else {
+            return Ok(());
+        };
+        fs::remove_file(dir.join(name)).map_err(|error| Error::Node(error.to_string()))
+    }
 }
 
 #[cfg(test)]
@@ -367,6 +558,61 @@ mod tests {
         std::os::unix::fs::symlink(&outside, src.join("leak")).unwrap();
         let err = pack_files(&src, &["leak".into()]).unwrap_err();
         assert!(err.to_string().contains("outside"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn writes_do_not_follow_symlinks_planted_in_the_checkout() {
+        let dir = scratch("rudder-tree-planted");
+        let src = dir.0.join("src");
+        fs::create_dir_all(src.join("config")).unwrap();
+        fs::write(src.join("config/job"), "payload").unwrap();
+        fs::write(src.join("top"), "payload").unwrap();
+        let packed_dir = pack_files(&src, &["config/job".into()]).unwrap();
+        let packed_file = pack_files(&src, &["top".into()]).unwrap();
+
+        let outside = dir.0.join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("victim"), "original").unwrap();
+        let dest = dir.0.join("remote/src");
+        let manifest = dir.0.join("remote/src.manifest");
+        fs::create_dir_all(&dest).unwrap();
+        std::os::unix::fs::symlink(&outside, dest.join("config")).unwrap();
+        std::os::unix::fs::symlink(outside.join("victim"), dest.join("top")).unwrap();
+
+        let err = apply_tree(&dest, &manifest, &packed_dir).unwrap_err();
+        assert!(err.to_string().contains("symlink"), "{err}");
+        assert!(!outside.join("job").exists());
+
+        let err = apply_tree(&dest, &manifest, &packed_file).unwrap_err();
+        assert!(err.to_string().contains("symlink"), "{err}");
+        assert_eq!(
+            fs::read_to_string(outside.join("victim")).unwrap(),
+            "original"
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn stale_cleanup_does_not_follow_symlinks_planted_in_the_checkout() {
+        let dir = scratch("rudder-tree-stale-link");
+        let src = dir.0.join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("README"), "hi").unwrap();
+        let packed = pack_files(&src, &["README".into()]).unwrap();
+
+        let outside = dir.0.join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("victim"), "keep").unwrap();
+        let dest = dir.0.join("remote/src");
+        let manifest = dir.0.join("remote/src.manifest");
+        fs::create_dir_all(&dest).unwrap();
+        std::os::unix::fs::symlink(&outside, dest.join("old")).unwrap();
+        fs::write(&manifest, "old/victim\n").unwrap();
+
+        apply_tree(&dest, &manifest, &packed).unwrap();
+        assert_eq!(fs::read_to_string(outside.join("victim")).unwrap(), "keep");
+        assert_eq!(fs::read_to_string(dest.join("README")).unwrap(), "hi");
     }
 
     #[test]
