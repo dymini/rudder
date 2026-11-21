@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Security
+- **Access sign-in links work only once, even under parallel requests.** Two simultaneous requests with the same Rudder Access handoff code could both get an app session; the code is now redeemed atomically, so only the first request signs in.
+
 ## [0.10.5] - 2026-11-21
 
 ### Fixed
