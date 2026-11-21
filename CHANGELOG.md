@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Fixed
+- **AI agent sign-in accepts longer OAuth state.** Agents such as Devin can complete approval with state values up to 4096 bytes; oversized values now report “state is too long” instead of claiming state is missing.
+
 ## [0.10.4] - 2026-11-21
 
 ### Fixed

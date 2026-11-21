@@ -825,6 +825,156 @@ async fn token_request(app: &axum::Router, form: &str) -> Reply {
     .await
 }
 
+#[sqlx::test(migrations = "./migrations")]
+async fn long_authorization_state_survives_consent_and_token_exchange(pool: PgPool) {
+    let app = app(pool);
+    let redirect_uri = "https://api.devin.ai/mcp/oauth/callback";
+    let resource = "https://rudder.dymini.com/mcp";
+    let registered = client_request(
+        &app,
+        "/oauth/register",
+        json!({
+            "client_name": "Devin", "redirect_uris": [redirect_uri]
+        }),
+        None,
+    )
+    .await;
+    assert_eq!(registered.status, StatusCode::CREATED);
+    let id = registered.body["client_id"].as_str().unwrap();
+    let scopes: Vec<&str> = rudder_core::MCP_SCOPES
+        .iter()
+        .map(|scope| scope.id)
+        .collect();
+    let scope = scopes.join(" ");
+    let verifier = "v".repeat(64);
+    let challenge = s256(&verifier);
+    let long_state = base64::engine::general_purpose::STANDARD
+        .encode(json!({"context": "x".repeat(740)}).to_string());
+    assert!(long_state.len() >= 1000);
+    let authorize_url = |state: &str| {
+        format!(
+        "/oauth/authorize?response_type=code&client_id={id}&redirect_uri={}&code_challenge={challenge}&code_challenge_method=S256&state={}&scope={}&resource={}",
+        percent(redirect_uri), percent(state), percent(&scope), percent(resource)
+    )
+    };
+    let consent_body = |state: &str| {
+        json!({
+            "client_id": id, "redirect_uri": redirect_uri, "resource": resource,
+            "code_challenge": challenge, "code_challenge_method": "S256",
+            "state": state, "template": "custom", "scopes": scopes
+        })
+    };
+    let anonymous = call(
+        &app,
+        "GET",
+        &authorize_url(&long_state),
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(anonymous.status, StatusCode::TEMPORARY_REDIRECT);
+    let login = url::Url::parse(&format!(
+        "https://panel.example{}",
+        anonymous.headers["location"].to_str().unwrap()
+    ))
+    .unwrap();
+    let next = login
+        .query_pairs()
+        .find(|(key, _)| key == "next")
+        .unwrap()
+        .1
+        .into_owned();
+    assert_eq!(next, authorize_url(&long_state));
+    let (cookie, csrf) = owner(&app).await;
+    for state in [long_state, "s".repeat(4096)] {
+        let authorized = call(
+            &app,
+            "GET",
+            &authorize_url(&state),
+            Some(&cookie),
+            None,
+            None,
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(authorized.status, StatusCode::TEMPORARY_REDIRECT);
+        let consent = url::Url::parse(&format!(
+            "https://panel.example{}",
+            authorized.headers["location"].to_str().unwrap()
+        ))
+        .unwrap();
+        assert_eq!(consent.path(), "/mcp/consent");
+        let params: HashMap<_, _> = consent.query_pairs().into_owned().collect();
+        assert_eq!(params["state"], state);
+        assert_eq!(params["scope"], scope);
+        let approved = call(
+            &app,
+            "POST",
+            "/api/v1/mcp/consent",
+            Some(&cookie),
+            Some(&csrf),
+            None,
+            Some("application/json"),
+            Some(consent_body(&params["state"]).to_string().into_bytes()),
+        )
+        .await;
+        assert_eq!(approved.status, StatusCode::OK, "{}", approved.body);
+        let redirect = approved.body["redirect"].as_str().unwrap();
+        let callback = url::Url::parse(redirect).unwrap();
+        assert_eq!(
+            callback
+                .query_pairs()
+                .find(|(key, _)| key == "state")
+                .unwrap()
+                .1,
+            state
+        );
+        let issued = token_request(&app, &format!(
+            "grant_type=authorization_code&client_id={id}&code={}&redirect_uri={}&code_verifier={verifier}",
+            code_from(redirect), percent(redirect_uri)
+        )).await;
+        assert_eq!(issued.status, StatusCode::OK, "{}", issued.body);
+        let mut granted = scopes.clone();
+        granted.sort();
+        assert_eq!(issued.body["scope"], granted.join(" "));
+    }
+    for (state, message) in [
+        (String::new(), "state is required"),
+        ("s".repeat(4097), "state is too long"),
+    ] {
+        let rejected = call(
+            &app,
+            "GET",
+            &authorize_url(&state),
+            Some(&cookie),
+            None,
+            None,
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(rejected.status, StatusCode::BAD_REQUEST);
+        assert_eq!(rejected.body["error"]["message"], message);
+        let rejected = call(
+            &app,
+            "POST",
+            "/api/v1/mcp/consent",
+            Some(&cookie),
+            Some(&csrf),
+            None,
+            Some("application/json"),
+            Some(consent_body(&state).to_string().into_bytes()),
+        )
+        .await;
+        assert_eq!(rejected.status, StatusCode::BAD_REQUEST);
+        assert_eq!(rejected.body["error"]["message"], message);
+    }
+}
+
 async fn rpc(app: &axum::Router, bearer: &str, body: Value) -> Reply {
     call(
         app,
