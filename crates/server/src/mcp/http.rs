@@ -431,14 +431,14 @@ async fn authenticate_client(
     } else {
         None
     };
-    let (id, secret, method) = match &basic {
+    let (id, secret) = match &basic {
         Some((id, secret)) => {
             if !body_id.is_empty() && body_id != id {
                 return Err(invalid());
             }
-            (id.as_str(), Some(secret.as_str()), "client_secret_basic")
+            (id.as_str(), Some(secret.as_str()))
         }
-        None => (body_id, body_secret, "client_secret_post"),
+        None => (body_id, body_secret),
     };
     let row: Option<(String, Option<String>)> = sqlx::query_as(
         "SELECT token_endpoint_auth_method, client_secret_hash FROM oauth_clients WHERE client_id = $1",
@@ -454,10 +454,9 @@ async fn authenticate_client(
         if basic.is_some() || body_secret.is_some() {
             return Err(invalid());
         }
-    } else if registered_method != method
-        || !secret
-            .zip(hash.as_deref())
-            .is_some_and(|(secret, hash)| auth::tokens_eq(&auth::sha256_hex(secret), hash))
+    } else if !secret
+        .zip(hash.as_deref())
+        .is_some_and(|(secret, hash)| auth::tokens_eq(&auth::sha256_hex(secret), hash))
     {
         return Err(invalid());
     }

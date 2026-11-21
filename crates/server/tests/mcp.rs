@@ -495,9 +495,14 @@ async fn client_request(
 
 #[sqlx::test(migrations = "./migrations")]
 async fn confidential_clients_authenticate_for_codes_refresh_and_revocation(pool: PgPool) {
-    let app = app(pool.clone());
-    let (cookie, csrf) = owner(&app).await;
-    for method in ["client_secret_post", "client_secret_basic"] {
+    let (cookie, csrf) = owner(&app(pool.clone())).await;
+    for (method, transport) in [
+        ("client_secret_post", "client_secret_post"),
+        ("client_secret_post", "client_secret_basic"),
+        ("client_secret_basic", "client_secret_post"),
+        ("client_secret_basic", "client_secret_basic"),
+    ] {
+        let app = app(pool.clone());
         let registration = client_request(
             &app,
             "/oauth/register",
@@ -548,7 +553,7 @@ async fn confidential_clients_authenticate_for_codes_refresh_and_revocation(pool
             assert_eq!(denied.status, StatusCode::UNAUTHORIZED);
             assert_eq!(denied.body["error"], "invalid_client");
         }
-        let basic = if method == "client_secret_basic" {
+        let basic = if transport == "client_secret_basic" {
             exchange.as_object_mut().unwrap().remove("client_id");
             // Encode every byte to exercise RFC 6749 credential decoding.
             Some(base64::engine::general_purpose::STANDARD.encode(format!(
@@ -584,7 +589,7 @@ async fn confidential_clients_authenticate_for_codes_refresh_and_revocation(pool
         let mut refresh = json!({"grant_type": "refresh_token", "refresh_token": issued.body["refresh_token"], "client_id": id});
         let denied = client_request(&app, "/oauth/token", refresh.clone(), None).await;
         assert_eq!(denied.status, StatusCode::UNAUTHORIZED);
-        if method == "client_secret_post" {
+        if transport == "client_secret_post" {
             refresh["client_secret"] = json!(secret);
         }
         let refreshed = client_request(&app, "/oauth/token", refresh, basic.clone()).await;
@@ -592,7 +597,7 @@ async fn confidential_clients_authenticate_for_codes_refresh_and_revocation(pool
         let mut revoke = json!({"token": refreshed.body["refresh_token"], "client_id": id});
         let denied = client_request(&app, "/oauth/revoke", revoke.clone(), None).await;
         assert_eq!(denied.status, StatusCode::UNAUTHORIZED);
-        if method == "client_secret_post" {
+        if transport == "client_secret_post" {
             revoke["client_secret"] = json!(secret);
         }
         let revoked = client_request(&app, "/oauth/revoke", revoke, basic).await;
@@ -642,6 +647,19 @@ async fn path_specific_discovery_and_registration_defaults(pool: PgPool) {
     assert_eq!(public.status, StatusCode::CREATED);
     assert_eq!(public.body["token_endpoint_auth_method"], "none");
     assert!(public.body.get("client_secret").is_none());
+    let id = public.body["client_id"].as_str().unwrap();
+    for basic in [false, true] {
+        let mut request = json!({"grant_type": "authorization_code", "client_id": id});
+        let credentials = if basic {
+            Some(base64::engine::general_purpose::STANDARD.encode(format!("{id}:secret")))
+        } else {
+            request["client_secret"] = json!("secret");
+            None
+        };
+        let denied = client_request(&app, "/oauth/token", request, credentials).await;
+        assert_eq!(denied.status, StatusCode::UNAUTHORIZED);
+        assert_eq!(denied.body["error"], "invalid_client");
+    }
     for body in [
         json!({"redirect_uris": []}),
         json!({"redirect_uris": ["https://client.example"], "token_endpoint_auth_method": "unknown"}),
