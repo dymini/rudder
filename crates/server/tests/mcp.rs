@@ -451,6 +451,210 @@ fn percent(value: &str) -> String {
     percent_encoding::utf8_percent_encode(value, percent_encoding::NON_ALPHANUMERIC).to_string()
 }
 
+async fn client_request(
+    app: &axum::Router,
+    path: &str,
+    body: Value,
+    basic: Option<String>,
+) -> Reply {
+    let (content_type, payload) = if body["grant_type"] == "refresh_token" {
+        let fields: Vec<(&str, &str)> = body
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str().unwrap()))
+            .collect();
+        (
+            "application/x-www-form-urlencoded",
+            serde_urlencoded::to_string(fields).unwrap(),
+        )
+    } else {
+        ("application/json", body.to_string())
+    };
+    let mut request = Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("content-type", content_type);
+    if let Some(basic) = basic {
+        request = request.header("authorization", format!("Basic {basic}"));
+    }
+    let response = app
+        .clone()
+        .oneshot(request.body(Body::from(payload)).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    let headers = response.headers().clone();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    Reply {
+        status,
+        headers,
+        body: serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn confidential_clients_authenticate_for_codes_refresh_and_revocation(pool: PgPool) {
+    let app = app(pool.clone());
+    let (cookie, csrf) = owner(&app).await;
+    for method in ["client_secret_post", "client_secret_basic"] {
+        let registration = client_request(
+            &app,
+            "/oauth/register",
+            json!({
+                "redirect_uris": ["https://client.example/callback"],
+                "token_endpoint_auth_method": method,
+                "extra_metadata": true
+            }),
+            None,
+        )
+        .await;
+        assert_eq!(
+            registration.status,
+            StatusCode::CREATED,
+            "{}",
+            registration.body
+        );
+        assert_eq!(registration.body["client_name"], "MCP client");
+        assert_eq!(registration.body["token_endpoint_auth_method"], method);
+        assert_eq!(registration.body["client_secret_expires_at"], 0);
+        assert!(registration.body["client_id_issued_at"].as_i64().unwrap() > 0);
+        let id = registration.body["client_id"].as_str().unwrap();
+        let secret = registration.body["client_secret"].as_str().unwrap();
+        let stored: String =
+            sqlx::query_scalar("SELECT client_secret_hash FROM oauth_clients WHERE client_id = $1")
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(stored, hex::encode(Sha256::digest(secret.as_bytes())));
+        let verifier = "a".repeat(64);
+        let start = format!("/oauth/authorize?response_type=code&client_id={id}&redirect_uri={}&code_challenge={}&code_challenge_method=S256&state=test", percent("https://client.example/callback"), s256(&verifier));
+        let authorized = call(&app, "GET", &start, Some(&cookie), None, None, None, None).await;
+        assert_eq!(authorized.status, StatusCode::TEMPORARY_REDIRECT);
+        let consent = call(&app, "POST", "/api/v1/mcp/consent", Some(&cookie), Some(&csrf), None, Some("application/json"), Some(json!({
+            "client_id": id, "redirect_uri": "https://client.example/callback",
+            "code_challenge": s256(&verifier), "code_challenge_method": "S256", "template": "full", "state": "test"
+        }).to_string().into_bytes())).await;
+        assert_eq!(consent.status, StatusCode::OK, "{}", consent.body);
+        let code = code_from(consent.body["redirect"].as_str().unwrap());
+        let mut exchange = json!({"grant_type": "authorization_code", "client_id": id, "code": code, "redirect_uri": "https://client.example/callback", "code_verifier": verifier});
+        for secret in [None, Some("wrong")] {
+            let mut bad = exchange.clone();
+            if let Some(secret) = secret {
+                bad["client_secret"] = json!(secret);
+            }
+            let denied = client_request(&app, "/oauth/token", bad, None).await;
+            assert_eq!(denied.status, StatusCode::UNAUTHORIZED);
+            assert_eq!(denied.body["error"], "invalid_client");
+        }
+        let basic = if method == "client_secret_basic" {
+            exchange.as_object_mut().unwrap().remove("client_id");
+            // Encode every byte to exercise RFC 6749 credential decoding.
+            Some(base64::engine::general_purpose::STANDARD.encode(format!(
+                "{}:{}",
+                percent(id),
+                percent(secret)
+            )))
+        } else {
+            exchange["client_secret"] = json!(secret);
+            None
+        };
+        if basic.is_some() {
+            for bad in [
+                "not-base64".to_owned(),
+                base64::engine::general_purpose::STANDARD.encode(format!("{id}:wrong")),
+            ] {
+                let denied =
+                    client_request(&app, "/oauth/token", exchange.clone(), Some(bad)).await;
+                assert_eq!(denied.status, StatusCode::UNAUTHORIZED);
+                assert_eq!(denied.body["error"], "invalid_client");
+            }
+        }
+        let mut bad_pkce = exchange.clone();
+        bad_pkce["code_verifier"] = json!("b".repeat(64));
+        assert_eq!(
+            client_request(&app, "/oauth/token", bad_pkce, basic.clone())
+                .await
+                .status,
+            StatusCode::BAD_REQUEST
+        );
+        let issued = client_request(&app, "/oauth/token", exchange.clone(), basic.clone()).await;
+        assert_eq!(issued.status, StatusCode::OK, "{}", issued.body);
+        let mut refresh = json!({"grant_type": "refresh_token", "refresh_token": issued.body["refresh_token"], "client_id": id});
+        let denied = client_request(&app, "/oauth/token", refresh.clone(), None).await;
+        assert_eq!(denied.status, StatusCode::UNAUTHORIZED);
+        if method == "client_secret_post" {
+            refresh["client_secret"] = json!(secret);
+        }
+        let refreshed = client_request(&app, "/oauth/token", refresh, basic.clone()).await;
+        assert_eq!(refreshed.status, StatusCode::OK, "{}", refreshed.body);
+        let mut revoke = json!({"token": refreshed.body["refresh_token"], "client_id": id});
+        let denied = client_request(&app, "/oauth/revoke", revoke.clone(), None).await;
+        assert_eq!(denied.status, StatusCode::UNAUTHORIZED);
+        if method == "client_secret_post" {
+            revoke["client_secret"] = json!(secret);
+        }
+        let revoked = client_request(&app, "/oauth/revoke", revoke, basic).await;
+        assert_eq!(revoked.status, StatusCode::OK);
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn path_specific_discovery_and_registration_defaults(pool: PgPool) {
+    let app = app(pool);
+    for path in [
+        "/.well-known/oauth-protected-resource",
+        "/.well-known/oauth-authorization-server",
+    ] {
+        let root = call(&app, "GET", path, None, None, None, None, None).await;
+        let inserted = call(
+            &app,
+            "GET",
+            &format!("{path}/mcp"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(inserted.status, StatusCode::OK);
+        assert_eq!(root.body, inserted.body);
+        if path.ends_with("authorization-server") {
+            assert_eq!(
+                root.body["token_endpoint_auth_methods_supported"],
+                json!(["none", "client_secret_post", "client_secret_basic"])
+            );
+            assert_eq!(
+                root.body["revocation_endpoint_auth_methods_supported"],
+                root.body["token_endpoint_auth_methods_supported"]
+            );
+        }
+    }
+    let public = client_request(
+        &app,
+        "/oauth/register",
+        json!({"redirect_uris": ["https://client.example/callback"]}),
+        None,
+    )
+    .await;
+    assert_eq!(public.status, StatusCode::CREATED);
+    assert_eq!(public.body["token_endpoint_auth_method"], "none");
+    assert!(public.body.get("client_secret").is_none());
+    for body in [
+        json!({"redirect_uris": []}),
+        json!({"redirect_uris": ["https://client.example"], "token_endpoint_auth_method": "unknown"}),
+    ] {
+        assert_eq!(
+            client_request(&app, "/oauth/register", body, None)
+                .await
+                .status,
+            StatusCode::BAD_REQUEST
+        );
+    }
+}
+
 async fn token_request(app: &axum::Router, form: &str) -> Reply {
     call(
         app,
