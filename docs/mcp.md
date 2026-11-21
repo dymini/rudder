@@ -19,6 +19,8 @@ Dynamic registration at `/oauth/register` supports public clients (`none`, the d
 
 Discovery is available at both `/.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource/mcp`, and at both `/.well-known/oauth-authorization-server` and `/.well-known/oauth-authorization-server/mcp`.
 
+Registration reads JSON regardless of the Content-Type header. Optional metadata may be omitted or null; unknown fields are ignored. Requested grant and response types are replaced with `authorization_code` plus `refresh_token`, and `code`. Unsupported authentication methods (such as `private_key_jwt`) fall back to `client_secret_post`, with a generated secret; clients should use the metadata returned by registration. Redirect URLs are still validated. Rejections return `error` and `error_description` in the standard OAuth registration format and are logged with the reason, client name, and redirect URLs, without client secrets.
+
 ## Permission templates
 
 | Template | What the agent can do |

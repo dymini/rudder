@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Fixed
+- **More AI agents can register automatically.** MCP client registration accepts null optional metadata and JSON without a Content-Type header, replaces unsupported grant and response types with the supported code flow, and falls back to a client secret for unsupported authentication methods. Rejected registrations now return standard OAuth errors and log the reason for operators.
+
 ## [0.10.3] - 2026-11-21
 
 ### Fixed

@@ -662,7 +662,7 @@ async fn path_specific_discovery_and_registration_defaults(pool: PgPool) {
     }
     for body in [
         json!({"redirect_uris": []}),
-        json!({"redirect_uris": ["https://client.example"], "token_endpoint_auth_method": "unknown"}),
+        json!({"redirect_uris": ["https://client.example"], "client_name": ""}),
     ] {
         assert_eq!(
             client_request(&app, "/oauth/register", body, None)
@@ -670,6 +670,144 @@ async fn path_specific_discovery_and_registration_defaults(pool: PgPool) {
                 .status,
             StatusCode::BAD_REQUEST
         );
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn registration_accepts_optional_nulls_and_replaces_unsupported_metadata(pool: PgPool) {
+    let app = app(pool);
+    for content_type in [
+        None,
+        Some("text/plain"),
+        Some("application/json; charset=utf-8"),
+    ] {
+        for method in [
+            Value::Null,
+            json!("private_key_jwt"),
+            json!("tls_client_auth"),
+        ] {
+            let registered = call(
+                &app,
+                "POST",
+                "/oauth/register",
+                None,
+                None,
+                None,
+                content_type,
+                Some(
+                    json!({
+                        "client_name": null,
+                        "redirect_uris": ["https://client.example/callback"],
+                        "grant_types": null,
+                        "response_types": null,
+                        "token_endpoint_auth_method": method,
+                        "scope": null,
+                        "contacts": null,
+                        "unknown": null
+                    })
+                    .to_string()
+                    .into_bytes(),
+                ),
+            )
+            .await;
+            assert_eq!(
+                registered.status,
+                StatusCode::CREATED,
+                "{}",
+                registered.body
+            );
+            assert_eq!(registered.body["client_name"], "MCP client");
+            assert_eq!(
+                registered.body["grant_types"],
+                json!(["authorization_code", "refresh_token"])
+            );
+            assert_eq!(registered.body["response_types"], json!(["code"]));
+            let expected = if method.is_null() {
+                "none"
+            } else {
+                "client_secret_post"
+            };
+            assert_eq!(registered.body["token_endpoint_auth_method"], expected);
+            assert_eq!(
+                registered.body.get("client_secret").is_some(),
+                !method.is_null()
+            );
+        }
+    }
+    for grants in [
+        json!(["client_credentials", "implicit"]),
+        json!(["authorization_code", "client_credentials"]),
+        json!([]),
+    ] {
+        let registered = client_request(
+            &app,
+            "/oauth/register",
+            json!({
+                "redirect_uris": ["https://client.example/callback"],
+                "grant_types": grants,
+                "response_types": ["token", "id_token"],
+                "scope": "unsupported:scope",
+                "unknown": {"extra": true}
+            }),
+            None,
+        )
+        .await;
+        assert_eq!(
+            registered.status,
+            StatusCode::CREATED,
+            "{}",
+            registered.body
+        );
+        assert_eq!(
+            registered.body["grant_types"],
+            json!(["authorization_code", "refresh_token"])
+        );
+        assert_eq!(registered.body["response_types"], json!(["code"]));
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn registration_rejections_use_rfc7591_errors(pool: PgPool) {
+    let app = app(pool);
+    for (body, error) in [
+        (
+            json!({"redirect_uris": ["http://evil.example/callback"]}).to_string(),
+            "invalid_redirect_uri",
+        ),
+        (
+            json!({"redirect_uris": []}).to_string(),
+            "invalid_redirect_uri",
+        ),
+        ("{".to_owned(), "invalid_client_metadata"),
+        ("".to_owned(), "invalid_client_metadata"),
+        ("null".to_owned(), "invalid_client_metadata"),
+        (
+            json!({"redirect_uris": ["https://client.example"], "client_name": 42}).to_string(),
+            "invalid_client_metadata",
+        ),
+    ] {
+        let rejected = call(
+            &app,
+            "POST",
+            "/oauth/register",
+            None,
+            None,
+            None,
+            None,
+            Some(body.into_bytes()),
+        )
+        .await;
+        assert_eq!(
+            rejected.status,
+            StatusCode::BAD_REQUEST,
+            "{}",
+            rejected.body
+        );
+        assert_eq!(rejected.body["error"], error);
+        assert!(rejected.body["error_description"]
+            .as_str()
+            .is_some_and(|description| !description.is_empty()));
+        assert_eq!(rejected.body.as_object().unwrap().len(), 2);
     }
 }
 

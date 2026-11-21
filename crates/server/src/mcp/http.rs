@@ -198,10 +198,6 @@ struct RegisterRequest {
     client_name: Option<String>,
     redirect_uris: Vec<String>,
     #[serde(default)]
-    grant_types: Vec<String>,
-    #[serde(default)]
-    response_types: Vec<String>,
-    #[serde(default)]
     token_endpoint_auth_method: Option<String>,
 }
 
@@ -209,77 +205,95 @@ async fn register(
     State(state): State<AppState>,
     headers: HeaderMap,
     auth::OptionalPeer(peer): auth::OptionalPeer,
-    Json(body): Json<RegisterRequest>,
-) -> Result<Response, ApiError> {
+    raw: Result<axum::body::Bytes, axum::extract::rejection::BytesRejection>,
+) -> Response {
+    let metadata = raw
+        .as_ref()
+        .ok()
+        .and_then(|raw| serde_json::from_slice::<Value>(raw).ok());
+    let reject = |status, code, reason| {
+        tracing::warn!(
+            reason,
+            client_name = ?metadata.as_ref().and_then(|value| value.get("client_name")),
+            redirect_uris = ?metadata.as_ref().and_then(|value| value.get("redirect_uris")),
+            "OAuth client registration rejected"
+        );
+        oauth_error(status, code, reason)
+    };
     if rate_limited(&state.oauth_limiter, &client_ip(&state, &headers, peer)) {
-        return Err(too_many());
+        return reject(
+            StatusCode::TOO_MANY_REQUESTS,
+            "invalid_client_metadata",
+            "too many requests; try again in a minute",
+        );
     }
-    let name =
-        clean_name(body.client_name.as_deref().unwrap_or("MCP client")).ok_or_else(|| {
-            ApiError::new(
-                StatusCode::BAD_REQUEST,
-                "invalid_client",
-                "client name must be 1 to 80 characters",
-            )
-        })?;
-    if body.redirect_uris.is_empty() || body.redirect_uris.len() > 8 {
-        return Err(ApiError::new(
+    if raw.is_err() {
+        return reject(
             StatusCode::BAD_REQUEST,
-            "invalid_redirect",
+            "invalid_client_metadata",
+            "could not read registration body or body is too large",
+        );
+    }
+    let Some(metadata) = metadata.as_ref() else {
+        return reject(
+            StatusCode::BAD_REQUEST,
+            "invalid_client_metadata",
+            "invalid JSON",
+        );
+    };
+    let body: RegisterRequest = match serde_json::from_value(metadata.clone()) {
+        Ok(body) => body,
+        Err(_) => return reject(StatusCode::BAD_REQUEST, "invalid_client_metadata", "provide client metadata with redirect_uris as an array of URLs and optional string client_name and token_endpoint_auth_method"),
+    };
+    let Some(name) = clean_name(body.client_name.as_deref().unwrap_or("MCP client")) else {
+        return reject(
+            StatusCode::BAD_REQUEST,
+            "invalid_client_metadata",
+            "client name must be 1 to 80 characters",
+        );
+    };
+    if body.redirect_uris.is_empty() || body.redirect_uris.len() > 8 {
+        return reject(
+            StatusCode::BAD_REQUEST,
+            "invalid_redirect_uri",
             "provide 1 to 8 redirect URLs",
-        ));
+        );
     }
     if body.redirect_uris.iter().any(|uri| !valid_redirect(uri)) {
-        return Err(ApiError::new(
+        return reject(
             StatusCode::BAD_REQUEST,
-            "invalid_redirect",
+            "invalid_redirect_uri",
             "redirect URLs must be https, a loopback http URL, or a private app scheme",
-        ));
+        );
     }
-    let method = body.token_endpoint_auth_method.as_deref().unwrap_or("none");
-    if !matches!(
-        method,
-        "none" | "client_secret_post" | "client_secret_basic"
-    ) {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "invalid_client",
-            "unsupported token_endpoint_auth_method",
-        ));
-    }
-    if body
-        .grant_types
-        .iter()
-        .any(|grant| grant != "authorization_code" && grant != "refresh_token")
-    {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "invalid_client",
-            "supported grants are authorization_code and refresh_token",
-        ));
-    }
-    if body.response_types.iter().any(|kind| kind != "code") {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "invalid_client",
-            "the only response type is code",
-        ));
-    }
-    let count = sqlx::query_scalar!(r#"SELECT count(*) AS "count!" FROM oauth_clients"#)
+    let method = match body.token_endpoint_auth_method.as_deref().unwrap_or("none") {
+        method @ ("none" | "client_secret_post" | "client_secret_basic") => method,
+        _ => "client_secret_post",
+    };
+    let count = match sqlx::query_scalar!(r#"SELECT count(*) AS "count!" FROM oauth_clients"#)
         .fetch_one(&state.pool)
         .await
-        .map_err(ApiError::database)?;
+    {
+        Ok(count) => count,
+        Err(_) => {
+            return reject(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "invalid_client_metadata",
+                "could not register client",
+            )
+        }
+    };
     if count >= 200 {
-        return Err(ApiError::new(
+        return reject(
             StatusCode::TOO_MANY_REQUESTS,
-            "too_many_clients",
+            "invalid_client_metadata",
             "too many agent clients are registered; unused ones are removed after 7 days",
-        ));
+        );
     }
     let client_id = auth::random_token("rdr_cli");
     let secret = (method != "none").then(|| auth::random_token("rdr_cs"));
     let secret_hash = secret.as_deref().map(auth::sha256_hex);
-    sqlx::query!(
+    if sqlx::query!(
         r#"
         INSERT INTO oauth_clients (client_id, client_name, redirect_uris, token_endpoint_auth_method, client_secret_hash)
         VALUES ($1, $2, $3, $4, $5)
@@ -291,8 +305,9 @@ async fn register(
         secret_hash,
     )
     .execute(&state.pool)
-    .await
-    .map_err(ApiError::database)?;
+    .await.is_err() {
+        return reject(StatusCode::INTERNAL_SERVER_ERROR, "invalid_client_metadata", "could not register client");
+    }
     let mut registration = json!({
         "client_id": client_id,
         "client_name": name,
@@ -306,9 +321,7 @@ async fn register(
         registration["client_secret"] = json!(secret);
         registration["client_secret_expires_at"] = json!(0);
     }
-    Ok(no_store(
-        (StatusCode::CREATED, Json(registration)).into_response(),
-    ))
+    no_store((StatusCode::CREATED, Json(registration)).into_response())
 }
 
 #[derive(Deserialize)]
@@ -978,14 +991,6 @@ fn rate_limited(limiter: &crate::state::LoginLimiter, ip: &str) -> bool {
 
 fn client_ip(state: &AppState, headers: &HeaderMap, peer: Option<SocketAddr>) -> String {
     auth::client_ip(headers, peer, state.config.trust_proxy)
-}
-
-fn too_many() -> ApiError {
-    ApiError::new(
-        StatusCode::TOO_MANY_REQUESTS,
-        "rate_limited",
-        "too many requests; try again in a minute",
-    )
 }
 
 fn bad(message: &'static str) -> ApiError {
