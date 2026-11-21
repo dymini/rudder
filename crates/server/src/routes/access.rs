@@ -1174,7 +1174,7 @@ async fn email_start(
     auth::OptionalPeer(peer): auth::OptionalPeer,
     Json(body): Json<AccessEmailStart>,
 ) -> Result<StatusCode, ApiError> {
-    let ip = auth::client_ip(&headers, peer, state.config.trust_proxy);
+    let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
     limit_ip(&state, &ip)?;
     let _pending_return = (body.return_host.as_deref(), body.return_path.as_deref());
     let settings = load_settings(&state).await?;
@@ -1236,7 +1236,7 @@ async fn email_verify(
     jar: CookieJar,
     Json(body): Json<AccessEmailVerify>,
 ) -> Result<(CookieJar, Json<AccessLoginResult>), ApiError> {
-    let ip = auth::client_ip(&headers, peer, state.config.trust_proxy);
+    let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
     limit_ip(&state, &ip)?;
     let settings = load_settings(&state).await?;
     verify_turnstile(&state, &settings, &body.turnstile_token, &ip).await?;
@@ -1273,7 +1273,7 @@ async fn google_start(
     auth::OptionalPeer(peer): auth::OptionalPeer,
     Json(body): Json<AccessGoogleStart>,
 ) -> Result<Json<AccessGoogleUrl>, ApiError> {
-    let ip = auth::client_ip(&headers, peer, state.config.trust_proxy);
+    let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
     limit_ip(&state, &ip)?;
     let settings = load_settings(&state).await?;
     verify_turnstile(&state, &settings, &body.turnstile_token, &ip).await?;
@@ -1370,7 +1370,7 @@ async fn google_callback(
         return Ok(Redirect::temporary("/access?error=blocked").into_response());
     };
     link_google(&state, identity, sub).await?;
-    let ip = auth::client_ip(&headers, peer, state.config.trust_proxy);
+    let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
     let host = request_host(&headers);
     let (jar, _csrf) = issue_session(&state, jar, identity, &host, &ip, &headers).await?;
     let return_host = payload.get("host").and_then(Value::as_str);
@@ -1494,7 +1494,7 @@ async fn handoff_callback(
     let Some(identity) = active_identity(&state, &row.email).await? else {
         return Err(blocked());
     };
-    let ip = auth::client_ip(&headers, peer, state.config.trust_proxy);
+    let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
     let (jar, _csrf) = issue_session(&state, jar, identity, &host, &ip, &headers).await?;
     let mut response = Redirect::temporary(&path).into_response();
     if let Some(cookie) = jar.get(ACCESS_COOKIE) {

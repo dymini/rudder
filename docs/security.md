@@ -26,6 +26,17 @@ Checks run only against domains stored in this panel. Start one with **Run check
 
 The edge gate counts requests whose forwarded protocol is `http` and requests whose hostname is an IP address. **Security** shows the totals. They are warnings, not blocks. A domain with HTTPS redirect still answers the redirect on HTTP; the active check above is what tells you the redirect is missing.
 
+## Client address and trusted proxies
+
+Panel sign-in, OAuth, MCP and Access limit requests per client address. Rudder takes that address from the connection itself, and reads `X-Forwarded-For` only when the connection comes from a trusted proxy. It then uses the nearest forwarded hop that is not a trusted proxy. In tunnel mode, `CF-Connecting-IP` counts only when that hop is on a private network.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `RUDDER_TRUST_PROXY` | `true` | `false` ignores forwarded headers from every peer |
+| `RUDDER_TRUSTED_PROXIES` | `127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128,fc00::/7` | Comma-separated addresses or CIDR networks allowed to set `X-Forwarded-For` |
+
+The default covers Traefik on the Docker networks. A request sent straight to port 3000 from the internet is limited by its own address, whatever headers it carries. If your own reverse proxy reaches the panel from a public address, add that address to `RUDDER_TRUSTED_PROXIES`.
+
 ## Rate limits
 
 A rule has:

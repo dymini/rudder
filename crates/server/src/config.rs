@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::fs;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
 
 use base64::Engine;
@@ -16,6 +16,57 @@ const DEFAULT_DATA_DIR: &str = "/var/lib/rudder";
 const DEFAULT_GITHUB_REPO: &str = "vantanminh/rudder";
 const DEFAULT_AGENT_BIND: &str = "0.0.0.0:7443";
 const DEFAULT_DIST_DIR: &str = "/usr/share/rudder/dist";
+/// Loopback and private networks: Traefik on the Docker networks, a local reverse proxy.
+const DEFAULT_TRUSTED_PROXIES: &str =
+    "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128,fc00::/7";
+
+/// Networks whose connections may set `X-Forwarded-For`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TrustedProxies(Vec<(IpAddr, u8)>);
+
+impl TrustedProxies {
+    /// Parses a comma-separated list of addresses and CIDR networks.
+    pub fn parse(list: &str) -> Result<Self, String> {
+        let mut networks = Vec::new();
+        for item in list
+            .split(',')
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+        {
+            let (addr, prefix) = item.split_once('/').unwrap_or((item, ""));
+            let addr: IpAddr = addr
+                .parse()
+                .map_err(|_| format!("'{item}' is not an IP address or CIDR network"))?;
+            let max = if addr.is_ipv4() { 32 } else { 128 };
+            let prefix = if prefix.is_empty() {
+                max
+            } else {
+                prefix
+                    .parse::<u8>()
+                    .ok()
+                    .filter(|prefix| *prefix <= max)
+                    .ok_or_else(|| format!("'{item}' has an invalid prefix length"))?
+            };
+            networks.push((addr, prefix));
+        }
+        Ok(Self(networks))
+    }
+
+    pub fn contains(&self, ip: IpAddr) -> bool {
+        let ip = ip.to_canonical();
+        self.0.iter().any(|(net, prefix)| match (net, ip) {
+            (IpAddr::V4(net), IpAddr::V4(ip)) => {
+                let mask = u32::MAX.checked_shl(32 - u32::from(*prefix)).unwrap_or(0);
+                u32::from(*net) & mask == u32::from(ip) & mask
+            }
+            (IpAddr::V6(net), IpAddr::V6(ip)) => {
+                let mask = u128::MAX.checked_shl(128 - u32::from(*prefix)).unwrap_or(0);
+                u128::from(*net) & mask == u128::from(ip) & mask
+            }
+            _ => false,
+        })
+    }
+}
 
 /// How tracing lines are encoded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,8 +87,11 @@ pub struct Config {
     pub github_repo: String,
     pub log_format: LogFormat,
     pub cookie_secure: bool,
-    /// When true, the first `X-Forwarded-For` hop is the client IP.
+    /// When true, forwarded headers from [`Config::trusted_proxies`] are honored.
     pub trust_proxy: bool,
+    /// Peers allowed to name the client in `X-Forwarded-For`. Empty when
+    /// `trust_proxy` is off.
+    pub trusted_proxies: TrustedProxies,
     /// Docker Engine unix socket. `None` uses `DOCKER_HOST` or `/var/run/docker.sock`.
     pub docker_socket: Option<PathBuf>,
     /// Admin listener of the local cache server.
@@ -145,6 +199,19 @@ impl Config {
         };
         let cookie_secure = parse_bool(vars, "RUDDER_COOKIE_SECURE", true)?;
         let trust_proxy = parse_bool(vars, "RUDDER_TRUST_PROXY", true)?;
+        let trusted_proxies = if trust_proxy {
+            TrustedProxies::parse(
+                vars.get("RUDDER_TRUSTED_PROXIES")
+                    .map(String::as_str)
+                    .unwrap_or(DEFAULT_TRUSTED_PROXIES),
+            )
+            .map_err(|reason| ConfigError::Invalid {
+                name: "RUDDER_TRUSTED_PROXIES",
+                reason,
+            })?
+        } else {
+            TrustedProxies::default()
+        };
         let master_key = load_master_key(vars, read_file)?;
         let docker_socket = vars
             .get("RUDDER_DOCKER_SOCKET")
@@ -298,6 +365,7 @@ impl Config {
             log_format,
             cookie_secure,
             trust_proxy,
+            trusted_proxies,
             docker_socket,
             cache_admin_url,
             host_proc,
@@ -359,6 +427,7 @@ impl fmt::Debug for Config {
             .field("log_format", &self.log_format)
             .field("cookie_secure", &self.cookie_secure)
             .field("trust_proxy", &self.trust_proxy)
+            .field("trusted_proxies", &self.trusted_proxies)
             .field("docker_socket", &self.docker_socket)
             .field("cache_admin_url", &self.cache_admin_url)
             .field("agent_bind", &self.agent_bind)

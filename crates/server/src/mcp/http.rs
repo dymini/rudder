@@ -993,7 +993,7 @@ fn rate_limited(limiter: &crate::state::LoginLimiter, ip: &str) -> bool {
 }
 
 fn client_ip(state: &AppState, headers: &HeaderMap, peer: Option<SocketAddr>) -> String {
-    auth::client_ip(headers, peer, state.config.trust_proxy)
+    auth::client_ip(headers, peer, &state.config.trusted_proxies)
 }
 
 fn bad(message: &'static str) -> ApiError {
