@@ -9,6 +9,7 @@ import {
   Card,
   Empty,
   Field,
+  NameInput,
   PickField,
   QuickPick,
   TextInput,
@@ -163,7 +164,7 @@ export function S3DestinationsPage() {
             />
           </div>
           <Field label={t("Name")}>
-            <TextInput required value={form.name} onChange={set("name")} />
+            <NameInput required value={form.name} onChange={set("name")} />
           </Field>
           <Field
             label={t("Endpoint (empty for AWS)")}

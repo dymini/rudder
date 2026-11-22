@@ -42,6 +42,13 @@ separate fragments. The interactive Terminal tab remains a full terminal.
 
 Browsers must open WebSockets from the panel's own origin. Other clients can connect with an `Authorization: Bearer` token and no `Origin` header.
 
+## Mobile viewing
+
+On narrow screens, log rows and backup runs stack vertically so their controls stay
+within the page. Long messages, hostnames, IDs, and expanded JSON wrap inside the
+viewer. Log panes are height-limited relative to the viewport and scroll independently;
+container and deployment output can also be focused to scroll with the keyboard.
+
 ## Retention
 
 Each source keeps its lines for its own number of days (default 14, maximum 365). Set this under **Logs → Retention**. An hourly job does three things:

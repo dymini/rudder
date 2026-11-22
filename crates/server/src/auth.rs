@@ -447,7 +447,7 @@ pub fn normalize_email(email: &str) -> Result<String, ApiError> {
         Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "invalid_email",
-            "enter a valid email address",
+            "Email address must be 3 to 254 UTF-8 bytes, include '@' and a dot in the domain, and contain no spaces.",
         ))
     }
 }

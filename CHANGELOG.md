@@ -12,9 +12,13 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 - **Choose how each domain is reached.** Service domains can opt in to Cloudflare tunnels or proxied DNS to their server's public IP. New domains default to direct routing; an upgrade preserves existing tunnel domains. Switching back to direct or deleting a domain cleans up only Rudder-managed records, and direct domains warn when closed public ports would make them unreachable.
 - **All your domains in one place.** The new Domains page lists service, stack, panel, and Access hostnames with their servers, routing, TLS and DNS checks. Re-check DNS, change routing, or remove a service domain without opening each service.
 
+### Fixed
+- **Naming errors explain how to fix them.** Invalid resource names, domains, database identifiers, and other labels now describe their naming rules instead of a generic rejection. Resource-name forms show the same guidance in English and Vietnamese, and duplicate names remain clearly identified.
+
 ## [0.11.1] - 2026-11-22
 
 ### Fixed
+- **Logs fit mobile screens.** Log lines, metadata, and long hostnames wrap inside their viewers; filters and touch controls stay accessible, backup runs stack on narrow screens, and log panes adapt to the available height.
 - **Tunnel domains publish automatically.** Connecting a Cloudflare tunnel now publishes existing local service, panel, and Access portal domains, and domain changes keep tunnel ingress and DNS in sync. Existing conflicting DNS records still require explicit permission to replace.
 - **Readable colored logs.** Container, stack, deployment, build, backup, and update logs now show ANSI colors and emphasis instead of escape-code garbage, with readable colors in both themes. Cursor commands and other terminal controls are hidden; raw log downloads are unchanged.
 

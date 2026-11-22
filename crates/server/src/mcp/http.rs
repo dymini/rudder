@@ -249,7 +249,7 @@ async fn register(
         return reject(
             StatusCode::BAD_REQUEST,
             "invalid_client_metadata",
-            "client name must be 1 to 80 characters",
+            "Client name must be non-blank, at most 80 UTF-8 bytes after trimming, and contain no control characters.",
         );
     };
     if body.redirect_uris.is_empty() || body.redirect_uris.len() > 8 {

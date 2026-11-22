@@ -89,7 +89,7 @@ impl ArchiveSource {
                 if ok {
                     Ok(())
                 } else {
-                    Err(Error::Validation("invalid volume name".into()))
+                    Err(Error::Validation("Volume name must be 1 to 128 ASCII letters, digits, dots, underscores, or hyphens, starting with a letter or digit.".into()))
                 }
             }
             Self::HostPath { path } => validate_host_path(path),

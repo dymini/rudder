@@ -252,7 +252,7 @@ async fn consent(
             return Err(ApiError::new(
                 StatusCode::BAD_REQUEST,
                 "invalid",
-                "name must be 1 to 80 characters",
+                "Name must be non-blank, at most 80 UTF-8 bytes after trimming, and contain no control characters.",
             ));
         }
         chosen.to_owned()

@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "../api";
-import { Badge, Button, Card, Empty, Field, PickField, Select, TextInput } from "../components/ui";
+import { Badge, Button, Card, Empty, Field, NameInput, PickField, Select, TextInput } from "../components/ui";
 import { errorMessage } from "../format";
 import { YES_NO } from "../presets";
 import type { Schemas } from "../types";
@@ -247,7 +247,7 @@ function DeployForm({ template, onClose }: { template: Template; onClose: () => 
           </Select>
         </Field>
         <Field label={t("Service name")}>
-          <TextInput required value={name} onChange={(event) => setName(event.target.value)} />
+          <NameInput required value={name} onChange={(event) => setName(event.target.value)} />
         </Field>
         {template.variables.map((variable) =>
           variable.kind === "boolean" ? (

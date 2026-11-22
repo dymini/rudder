@@ -1,3 +1,5 @@
+import { currentLanguage, translate } from "./i18n";
+
 const CSRF_KEY = "rudder_csrf";
 
 let csrfToken = sessionStorage.getItem(CSRF_KEY);
@@ -16,7 +18,7 @@ export class ApiError extends Error {
   code: string;
 
   constructor(status: number, code: string, message: string) {
-    super(message);
+    super(String(translate(currentLanguage(), message)));
     this.status = status;
     this.code = code;
   }

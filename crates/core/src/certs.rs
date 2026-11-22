@@ -101,7 +101,7 @@ fn match_names(certificate: &HostMatch) -> Vec<&str> {
 fn normalize_host(host: &str) -> Result<String, Error> {
     let host = host.trim().trim_end_matches('.').to_ascii_lowercase();
     if host.is_empty() || host.len() > 253 {
-        return Err(Error::Validation("invalid host".into()));
+        return Err(Error::Validation("Certificate host must be 1 to 253 UTF-8 bytes after trimming whitespace and trailing dots.".into()));
     }
     Ok(host)
 }

@@ -666,19 +666,19 @@ export function BackupJobs({ serviceId }: { serviceId?: string }) {
         <li key={job.id} className="overflow-hidden rounded-alert border border-line bg-surface">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4">
             <div className="min-w-0 flex-1 basis-72">
-              <p className="flex flex-wrap items-center gap-2 font-medium text-ink">
+              <p className="flex flex-wrap items-center gap-2 font-medium [overflow-wrap:anywhere] text-ink">
                 {job.name}
                 {job.last_status ? <Badge value={job.last_status} /> : null}
                 {job.enabled ? null : <Badge value="paused" tone="outline" />}
               </p>
-              <p className="mt-1 text-[13px] text-muted">
+              <p className="mt-1 text-[13px] [overflow-wrap:anywhere] text-muted">
                 {job.target_kind} · {job.schedule_cron || t("manual")} ({job.timezone}) ·{" "}
                 {t("next {time}", { time: formatTime(job.next_run_at) })} · {job.compression}
                 {job.encrypted ? ` · ${t("encrypted")}` : ""} ·{" "}
                 {t("{count} destination(s)", { count: job.destination_ids.length })}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 [&_button]:min-h-11 [&_button]:min-w-11 sm:[&_button]:min-h-0 sm:[&_button]:min-w-0">
               <Button
                 size="sm"
                 icon="play"
@@ -746,33 +746,97 @@ function RunHistory({ job }: { job: Job }) {
     );
   }
   return (
-    <DataTable
-      minWidth={640}
-      head={
-        <>
-          <Th>{t("Started")}</Th>
-          <Th>{t("Kind")}</Th>
-          <Th>{t("Status")}</Th>
-          <Th>{t("Duration")}</Th>
-          <Th>{t("Size")}</Th>
-          <Th>
-            <span className="sr-only">{t("Actions")}</span>
-          </Th>
-        </>
-      }
-    >
-      {(runs.data ?? []).map((run) => (
-        <RunRow
-          key={run.id}
-          job={job}
-          run={run}
-          showLogs={logsFor === run.id}
-          showRestore={restoreFor === run.id}
-          onLogs={() => setLogsFor(logsFor === run.id ? null : run.id)}
-          onRestore={() => setRestoreFor(restoreFor === run.id ? null : run.id)}
-        />
+    <>
+      <div className="divide-y divide-line border-t border-line sm:hidden">
+        {(runs.data ?? []).map((run) => (
+          <div key={run.id} className="min-w-0 space-y-3 p-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="[overflow-wrap:anywhere]">{formatTime(run.started_at)}</span>
+              <Badge value={run.status} />
+            </div>
+            <p className="text-xs [overflow-wrap:anywhere] text-muted">
+              {run.kind} · {run.trigger} · {formatDuration(run.duration_ms)} · {formatBytes(run.size_bytes)}
+            </p>
+            <div className="flex flex-wrap gap-2 [&_button]:min-h-11 [&_a]:min-h-11">
+              <Button
+                size="sm"
+                variant="secondary"
+                aria-expanded={logsFor === run.id}
+                onClick={() => setLogsFor(logsFor === run.id ? null : run.id)}
+              >
+                {t("Logs")}
+              </Button>
+              {run.kind === "backup" && (run.status === "succeeded" || run.status === "partial") ? (
+                <>
+                  <a
+                    className={buttonClass({ variant: "ghost", size: "sm" })}
+                    href={`/api/v1/backup-runs/${run.id}/download`}
+                  >
+                    {t("Download")}
+                  </a>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setRestoreFor(restoreFor === run.id ? null : run.id)}
+                  >
+                    {t("Restore")}
+                  </Button>
+                </>
+              ) : null}
+            </div>
+            {logsFor === run.id ? <RunOutput run={run} /> : null}
+            {restoreFor === run.id ? (
+              job.target_kind.startsWith("panel_") ? <PanelRestoreHint /> : <RestoreForm job={job} run={run} />
+            ) : null}
+          </div>
+        ))}
+      </div>
+      <div className="hidden sm:block">
+        <DataTable
+          minWidth={640}
+          head={
+            <>
+              <Th>{t("Started")}</Th>
+              <Th>{t("Kind")}</Th>
+              <Th>{t("Status")}</Th>
+              <Th>{t("Duration")}</Th>
+              <Th>{t("Size")}</Th>
+              <Th>
+                <span className="sr-only">{t("Actions")}</span>
+              </Th>
+            </>
+          }
+        >
+          {(runs.data ?? []).map((run) => (
+            <RunRow
+              key={run.id}
+              job={job}
+              run={run}
+              showLogs={logsFor === run.id}
+              showRestore={restoreFor === run.id}
+              onLogs={() => setLogsFor(logsFor === run.id ? null : run.id)}
+              onRestore={() => setRestoreFor(restoreFor === run.id ? null : run.id)}
+            />
+          ))}
+        </DataTable>
+      </div>
+    </>
+  );
+}
+
+function RunOutput({ run }: { run: Run }) {
+  const t = useT();
+  return (
+    <div className="min-w-0 space-y-2">
+      {run.error ? <p className="text-sm [overflow-wrap:anywhere] text-danger">{run.error}</p> : null}
+      {run.checksum ? <p className="font-mono text-xs break-all text-muted">sha256 {run.checksum}</p> : null}
+      {run.object_keys.map((key) => (
+        <p key={key} className="font-mono text-xs break-all text-muted">{key}</p>
       ))}
-    </DataTable>
+      <LogPre className="max-h-[min(16rem,60dvh)]" empty={t("No log output yet.")}>
+        {run.logs}
+      </LogPre>
+    </div>
   );
 }
 
@@ -829,20 +893,7 @@ function RunRow({
       {showLogs ? (
         <tr>
           <Td colSpan={6} className="bg-paper/60">
-            {run.error ? <p className="mb-2 text-sm text-danger">{run.error}</p> : null}
-            {run.checksum ? (
-              <p className="font-mono text-xs break-all text-muted">sha256 {run.checksum}</p>
-            ) : null}
-            {run.object_keys.map((key) => (
-              <p key={key} className="font-mono text-xs break-all text-muted">
-                {key}
-              </p>
-            ))}
-            <div className="mt-2">
-              <LogPre className="max-h-64" empty={t("No log output yet.")}>
-                {run.logs}
-              </LogPre>
-            </div>
+            <RunOutput run={run} />
           </Td>
         </tr>
       ) : null}

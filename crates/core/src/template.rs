@@ -240,7 +240,10 @@ fn check_value(variable: &TemplateVariable, value: &str) -> Result<(), Error> {
         return Ok(());
     }
     let ok = match variable.kind {
-        VariableKind::Domain => crate::validate_host(value).is_ok() && !value.starts_with("*."),
+        VariableKind::Domain => {
+            return crate::validate_host(value)
+                .map_err(|error| Error::Validation(format!("{}: {error}", variable.name)));
+        }
         VariableKind::Email => {
             let mut parts = value.split('@');
             matches!((parts.next(), parts.next(), parts.next()), (Some(user), Some(host), None) if !user.is_empty() && host.contains('.'))
@@ -252,10 +255,17 @@ fn check_value(variable: &TemplateVariable, value: &str) -> Result<(), Error> {
     if ok {
         Ok(())
     } else {
-        Err(Error::Validation(format!(
-            "{} is not a valid {:?}",
-            variable.name, variable.kind
-        )))
+        let rule = match variable.kind {
+            VariableKind::Email => {
+                "use exactly one '@', a non-empty local part, and a domain containing a dot"
+            }
+            VariableKind::Number => {
+                "use an integer from -9223372036854775808 to 9223372036854775807"
+            }
+            VariableKind::Boolean => "use 'true' or 'false'",
+            _ => "use a valid value",
+        };
+        Err(Error::Validation(format!("{}: {rule}", variable.name)))
     }
 }
 
@@ -328,7 +338,11 @@ compose: |
             ("DOMAIN".to_owned(), "not a host".to_owned()),
             ("ADMIN_EMAIL".to_owned(), "me@example.com".to_owned()),
         ]);
-        assert!(template.resolve(&bad_domain, generate).is_err());
+        let error = template
+            .resolve(&bad_domain, generate)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("DOMAIN: Host must be 1 to 253"));
         let unknown = HashMap::from([
             ("DOMAIN".to_owned(), "demo.example.com".to_owned()),
             ("ADMIN_EMAIL".to_owned(), "me@example.com".to_owned()),

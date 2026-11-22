@@ -126,7 +126,10 @@ pub fn router() -> axum::Router<AppState> {
 fn validate_policy(body: &SaveCachePolicy, rules: &[CacheRule]) -> Result<(), ApiError> {
     let name = body.name.trim();
     if name.is_empty() || name.len() > 100 {
-        return Err(bad("invalid", "policy name must be 1-100 characters"));
+        return Err(bad(
+            "invalid",
+            "Policy name must be non-blank and at most 100 UTF-8 bytes after trimming.",
+        ));
     }
     if body.description.as_deref().is_some_and(|d| d.len() > 500) {
         return Err(bad("invalid", "description is at most 500 characters"));

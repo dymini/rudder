@@ -375,7 +375,13 @@ async fn update_destination(
     )
     .fetch_optional(&state.pool)
     .await
-    .map_err(ApiError::database)?
+    .map_err(|error| {
+        if is_unique(&error) {
+            conflict("name_taken", "a destination with that name exists")
+        } else {
+            ApiError::database(error)
+        }
+    })?
     .ok_or_else(|| not_found("S3 destination not found"))?;
     audit::record(
         &state.pool,
@@ -588,7 +594,7 @@ struct JobFields {
 
 async fn validate_fields(state: &AppState, fields: &JobFields) -> Result<(), ApiError> {
     if fields.name.trim().is_empty() || fields.name.len() > 100 {
-        return Err(bad("invalid", "job name must be 1 to 100 characters"));
+        return Err(bad("invalid", "Job name must be non-blank and at most 100 UTF-8 bytes, including surrounding whitespace."));
     }
     if !matches!(
         fields.target_kind.as_str(),
