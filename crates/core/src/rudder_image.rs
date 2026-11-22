@@ -104,7 +104,7 @@ pub fn validate_image_tag(tag: &str) -> Result<String, Error> {
         && !trimmed.starts_with(['.', '-']);
     if !valid {
         return Err(Error::Validation(
-            "image tag may only contain letters, digits, '.', '-', or '_'".into(),
+            "Image tag may only contain ASCII letters, digits, '.', '-', or '_' and cannot start with '.' or '-'.".into(),
         ));
     }
     Ok(trimmed.to_owned())

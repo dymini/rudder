@@ -223,7 +223,7 @@ async fn metrics(
                     .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
         })
     {
-        return Err(bad("invalid_metrics", "give 1 to 8 metric names"));
+        return Err(bad("invalid_metrics", "Give 1 to 8 metric names; each name must be 1 to 40 lowercase ASCII letters, digits, or underscores."));
     }
     let seconds = range_secs(query.range.as_deref())?;
     let since = Utc::now() - Duration::seconds(seconds);
@@ -381,7 +381,10 @@ async fn list_alerts(
 async fn validate_alert(state: &AppState, body: &SaveAlert) -> Result<serde_json::Value, ApiError> {
     let name = body.name.trim();
     if name.is_empty() || name.len() > 100 {
-        return Err(bad("invalid_name", "name is 1 to 100 characters"));
+        return Err(bad(
+            "invalid_name",
+            "Name must be non-blank and at most 100 UTF-8 bytes after trimming.",
+        ));
     }
     validate_alert_kind(&body.kind).map_err(core_error)?;
     if alert_needs_threshold(&body.kind) {
@@ -425,7 +428,7 @@ async fn validate_alert(state: &AppState, body: &SaveAlert) -> Result<serde_json
             {
                 return Err(bad(
                     "invalid_events",
-                    "events are patterns like backup.* or deploy.failed",
+                    "Give 1 to 20 event patterns, each 1 to 60 lowercase ASCII letters, dots, underscores, or '*', such as backup.* or deploy.failed.",
                 ));
             }
             let min = body
@@ -666,7 +669,10 @@ async fn list_channels(
 fn parse_channel(body: &SaveChannel) -> Result<ChannelConfig, ApiError> {
     let name = body.name.trim();
     if name.is_empty() || name.len() > 100 {
-        return Err(bad("invalid_name", "name is 1 to 100 characters"));
+        return Err(bad(
+            "invalid_name",
+            "Name must be non-blank and at most 100 UTF-8 bytes after trimming.",
+        ));
     }
     serde_json::from_value::<ChannelConfig>(body.config.clone()).map_err(|_| {
         bad(

@@ -1,7 +1,7 @@
 import { Button as BaseButton } from "@base-ui/react/button";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { Input as BaseInput } from "@base-ui/react/input";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
@@ -12,6 +12,7 @@ import type {
 } from "react";
 import { toast } from "sonner";
 import { useT } from "../i18n";
+import { nameError, nameRules, type NameKind } from "../validation";
 import { Icon, type IconName } from "./icons";
 import { AnsiText } from "./AnsiText";
 
@@ -77,6 +78,48 @@ const controlClass =
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <BaseInput {...props} className={`h-10 px-3 ${controlClass} ${props.className ?? ""}`} />;
+}
+
+export function NameInput({
+  kind = "resource",
+  ...props
+}: InputHTMLAttributes<HTMLInputElement> & { kind?: NameKind }) {
+  const t = useT();
+  const hintId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const rule = nameRules[kind];
+  const message = t(rule.message);
+  useEffect(() => {
+    inputRef.current?.setCustomValidity("");
+  }, [props.value, message]);
+  return (
+    <>
+      <BaseInput
+        {...props}
+        ref={inputRef}
+        className={`h-10 px-3 ${controlClass} ${props.className ?? ""}`}
+        pattern={rule.pattern}
+        title={message}
+        aria-describedby={[props["aria-describedby"], hintId].filter(Boolean).join(" ")}
+        onInvalid={(event) => {
+          const error = nameError(event.currentTarget.value, kind, Boolean(props.required));
+          if (error) {
+            event.currentTarget.setCustomValidity(t(error));
+          }
+          props.onInvalid?.(event);
+        }}
+        onInput={(event) => {
+          event.currentTarget.setCustomValidity("");
+          props.onInput?.(event);
+        }}
+        onChange={(event) => {
+          event.currentTarget.setCustomValidity("");
+          props.onChange?.(event);
+        }}
+      />
+      <span id={hintId} className="text-[13px] font-normal text-muted">{message}</span>
+    </>
+  );
 }
 
 export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -224,7 +267,7 @@ export function Card({
   const hasHeader = title || description || actions;
   return (
     <section
-      className={`overflow-hidden rounded-card border border-line bg-surface shadow-card ${className}`}
+      className={`min-w-0 overflow-hidden rounded-card border border-line bg-surface shadow-card ${className}`}
     >
       {hasHeader ? (
         <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 px-5 pt-5 sm:px-6">
@@ -236,7 +279,7 @@ export function Card({
             ) : null}
             {description ? <p className="mt-1 text-sm text-muted">{description}</p> : null}
           </div>
-          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+          {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{actions}</div> : null}
         </header>
       ) : null}
       {children ? (
@@ -963,7 +1006,7 @@ export function SectionNav<T extends string>({
 export function LogPre({
   children,
   empty,
-  className = "max-h-[32rem]",
+  className = "max-h-[min(32rem,60dvh)]",
   follow = false,
 }: {
   children?: string | null;
@@ -989,7 +1032,8 @@ export function LogPre({
           atEnd.current = element.scrollHeight - element.scrollTop - element.clientHeight < 48;
         }
       }}
-      className={`overflow-auto rounded-alert border border-[#2c2a26] bg-[#12110f] p-3.5 font-mono text-xs leading-relaxed whitespace-pre-wrap text-[#d8d2c8] ${className}`}
+      tabIndex={0}
+      className={`min-w-0 max-w-full overflow-auto rounded-alert border border-[#2c2a26] bg-[#12110f] p-3.5 font-mono text-xs leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] text-[#d8d2c8] ${className}`}
     >
       {children ? <AnsiText console>{children}</AnsiText> : <span className="text-[#766f67]">{empty}</span>}
     </pre>

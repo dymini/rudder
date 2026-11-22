@@ -609,7 +609,7 @@ pub fn object_key(
         || name.split('/').any(|part| part.is_empty() || part == "..")
     {
         return Err(Error::Validation(
-            "filename template must produce letters, digits, '-', '_', '.', and '/'".into(),
+            "Filename template must produce 1 to 200 ASCII letters, digits, '-', '_', '.', or '/'; path segments cannot be empty or '..'.".into(),
         ));
     }
     let prefix = prefix.trim_matches('/');
@@ -629,7 +629,7 @@ pub fn validate_prefix(prefix: &str) -> Result<(), Error> {
     if ok {
         Ok(())
     } else {
-        Err(Error::Validation("invalid path prefix".into()))
+        Err(Error::Validation("Backup path prefix must be at most 200 ASCII letters, digits, '-', '_', '.', or '/'; '..' path segments are not allowed.".into()))
     }
 }
 

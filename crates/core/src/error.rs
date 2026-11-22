@@ -4,7 +4,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum Error {
     /// Resource name failed [`crate::validate_name`].
-    #[error("invalid name '{0}'")]
+    #[error("{}", crate::NAME_RULE)]
     InvalidName(String),
 
     /// Caller sent a value the domain rejects.

@@ -31,6 +31,32 @@ export const vi: Record<string, string> = {
   "cloudflare-proxied": "qua proxy Cloudflare",
   "tunnel": "tunnel",
   "direct": "trực tiếp",
+  "Environment variable name must be 1 to 128 ASCII letters, digits, or underscores, starting with a letter or underscore.":
+    "Tên biến môi trường phải dài từ 1 đến 128 ký tự ASCII: chữ cái, chữ số hoặc dấu gạch dưới; bắt đầu bằng chữ cái hoặc dấu gạch dưới.",
+  "Host must be 1 to 253 ASCII characters with at least one dot; each label must be 1 to 63 letters, digits, or hyphens and cannot start or end with a hyphen. Do not include a scheme, port, path, or wildcard.":
+    "Tên miền phải dài từ 1 đến 253 ký tự ASCII và có ít nhất một dấu chấm; mỗi nhãn dài từ 1 đến 63 chữ cái, chữ số hoặc dấu gạch nối, không bắt đầu hoặc kết thúc bằng dấu gạch nối. Không nhập giao thức, cổng, đường dẫn hoặc ký tự đại diện.",
+  "Slug must be 1 to 48 lowercase ASCII letters, digits, or hyphens, with no leading or trailing hyphen (after trimming and lowercasing).":
+    "Slug phải dài từ 1 đến 48 ký tự ASCII thường: chữ cái, chữ số hoặc dấu gạch nối; không bắt đầu hoặc kết thúc bằng dấu gạch nối (sau khi bỏ khoảng trắng hai đầu và chuyển thành chữ thường).",
+  "Token name must be non-blank, at most 64 UTF-8 bytes after trimming, and contain no control characters.":
+    "Tên token không được để trống, dài tối đa 64 byte UTF-8 sau khi bỏ khoảng trắng hai đầu và không chứa ký tự điều khiển.",
+  "Name must be non-blank, at most 80 UTF-8 bytes after trimming, and contain no control characters.":
+    "Tên không được để trống, dài tối đa 80 byte UTF-8 sau khi bỏ khoảng trắng hai đầu và không chứa ký tự điều khiển.",
+  "Name must be non-blank and at most 100 UTF-8 bytes after trimming.":
+    "Tên không được để trống và dài tối đa 100 byte UTF-8 sau khi bỏ khoảng trắng hai đầu.",
+  "Policy name must be non-blank and at most 100 UTF-8 bytes after trimming.":
+    "Tên chính sách không được để trống và dài tối đa 100 byte UTF-8 sau khi bỏ khoảng trắng hai đầu.",
+  "Job name must be non-blank and at most 100 UTF-8 bytes, including surrounding whitespace.":
+    "Tên công việc không được để trống và dài tối đa 100 byte UTF-8, kể cả khoảng trắng hai đầu.",
+  "Registry username must be at most 256 UTF-8 bytes and contain no newline, carriage return, or NUL characters.":
+    "Tên người dùng registry dài tối đa 256 byte UTF-8 và không chứa ký tự xuống dòng, về đầu dòng hoặc NUL.",
+  "Basic auth user must be 1 to 64 ASCII letters, digits, dots, underscores, or hyphens.":
+    "Tên người dùng Basic auth phải dài từ 1 đến 64 ký tự ASCII: chữ cái, chữ số, dấu chấm, gạch dưới hoặc gạch nối.",
+  "Email address must be 3 to 254 UTF-8 bytes, include '@' and a dot in the domain, and contain no spaces.":
+    "Địa chỉ email phải dài từ 3 đến 254 byte UTF-8, có '@' và dấu chấm trong tên miền, không chứa dấu cách.",
+  "Name must be 1 to 63 characters: lowercase ASCII letters (a-z), digits (0-9), or hyphens (-), starting with a letter or digit.":
+    "Tên phải dài từ 1 đến 63 ký tự: chỉ dùng chữ ASCII thường (a-z), chữ số (0-9) hoặc dấu gạch nối (-), bắt đầu bằng chữ cái hoặc chữ số.",
+  "Compose service name must be 1 to 63 ASCII letters, digits, dots, underscores, or hyphens, starting with a letter or digit.":
+    "Tên dịch vụ Compose phải dài từ 1 đến 63 ký tự ASCII: chữ cái, chữ số, dấu chấm, gạch dưới hoặc gạch nối; bắt đầu bằng chữ cái hoặc chữ số.",
   // --- Shared words: roles and status badges ---
   admin: "quản trị viên",
   viewer: "người xem",

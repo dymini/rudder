@@ -13,6 +13,7 @@ Operating and product documentation for this repository.
 | `mcp.md` | Connecting an AI agent and the permission templates |
 | `plugins.md` | Installing and updating release-backed plugins, including Dockside |
 | `domains.md` | Domain inventory, direct and Cloudflare routing, and DNS checks |
+| `names.md` | Naming rules and understanding validation errors |
 | `access.md` | Rudder Access sign-in for internal apps |
 | `security.md` | SSL, exposure checks, and shared rate limits |
 | `product/` | Product contracts |

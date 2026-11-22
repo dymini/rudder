@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "../api";
-import { Badge, Button, Card, Dialog, Empty, Field, Select, TextArea, TextInput } from "../components/ui";
+import { Badge, Button, Card, Dialog, Empty, Field, NameInput, Select, TextArea, TextInput } from "../components/ui";
 import { errorMessage } from "../format";
 import { useT } from "../i18n";
 import type { Schemas } from "../types";
@@ -114,7 +114,7 @@ function InstallDialog({ plugin, onClose }: { plugin: Plugin; onClose: () => voi
       <Field label={t("Project")}><Select value={project} onChange={(e) => { setProjectId(e.target.value); setEnvironmentId(""); }}>{projects.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
       <Field label={t("Environment")}><Select value={environment} onChange={(e) => setEnvironmentId(e.target.value)}>{environments.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
       <Field label={t("Server")}><Select value={server} onChange={(e) => setServerId(e.target.value)}>{servers.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
-      <Field label={t("Service name")}><TextInput required value={name} onChange={(e) => setName(e.target.value)} /></Field>
+      <Field label={t("Service name")}><NameInput required value={name} onChange={(e) => setName(e.target.value)} /></Field>
       <Field label={t("Version")}><Select value={version} onChange={(e) => setVersion(e.target.value)}>{plugin.last_check?.releases.map((r) => <option key={r.version} value={r.version}>{r.version}</option>)}</Select></Field>
       {plugin.manifest.variables.map((v) => <Field key={v.name} label={`${v.label}${v.required ? " *" : ""}`}>
         {v.kind === "text" ? <TextArea aria-label={v.label} value={values[v.name]} placeholder={v.description} onChange={(e) => setValues({ ...values, [v.name]: e.target.value })} />

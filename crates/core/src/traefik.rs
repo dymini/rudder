@@ -53,26 +53,29 @@ pub struct TlsMaterial {
 }
 
 pub fn validate_host(host: &str) -> Result<(), Error> {
+    let invalid = || {
+        Error::Validation("Host must be 1 to 253 ASCII characters with at least one dot; each label must be 1 to 63 letters, digits, or hyphens and cannot start or end with a hyphen. Do not include a scheme, port, path, or wildcard.".into())
+    };
     if host.len() > 253 || host.is_empty() || host.contains('*') {
-        return Err(Error::Validation("invalid host".into()));
+        return Err(invalid());
     }
     let labels: Vec<&str> = host.split('.').collect();
     if labels.len() < 2 {
-        return Err(Error::Validation("host needs a dot".into()));
+        return Err(invalid());
     }
     for label in labels {
         if label.is_empty() || label.len() > 63 {
-            return Err(Error::Validation("invalid host".into()));
+            return Err(invalid());
         }
         let bytes = label.as_bytes();
         if bytes[0] == b'-' || bytes[bytes.len() - 1] == b'-' {
-            return Err(Error::Validation("invalid host".into()));
+            return Err(invalid());
         }
         if !bytes
             .iter()
             .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'-')
         {
-            return Err(Error::Validation("invalid host".into()));
+            return Err(invalid());
         }
     }
     Ok(())
@@ -365,7 +368,7 @@ fn validate_route(route: &ProxyRoute) -> Result<(), Error> {
                 .bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
         {
-            return Err(Error::Validation("invalid basic auth user".into()));
+            return Err(Error::Validation("Basic auth user must be 1 to 64 ASCII letters, digits, dots, underscores, or hyphens.".into()));
         }
     }
     if let Some(hash) = &route.basic_auth_hash {

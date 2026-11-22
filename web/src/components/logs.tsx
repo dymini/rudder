@@ -146,8 +146,8 @@ export function LogViewer({
   }
 
   return (
-    <div className="@container space-y-3">
-      <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-[2fr_1fr_1fr_1fr_1.3fr]">
+    <div className="@container min-w-0 max-w-full space-y-3">
+      <div className="grid grid-cols-2 gap-2 *:min-w-0 [&_input]:h-11 [&_select]:h-11 sm:[&_input]:h-10 sm:[&_select]:h-10 @2xl:grid-cols-[2fr_1fr_1fr_1fr_1.3fr]">
         <TextInput
           className="col-span-2 @2xl:col-span-1"
           placeholder={t("Search messages")}
@@ -206,10 +206,11 @@ export function LogViewer({
           ))}
         </Select>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-2 items-center gap-2 *:min-w-0 [&_button]:h-11 [&_a]:h-11 sm:flex sm:flex-wrap sm:[&_button]:h-8 sm:[&_a]:h-8">
         <Button
           variant={live ? "primary" : "secondary"}
           size="sm"
+          className="col-span-2"
           icon={live ? "stop" : "play"}
           onClick={() => setLive((value) => !value)}
         >
@@ -229,7 +230,7 @@ export function LogViewer({
           <Icon name="download" size={14} />
           {t("Export CSV")}
         </a>
-        <span className="ml-auto text-[13px] text-muted">
+        <span className="col-span-2 min-w-0 break-words text-[13px] text-muted sm:ml-auto">
           {live
             ? liveNote && t(liveNote.key, liveNote.values)
             : search.isFetching
@@ -238,11 +239,11 @@ export function LogViewer({
         </span>
       </div>
       {search.error && !live ? (
-        <p className="text-sm text-danger">{errorMessage(search.error, t("Search failed"))}</p>
+        <p className="text-sm [overflow-wrap:anywhere] text-danger">{errorMessage(search.error, t("Search failed"))}</p>
       ) : null}
-      <div className="max-h-[36rem] overflow-auto rounded-alert border border-line bg-surface">
-        <table className="w-full font-mono text-xs">
-          <tbody>
+      <div className="min-w-0 max-w-full max-h-[min(36rem,65dvh)] overflow-auto rounded-alert border border-line bg-surface">
+        <table className="block w-full font-mono text-xs sm:table">
+          <tbody className="block sm:table-row-group">
             {rows.map((row) => (
               <LogRow
                 key={row.id}
@@ -276,23 +277,24 @@ function LogRow({ row, open, onToggle }: { row: LogView; open: boolean; onToggle
   return (
     <>
       <tr
-        className={`border-b border-line/70 align-top transition-colors hover:bg-paper ${hasFields ? "cursor-pointer" : ""}`}
+        className={`grid grid-cols-2 border-b border-line/70 align-top transition-colors hover:bg-paper sm:table-row ${hasFields ? "cursor-pointer" : ""}`}
         onClick={hasFields ? onToggle : undefined}
       >
-        <td className="px-3 py-1.5 whitespace-nowrap text-muted">{formatTime(row.logged_at)}</td>
-        <td className="px-2 py-1.5 whitespace-nowrap text-muted">{row.source}</td>
-        <td className={`px-2 py-1.5 whitespace-nowrap ${levelTone[row.level] ?? ""}`}>
+        <td className="col-span-2 px-3 pt-3 pb-1 break-words text-muted sm:py-1.5 sm:whitespace-nowrap">{formatTime(row.logged_at)}</td>
+        <td className="min-w-0 px-3 py-1 [overflow-wrap:anywhere] text-muted sm:px-2 sm:py-1.5 sm:whitespace-nowrap">{row.source}</td>
+        <td className={`px-3 py-1 text-right sm:px-2 sm:py-1.5 sm:text-left sm:whitespace-nowrap ${levelTone[row.level] ?? ""}`}>
           {row.level}
+          {row.http_status ? <span className="ml-2 text-ink-soft sm:hidden">{row.http_status}</span> : null}
         </td>
-        <td className="px-2 py-1.5 whitespace-nowrap text-ink-soft">{row.http_status ?? ""}</td>
-        <td className="w-full px-2 py-1.5 pr-3 break-all whitespace-pre-wrap text-ink">
+        <td className="hidden px-2 py-1.5 whitespace-nowrap text-ink-soft sm:table-cell">{row.http_status ?? ""}</td>
+        <td className="col-span-2 min-w-0 w-full px-3 pt-1 pb-3 [overflow-wrap:anywhere] whitespace-pre-wrap text-ink sm:px-2 sm:py-1.5 sm:pr-3">
           <AnsiText>{row.message}</AnsiText>
         </td>
       </tr>
       {open && hasFields ? (
-        <tr className="border-b border-line/70 bg-paper">
-          <td colSpan={5} className="px-3 py-2">
-            <pre className="whitespace-pre-wrap text-muted">{JSON.stringify(fields, null, 2)}</pre>
+        <tr className="block border-b border-line/70 bg-paper sm:table-row">
+          <td colSpan={5} className="block min-w-0 px-3 py-2 sm:table-cell">
+            <pre className="whitespace-pre-wrap [overflow-wrap:anywhere] text-muted">{JSON.stringify(fields, null, 2)}</pre>
           </td>
         </tr>
       ) : null}

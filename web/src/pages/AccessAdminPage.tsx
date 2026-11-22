@@ -259,7 +259,7 @@ function Directory({
         <Field label={t("Name")}>
           <TextInput required value={name} onChange={(event) => setName(event.target.value)} />
         </Field>
-        <Field label={t("Slug")}>
+        <Field label={t("Slug")} hint={t("Slug must be 1 to 48 lowercase ASCII letters, digits, or hyphens, with no leading or trailing hyphen (after trimming and lowercasing).")}>
           <TextInput required value={slug} onChange={(event) => setSlug(event.target.value)} />
         </Field>
         {extra ? (
