@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Fixed
+- **Naming errors explain how to fix them.** Invalid resource names, domains, database identifiers, and other labels now describe their naming rules instead of a generic rejection. Resource-name forms show the same guidance in English and Vietnamese, and duplicate names remain clearly identified.
+
 ## [0.11.1] - 2026-11-22
 
 ### Fixed

@@ -24,6 +24,7 @@ import {
   Disclosure,
   Empty,
   Field,
+  NameInput,
   LogPre,
   PickField,
   QuickPick,
@@ -31,7 +32,6 @@ import {
   Select,
   Td,
   TextArea,
-  TextInput,
   Th,
 } from "./ui";
 
@@ -465,7 +465,8 @@ function SourceForm({
               />
             }
           >
-            <TextInput
+            <NameInput
+              kind="compose"
               value={mainService}
               placeholder="web"
               onChange={(event) => setMainService(event.target.value)}
@@ -484,10 +485,9 @@ function SourceForm({
                 )
           }
         >
-          <TextInput
+          <NameInput
             value={project}
             disabled={deployed}
-            pattern="[a-z0-9][a-z0-9\-]*"
             onChange={(event) => setProject(event.target.value)}
           />
         </Field>

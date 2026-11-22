@@ -1,5 +1,7 @@
 use crate::Error;
 
+pub const NAME_RULE: &str = "Name must be 1 to 63 characters: lowercase ASCII letters (a-z), digits (0-9), or hyphens (-), starting with a letter or digit.";
+
 /// Docker-safe resource name: lowercase ASCII, digits, and hyphens.
 ///
 /// Pattern: `^[a-z0-9][a-z0-9-]{0,62}$` (1 to 63 characters).
@@ -37,7 +39,7 @@ pub fn validate_image_ref(image: &str) -> Result<(), Error> {
     if ok {
         Ok(())
     } else {
-        Err(Error::Validation("invalid image reference".into()))
+        Err(Error::Validation("Image reference must be 1 to 512 UTF-8 bytes, with no whitespace, control characters, semicolons, pipes, ampersands, dollar signs, backticks, quotes, or backslashes.".into()))
     }
 }
 
@@ -54,7 +56,7 @@ pub fn validate_env_key(key: &str) -> Result<(), Error> {
         Ok(())
     } else {
         Err(Error::Validation(format!(
-            "invalid environment variable name '{key}'"
+            "Environment variable name '{key}' must be 1 to 128 ASCII letters, digits, or underscores, starting with a letter or underscore."
         )))
     }
 }
@@ -79,6 +81,30 @@ mod tests {
         assert!(validate_name("web_app").is_err());
         assert!(validate_name("web app").is_err());
         assert!(validate_name(&"a".repeat(64)).is_err());
+    }
+
+    #[test]
+    fn naming_errors_describe_the_accepted_rule() {
+        for name in [
+            "".to_owned(),
+            "Upper".into(),
+            "under_score".into(),
+            "-first".into(),
+            "a".repeat(64),
+            "tiếng".into(),
+        ] {
+            let error = validate_name(&name).unwrap_err();
+            assert_eq!(error.to_string(), NAME_RULE);
+            assert!(error.to_string().contains("1 to 63"));
+            assert!(error
+                .to_string()
+                .contains("starting with a letter or digit"));
+        }
+        for key in ["", "1NAME", "HAS-DASH", "HAS SPACE"] {
+            let error = validate_env_key(key).unwrap_err().to_string();
+            assert!(error.contains("1 to 128"));
+            assert!(error.contains("starting with a letter or underscore"));
+        }
     }
 
     #[test]

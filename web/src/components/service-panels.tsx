@@ -24,6 +24,7 @@ import {
   Empty,
   Field,
   LogPre,
+  NameInput,
   PickField,
   QuickPick,
   Select,
@@ -1118,7 +1119,8 @@ export function EnvironmentPanel({
               />
             }
           >
-            <TextInput
+            <NameInput
+              kind="environment"
               required
               value={key}
               placeholder="DATABASE_URL"

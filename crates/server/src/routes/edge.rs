@@ -644,7 +644,7 @@ async fn create_registry(
     let url = validate_registry_url(&body.url).map_err(core_error)?;
     if let Some(username) = &body.username {
         if username.len() > 256 || username.contains(['\n', '\r', '\0']) {
-            return Err(bad("invalid", "invalid registry username"));
+            return Err(bad("invalid", "Registry username must be at most 256 UTF-8 bytes and contain no newline, carriage return, or NUL characters."));
         }
     }
     let password = match body.password.as_deref() {
@@ -907,7 +907,7 @@ fn basic_hash(user: Option<&str>, password: Option<&str>) -> Result<Option<Strin
                     .bytes()
                     .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
             {
-                return Err(bad("invalid", "invalid basic auth user"));
+                return Err(bad("invalid", "Basic auth user must be 1 to 64 ASCII letters, digits, dots, underscores, or hyphens."));
             }
             if password.len() > 256 {
                 return Err(bad("invalid", "basic auth password is too long"));

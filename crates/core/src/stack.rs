@@ -45,7 +45,7 @@ pub fn validate_compose_service(name: &str) -> Result<(), Error> {
         Ok(())
     } else {
         Err(Error::Validation(format!(
-            "invalid compose service name '{name}'"
+            "Compose service name '{name}' must be 1 to 63 ASCII letters, digits, dots, underscores, or hyphens, starting with a letter or digit."
         )))
     }
 }

@@ -883,7 +883,7 @@ async fn create_token(
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "invalid_name",
-            "token name must be 1 to 64 visible characters",
+            "Token name must be non-blank, at most 64 UTF-8 bytes after trimming, and contain no control characters.",
         ));
     }
     let scopes = auth::validate_scopes(&body.scopes)?;
@@ -985,7 +985,7 @@ async fn cli_auth_start(
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "invalid_name",
-            "client_name must be 1 to 64 visible characters",
+            "Client name must be at most 64 UTF-8 bytes after trimming and contain no control characters; leave it empty to use rudder-cli.",
         ));
     }
     let requested_scopes = body

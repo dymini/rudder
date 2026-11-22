@@ -1,7 +1,7 @@
 import { Button as BaseButton } from "@base-ui/react/button";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { Input as BaseInput } from "@base-ui/react/input";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
@@ -12,6 +12,7 @@ import type {
 } from "react";
 import { toast } from "sonner";
 import { useT } from "../i18n";
+import { nameError, nameRules, type NameKind } from "../validation";
 import { Icon, type IconName } from "./icons";
 import { AnsiText } from "./AnsiText";
 
@@ -77,6 +78,48 @@ const controlClass =
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <BaseInput {...props} className={`h-10 px-3 ${controlClass} ${props.className ?? ""}`} />;
+}
+
+export function NameInput({
+  kind = "resource",
+  ...props
+}: InputHTMLAttributes<HTMLInputElement> & { kind?: NameKind }) {
+  const t = useT();
+  const hintId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const rule = nameRules[kind];
+  const message = t(rule.message);
+  useEffect(() => {
+    inputRef.current?.setCustomValidity("");
+  }, [props.value, message]);
+  return (
+    <>
+      <BaseInput
+        {...props}
+        ref={inputRef}
+        className={`h-10 px-3 ${controlClass} ${props.className ?? ""}`}
+        pattern={rule.pattern}
+        title={message}
+        aria-describedby={[props["aria-describedby"], hintId].filter(Boolean).join(" ")}
+        onInvalid={(event) => {
+          const error = nameError(event.currentTarget.value, kind, Boolean(props.required));
+          if (error) {
+            event.currentTarget.setCustomValidity(t(error));
+          }
+          props.onInvalid?.(event);
+        }}
+        onInput={(event) => {
+          event.currentTarget.setCustomValidity("");
+          props.onInput?.(event);
+        }}
+        onChange={(event) => {
+          event.currentTarget.setCustomValidity("");
+          props.onChange?.(event);
+        }}
+      />
+      <span id={hintId} className="text-[13px] font-normal text-muted">{message}</span>
+    </>
+  );
 }
 
 export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {

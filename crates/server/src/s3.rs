@@ -52,7 +52,9 @@ pub fn build_store(config: &StoreConfig<'_>) -> Result<Arc<dyn ObjectStore>, Err
         ));
     }
     if config.region.is_empty() || config.region.len() > 64 || config.region.contains(' ') {
-        return Err(Error::Validation("invalid region".into()));
+        return Err(Error::Validation(
+            "Region must be 1 to 64 UTF-8 bytes and contain no spaces.".into(),
+        ));
     }
     let mut builder = AmazonS3Builder::new()
         .with_region(config.region)
