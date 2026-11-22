@@ -950,6 +950,140 @@
         }
       }
     },
+    "/api/v1/auth/mfa/email/send": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Send an email sign-in factor after verifying the password",
+        "operationId": "post_v1_auth_mfa_email_send",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyVerify"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Send an email sign-in factor after verifying the password"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/passkeys/login/finish": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Complete discoverable passkey sign-in and issue a browser session",
+        "operationId": "post_v1_auth_passkeys_login_finish",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaFinish"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Complete discoverable passkey sign-in and issue a browser session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/passkeys/login/start": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Begin discoverable passkey sign-in",
+        "operationId": "post_v1_auth_passkeys_login_start",
+        "responses": {
+          "200": {
+            "description": "Begin discoverable passkey sign-in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaChallenge"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/passkeys/verify/finish": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Complete passkey verification; return a single-use five-minute factor proof",
+        "operationId": "post_v1_auth_passkeys_verify_finish",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaFinish"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Complete passkey verification; return a single-use five-minute factor proof",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaProof"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/passkeys/verify/start": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Begin a passkey second-factor or re-authentication ceremony",
+        "operationId": "post_v1_auth_passkeys_verify_start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyVerify"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Begin a passkey second-factor or re-authentication ceremony",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaChallenge"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/backup-jobs": {
       "get": {
         "tags": [
@@ -3284,6 +3418,217 @@
         }
       }
     },
+    "/api/v1/me/mfa": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "List enabled MFA methods and availability",
+        "operationId": "get_v1_me_mfa",
+        "responses": {
+          "200": {
+            "description": "List enabled MFA methods and availability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaMethods"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/mfa/email/disable": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Disable email MFA with password and a current factor",
+        "operationId": "post_v1_me_mfa_email_disable",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaReauth"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Disable email MFA with password and a current factor"
+          }
+        }
+      }
+    },
+    "/api/v1/me/mfa/email/enable": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Enable email MFA with the enrollment code and password",
+        "operationId": "post_v1_me_mfa_email_enable",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailMfaEnable"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Enable email MFA with the enrollment code and password"
+          }
+        }
+      }
+    },
+    "/api/v1/me/mfa/email/send": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Send an enrollment or re-authentication email code",
+        "operationId": "post_v1_me_mfa_email_send",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailMfaSend"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Send an enrollment or re-authentication email code"
+          }
+        }
+      }
+    },
+    "/api/v1/me/passkeys": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "List your registered passkeys",
+        "operationId": "get_v1_me_passkeys",
+        "responses": {
+          "200": {
+            "description": "List your registered passkeys",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PasskeyView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/passkeys/register/finish": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Complete a single-use passkey registration",
+        "operationId": "post_v1_me_passkeys_register_finish",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaFinish"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Complete a single-use passkey registration"
+          }
+        }
+      }
+    },
+    "/api/v1/me/passkeys/register/start": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Begin resident passkey registration after re-authentication",
+        "operationId": "post_v1_me_passkeys_register_start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyRegister"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Begin resident passkey registration after re-authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaChallenge"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/passkeys/{id}": {
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Delete your passkey with password and a current factor",
+        "operationId": "delete_v1_me_passkeys__id_",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaReauth"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Delete your passkey with password and a current factor"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Rename your passkey",
+        "operationId": "patch_v1_me_passkeys__id_",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyName"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Rename your passkey"
+          }
+        }
+      }
+    },
     "/api/v1/me/password": {
       "post": {
         "tags": [
@@ -3367,6 +3712,15 @@
         ],
         "summary": "Start authenticator setup",
         "operationId": "post_v1_me_totp_setup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaReauth"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Start authenticator setup",
@@ -9298,6 +9652,39 @@
           }
         }
       },
+      "EmailMfaEnable": {
+        "type": "object",
+        "required": [
+          "password",
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "EmailMfaSend": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MfaReauth"
+          },
+          {
+            "type": "object",
+            "required": [
+              "purpose"
+            ],
+            "properties": {
+              "purpose": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
       "EnrollRequest": {
         "type": "object",
         "required": [
@@ -9452,6 +9839,29 @@
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "FactorInput": {
+        "type": "object",
+        "properties": {
+          "email_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mfa_proof": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "totp_code": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -10753,6 +11163,18 @@
           "email": {
             "type": "string"
           },
+          "email_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mfa_proof": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "password": {
             "type": "string"
           },
@@ -11412,6 +11834,91 @@
           }
         }
       },
+      "MfaChallenge": {
+        "type": "object",
+        "required": [
+          "challenge_id",
+          "options"
+        ],
+        "properties": {
+          "challenge_id": {
+            "type": "string"
+          },
+          "options": {}
+        }
+      },
+      "MfaFinish": {
+        "type": "object",
+        "required": [
+          "challenge_id",
+          "credential"
+        ],
+        "properties": {
+          "challenge_id": {
+            "type": "string"
+          },
+          "credential": {}
+        }
+      },
+      "MfaMethods": {
+        "type": "object",
+        "required": [
+          "totp",
+          "email",
+          "passkeys",
+          "email_available"
+        ],
+        "properties": {
+          "email": {
+            "type": "boolean"
+          },
+          "email_available": {
+            "type": "boolean"
+          },
+          "passkey_origin": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "passkeys": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totp": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MfaProof": {
+        "type": "object",
+        "required": [
+          "mfa_proof"
+        ],
+        "properties": {
+          "mfa_proof": {
+            "type": "string"
+          }
+        }
+      },
+      "MfaReauth": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FactorInput"
+          },
+          {
+            "type": "object",
+            "required": [
+              "password"
+            ],
+            "properties": {
+              "password": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
       "NetworkView": {
         "type": "object",
         "required": [
@@ -11548,6 +12055,83 @@
             ]
           },
           "panel_ssl_mode": {
+            "type": "string"
+          }
+        }
+      },
+      "PasskeyName": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "PasskeyRegister": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MfaReauth"
+          },
+          {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "PasskeyVerify": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "PasskeyView": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "counter",
+          "created_at"
+        ],
+        "properties": {
+          "counter": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "name": {
             "type": "string"
           }
         }
@@ -14892,6 +15476,18 @@
         "properties": {
           "code": {
             "type": "string"
+          },
+          "email_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mfa_proof": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "password": {
             "type": "string"

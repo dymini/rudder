@@ -5,16 +5,24 @@ import { useAuth } from "../auth";
 import { Button, Card, Field, Segmented, TextInput } from "../components/ui";
 import { LANGUAGES, translate, useLanguage, type Language } from "../i18n";
 import type { Schemas } from "../types";
+import {
+  MfaFields,
+  MfaSecurity,
+  clearFactor,
+  type Reauth,
+} from "../components/mfa";
 
 export function AccountPage() {
   const { user, refresh } = useAuth();
   const { language, setLanguage, t } = useLanguage();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [setup, setSetup] = useState<{ secret: string; otpauth_url: string } | null>(null);
+  const [setup, setSetup] = useState<{
+    secret: string;
+    otpauth_url: string;
+  } | null>(null);
   const [code, setCode] = useState("");
-  const [disablePassword, setDisablePassword] = useState("");
-  const [disableCode, setDisableCode] = useState("");
+  const [reauth, setReauth] = useState<Reauth>({ password: "" });
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
 
   async function changePassword(event: FormEvent) {
@@ -31,37 +39,54 @@ export function AccountPage() {
       toast.success(t("Password changed. Sign in again."));
       await refresh();
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("Could not change password"));
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : t("Could not change password"),
+      );
     }
   }
 
   async function startTotp() {
     try {
-      const body = await api<Schemas["TotpSetupResponse"]>("/api/v1/me/totp/setup", {
-        method: "POST",
-      });
+      const body = await api<Schemas["TotpSetupResponse"]>(
+        "/api/v1/me/totp/setup",
+        {
+          method: "POST",
+          body: JSON.stringify(reauth),
+        },
+      );
       setSetup(body);
     } catch (error) {
       toast.error(
-        error instanceof ApiError ? error.message : t("Could not start authenticator setup"),
+        error instanceof ApiError
+          ? error.message
+          : t("Could not start authenticator setup"),
       );
+    } finally {
+      setReauth(clearFactor(reauth));
     }
   }
 
   async function enableTotp(event: FormEvent) {
     event.preventDefault();
     try {
-      const saved = await api<{ recovery_codes: string[] }>("/api/v1/me/totp/enable", {
-        method: "POST",
-        body: JSON.stringify({ code }),
-      });
+      const saved = await api<{ recovery_codes: string[] }>(
+        "/api/v1/me/totp/enable",
+        {
+          method: "POST",
+          body: JSON.stringify({ code }),
+        },
+      );
       setRecoveryCodes(saved.recovery_codes);
       setSetup(null);
       setCode("");
       toast.success(t("Authenticator enabled"));
       await refresh();
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("Code did not match"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("Code did not match"),
+      );
     }
   }
 
@@ -70,12 +95,18 @@ export function AccountPage() {
     try {
       await api("/api/v1/me/totp/disable", {
         method: "POST",
-        body: JSON.stringify({ password: disablePassword, code: disableCode }),
+        body: JSON.stringify({ ...reauth, code: reauth.totp_code ?? "" }),
       });
       toast.success(t("Authenticator disabled"));
       await refresh();
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("Could not disable authenticator"));
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : t("Could not disable authenticator"),
+      );
+    } finally {
+      setReauth(clearFactor(reauth));
     }
   }
 
@@ -84,7 +115,9 @@ export function AccountPage() {
       <h1 className="text-2xl font-semibold">{t("Account")}</h1>
       <Card
         title={t("Language")}
-        description={t("Choose the language used for menus, forms, and messages in this browser.")}
+        description={t(
+          "Choose the language used for menus, forms, and messages in this browser.",
+        )}
       >
         <Segmented
           label={t("Language")}
@@ -98,7 +131,10 @@ export function AccountPage() {
         />
       </Card>
       <Card title={t("Password")}>
-        <form className="grid max-w-md gap-3" onSubmit={(event) => void changePassword(event)}>
+        <form
+          className="grid max-w-md gap-3"
+          onSubmit={(event) => void changePassword(event)}
+        >
           <Field label={t("Current password")}>
             <TextInput
               type="password"
@@ -119,40 +155,46 @@ export function AccountPage() {
           <Button type="submit">{t("Change password")}</Button>
         </form>
       </Card>
+      <Card title={t("Confirm security changes")}>
+        <MfaFields
+          email={user?.email ?? ""}
+          value={reauth}
+          onChange={setReauth}
+        />
+      </Card>
+      <MfaSecurity reauth={reauth} setReauth={setReauth} />
       <Card title={t("Authenticator")}>
         {user?.totp_enabled ? (
-          <form className="grid max-w-md gap-3" onSubmit={(event) => void disableTotp(event)}>
+          <form
+            className="grid max-w-md gap-3"
+            onSubmit={(event) => void disableTotp(event)}
+          >
             <p className="text-sm text-muted">
-              {t("Authenticator codes are required at sign-in.")}
+              {t("Use any enabled factor at sign-in.")}
             </p>
-            <Field label={t("Password")}>
-              <TextInput
-                type="password"
-                required
-                value={disablePassword}
-                onChange={(event) => setDisablePassword(event.target.value)}
-              />
-            </Field>
-            <Field label={t("Current code")}>
-              <TextInput
-                required
-                value={disableCode}
-                onChange={(event) => setDisableCode(event.target.value)}
-              />
-            </Field>
-            <Button type="submit" quiet>
+            <Button type="submit" quiet disabled={!reauth.password}>
               {t("Disable authenticator")}
             </Button>
           </form>
         ) : (
           <div className="space-y-4">
-            <Button quiet onClick={() => void startTotp()}>
+            <Button
+              quiet
+              disabled={!reauth.password}
+              onClick={() => void startTotp()}
+            >
               {t("Set up authenticator")}
             </Button>
             {setup ? (
-              <form className="grid max-w-md gap-3" onSubmit={(event) => void enableTotp(event)}>
+              <form
+                className="grid max-w-md gap-3"
+                onSubmit={(event) => void enableTotp(event)}
+              >
                 <p className="break-all font-mono text-sm">{setup.secret}</p>
-                <a className="text-sm text-accent underline" href={setup.otpauth_url}>
+                <a
+                  className="text-sm text-accent underline"
+                  href={setup.otpauth_url}
+                >
                   {t("Open in authenticator app")}
                 </a>
                 <Field label={t("Code")}>
@@ -168,7 +210,9 @@ export function AccountPage() {
             {recoveryCodes.length > 0 ? (
               <div className="space-y-2">
                 <p className="text-sm text-muted">
-                  {t("Save these recovery codes. Each one signs you in once if you lose the authenticator.")}
+                  {t(
+                    "Save these recovery codes. Each one signs you in once if you lose the authenticator.",
+                  )}
                 </p>
                 <ul className="font-mono text-sm">
                   {recoveryCodes.map((item) => (

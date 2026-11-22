@@ -8,6 +8,7 @@ import { InsecureBanner } from "../components/insecure-banner";
 import { Button, Field, TextInput } from "../components/ui";
 import { LANGUAGES, useLanguage, useT } from "../i18n";
 import type { SessionResponse } from "../types";
+import { signInPasskey, verifyPasskey } from "../passkeys";
 
 export function SetupPage() {
   const t = useT();
@@ -42,18 +43,25 @@ export function SetupPage() {
       rememberSession(body);
       await refresh();
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("Setup failed"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("Setup failed"),
+      );
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <AuthFrame title={t("Create the owner")} subtitle={t("This account administers the panel.")}>
+    <AuthFrame
+      title={t("Create the owner")}
+      subtitle={t("This account administers the panel.")}
+    >
       <form className="grid gap-4" onSubmit={(event) => void onSubmit(event)}>
         <Field
           label={t("Setup token")}
-          hint={t("The installer prints it. It is also in setup-token in the panel's data directory.")}
+          hint={t(
+            "The installer prints it. It is also in setup-token in the panel's data directory.",
+          )}
         >
           <TextInput
             required
@@ -72,7 +80,10 @@ export function SetupPage() {
           />
         </Field>
         <Field label={t("Display name")}>
-          <TextInput value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+          <TextInput
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+          />
         </Field>
         <Field
           label={t("Password")}
@@ -96,11 +107,20 @@ export function SetupPage() {
 
 /** Only the agent approval flow may leave the sign-in page for a specific path. */
 function safeNext(value: string | null): string | null {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
+  if (
+    !value ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.includes("\\")
+  ) {
     return null;
   }
   const path = value.split("?")[0];
-  if (path === "/oauth/authorize" || path === "/mcp/consent" || path === "/tokens") {
+  if (
+    path === "/oauth/authorize" ||
+    path === "/mcp/consent" ||
+    path === "/tokens"
+  ) {
     return value;
   }
   return null;
@@ -115,6 +135,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
   const [needsTotp, setNeedsTotp] = useState(false);
+  const [factor, setFactor] = useState("totp");
   const [pending, setPending] = useState(false);
 
   if (!loading && needsSetup) {
@@ -126,6 +147,10 @@ export function LoginPage() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    await signIn();
+  }
+
+  async function signIn(mfa_proof?: string) {
     setPending(true);
     try {
       const body = await api<SessionResponse>("/api/v1/login", {
@@ -133,25 +158,73 @@ export function LoginPage() {
         body: JSON.stringify({
           email,
           password,
-          totp_code: totp || undefined,
+          totp_code: factor === "totp" ? totp || undefined : undefined,
+          email_code: factor === "email" ? totp || undefined : undefined,
+          mfa_proof,
         }),
       });
       rememberSession(body);
       await refresh();
     } catch (error) {
-      if (error instanceof ApiError && error.code === "totp_required") {
+      if (
+        error instanceof ApiError &&
+        ["totp_required", "mfa_required"].includes(error.code)
+      ) {
         setNeedsTotp(true);
-        toast.message(t("Enter the authenticator code"));
+        toast.message(t("Use an enabled MFA method"));
       } else {
-        toast.error(error instanceof ApiError ? error.message : t("Sign-in failed"));
+        toast.error(
+          error instanceof ApiError ? error.message : t("Sign-in failed"),
+        );
       }
     } finally {
       setPending(false);
     }
   }
 
+  async function passkey(discoverable: boolean) {
+    setPending(true);
+    try {
+      if (discoverable) {
+        rememberSession(await signInPasskey());
+        await refresh();
+      } else {
+        const proof = await verifyPasskey(email, password);
+        await signIn(proof.mfa_proof);
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("Passkey operation failed"),
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function sendEmail() {
+    setPending(true);
+    try {
+      await api("/api/v1/auth/mfa/email/send", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      setFactor("email");
+      setTotp("");
+      toast.success(t("Email code sent"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("Could not send email code"),
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
-    <AuthFrame title={t("Sign in")} subtitle={t("Use your Rudder panel account.")}>
+    <AuthFrame
+      title={t("Sign in")}
+      subtitle={t("Use your Rudder panel account.")}
+    >
       <form className="grid gap-4" onSubmit={(event) => void onSubmit(event)}>
         <Field label={t("Email")}>
           <TextInput
@@ -170,21 +243,74 @@ export function LoginPage() {
           />
         </Field>
         {needsTotp ? (
-          <Field label={t("Authenticator code")}>
-            <TextInput
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="000000"
-              className="h-12 text-center font-mono text-xl! tracking-[0.35em]"
-              value={totp}
-              onChange={(event) => setTotp(event.target.value)}
-            />
-          </Field>
+          <div className="grid gap-3">
+            <p className="text-sm text-muted">
+              {t("Use a method enabled for your account.")}
+            </p>
+            <select
+              aria-label={t("Verification method")}
+              className="min-h-10 rounded-control border border-line bg-surface px-3"
+              value={factor}
+              onChange={(e) => {
+                setFactor(e.target.value);
+                setTotp("");
+              }}
+            >
+              <option value="totp">
+                {t("Authenticator or recovery code")}
+              </option>
+              <option value="email">{t("Email code")}</option>
+            </select>
+            <Field label={t("Current code")}>
+              <TextInput
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="000000"
+                className="h-12 text-center font-mono text-xl! tracking-[0.35em]"
+                value={totp}
+                onChange={(event) => setTotp(event.target.value)}
+              />
+            </Field>
+            {factor === "email" ? (
+              <Button
+                type="button"
+                quiet
+                disabled={pending}
+                onClick={() => void sendEmail()}
+              >
+                {t("Send email code")}
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              quiet
+              disabled={pending || !window.PublicKeyCredential}
+              onClick={() => void passkey(false)}
+            >
+              {t("Verify with passkey")}
+            </Button>
+          </div>
         ) : null}
-        <Button type="submit" size="lg" disabled={pending} className="mt-2 w-full">
+        <Button
+          type="submit"
+          size="lg"
+          disabled={pending}
+          className="mt-2 w-full"
+        >
           {pending ? t("Signing in…") : t("Sign in")}
         </Button>
       </form>
+      <Button
+        type="button"
+        quiet
+        className="mt-3 w-full"
+        disabled={
+          pending || !window.PublicKeyCredential || !window.isSecureContext
+        }
+        onClick={() => void passkey(true)}
+      >
+        {t("Sign in with passkey")}
+      </Button>
     </AuthFrame>
   );
 }

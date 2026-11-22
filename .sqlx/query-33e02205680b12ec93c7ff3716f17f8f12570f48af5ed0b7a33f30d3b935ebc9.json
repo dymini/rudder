@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET recovery_hashes = $2, updated_at = now() WHERE id = $1 AND recovery_hashes = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "33e02205680b12ec93c7ff3716f17f8f12570f48af5ed0b7a33f30d3b935ebc9"
+}

@@ -4,6 +4,61 @@ Rudder Access decides who may open an internal app that Rudder is hosting. It is
 
 The panel account is the operator. Rudder Access people are the coworkers who use the internal apps. An email that has not been added is blocked.
 
+## Panel account multi-factor authentication
+
+**Account → Confirm security changes** holds the current password and factor used
+for security changes. Register your first method using your password. When a method
+is already enabled, adding another one requires that password and an enabled factor.
+These settings protect the panel account, not an Access identity or app session.
+
+- **Authenticator:** existing TOTP and one-use recovery codes still work. Recovery
+  codes belong to the authenticator enrollment; disabling it removes those codes.
+- **Passkeys:** register several named keys in Account. Rename or remove individual
+  keys there. Registration requests a discoverable credential and requires user
+  verification (device PIN, biometric, or equivalent). At password sign-in choose
+  **Verify with passkey**, or choose **Sign in with passkey** to discover your
+  account without entering a password. Keep an independent method or spare key in
+  case a device is lost. A non-discoverable authenticator cannot provide usernameless
+  sign-in; resident-key support is required during browser enrollment.
+- **Email:** configure an email provider and From address in **Rudder Access**
+  first (SMTP, Resend, or Cloudflare). Access itself need not be enabled and the
+  panel account need not be an Access identity. Opt in from Account and confirm a
+  code sent to your account email. Request a fresh code at sign-in, or select email
+  in Confirm security changes for re-authentication. Codes are six digits, expire
+  after ten minutes, allow five total attempts, and can succeed only once.
+  Enrollment, sign-in, and security-change codes are separate. Resends invalidate
+  the previous code and are limited to one delivery per account per minute,
+  including failed sends. MFA requests also have a ten-per-minute client-IP budget.
+
+At sign-in, any enabled method can satisfy the second factor. No global
+administrator require-MFA policy existed before these methods; enrollment remains
+per account. Every method removal, including the last passkey or last MFA method,
+requires the password plus a current enabled factor. Passkey verification proofs
+are valid for five minutes and for one security action or password sign-in only.
+
+WebAuthn uses `RUDDER_PUBLIC_URL` when set, otherwise the saved panel domain (HTTPS
+unless SSL is disabled). It never derives its RP ID or allowed origin from
+request Host/forwarding headers. HTTPS is required except for `http://localhost`.
+Use the configured origin in your browser. When HTTPS terminates at a tunnel or
+external proxy while panel SSL is disabled, set `RUDDER_PUBLIC_URL` to the external
+HTTPS URL. Moving the panel to another hostname
+changes the RP ID: keep TOTP or email available and register new keys at the new
+origin before retiring old ones.
+
+Ceremony state is encrypted in the database, expires after five minutes, and is
+atomically consumed before verification. Public-key credentials and counters are
+persisted; successful assertions update the latest locked counter. Counter
+regressions are rejected, while synchronized passkeys with zero counters work.
+Email codes are stored only as purpose-bound keyed hashes; no codes or private
+authenticator keys are logged or returned by account-listing APIs.
+
+`GET /api/v1/me/mfa`, passkey listing/renaming/deletion, and email enrollment/removal
+are available through the `auth` API and MCP scopes. Browser-only WebAuthn
+registration, verification, and passkey sign-in ceremonies are documented in
+OpenAPI but excluded from MCP because they require an origin-bound authenticator
+interaction. Agent/API credentials do not bypass the password and current-factor
+checks on security changes.
+
 ## What a person sees
 
 The portal is at `/access` on the panel, for example `https://panel.example.com/access`. You can also give it its own hostname under **Rudder Access**. Point that hostname's DNS at the server. Rudder publishes the route and serves the same portal there. The path stays `/access`.
