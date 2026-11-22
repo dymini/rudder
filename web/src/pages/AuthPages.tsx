@@ -12,6 +12,8 @@ import type { SessionResponse } from "../types";
 export function SetupPage() {
   const t = useT();
   const { needsSetup, loading, refresh, user } = useAuth();
+  const [params] = useSearchParams();
+  const [setupToken, setSetupToken] = useState(() => params.get("token") ?? "");
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
@@ -31,6 +33,7 @@ export function SetupPage() {
       const body = await api<SessionResponse>("/api/v1/setup", {
         method: "POST",
         body: JSON.stringify({
+          setup_token: setupToken.trim(),
           email,
           password,
           display_name: displayName || undefined,
@@ -48,6 +51,18 @@ export function SetupPage() {
   return (
     <AuthFrame title={t("Create the owner")} subtitle={t("This account administers the panel.")}>
       <form className="grid gap-4" onSubmit={(event) => void onSubmit(event)}>
+        <Field
+          label={t("Setup token")}
+          hint={t("The installer prints it. It is also in setup-token in the panel's data directory.")}
+        >
+          <TextInput
+            required
+            autoComplete="off"
+            spellCheck={false}
+            value={setupToken}
+            onChange={(event) => setSetupToken(event.target.value)}
+          />
+        </Field>
         <Field label={t("Email")}>
           <TextInput
             type="email"

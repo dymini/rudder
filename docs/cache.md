@@ -34,13 +34,17 @@ Manage policies under **Cache** in the sidebar. A policy is an ordered list of r
 | `stale_if_error_secs` | 0 | Serve the stale copy when the origin fails. |
 | `ignore_query` | false | Drop the query string from the key. |
 | `query_keys` | [] | When set, only these query parameters are part of the key. |
-| `bypass_cookies` | [] | Requests with a cookie whose name starts with one of these skip the cache. |
+| `cache_cookies` | false | Look up and store requests that carry a `Cookie` header. When false, any request with a cookie skips the cache. |
+| `bypass_cookies` | [] | With `cache_cookies`, requests with a cookie whose name starts with one of these still skip the cache. |
 | `statuses` | 200, 203, 204, 300, 301, 308, 404, 410 | Statuses that may be stored. |
 
 The following always apply:
 
 - Only `GET` requests are looked up.
 - Requests with `Authorization` bypass the cache.
+- Requests with a `Cookie` header bypass the cache unless the rule sets `cache_cookies`.
+- `extensions` never match a path containing `;` (or `%3B`), since many apps ignore what follows it.
+- A path with a known file extension is stored only when the response `Content-Type` matches it, so an HTML page served for `/account/x.css` is never stored. Extension rules never store HTML for other extensions either.
 - Responses with `Set-Cookie`, or with `Vary` on anything other than `Accept-Encoding`, are never stored.
 - Query parameters are sorted, so `?b=2&a=1` and `?a=1&b=2` share an object.
 - Brotli, gzip, and uncompressed variants are stored separately.
@@ -54,7 +58,7 @@ The following always apply:
 | WordPress | Skips `/wp-admin`, login, REST, cart, checkout, and logged-in/WooCommerce cookies. Static files 30 days, pages 5 minutes with stale windows. |
 | Ghost | Skips `/ghost`, members, and signed-in cookies. Static files 7 days, pages 10 minutes. |
 | Next.js | `/_next/static` for a year, `/_next/image` for a day keyed by `url`, `w`, `q`; pages as the origin says. |
-| API micro-cache | 5-second cache for `200` GET responses; session cookies skip it. |
+| API micro-cache | 5-second cache for `200` GET responses; requests with any cookie skip it. |
 
 ### Memory
 

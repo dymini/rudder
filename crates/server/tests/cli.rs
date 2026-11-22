@@ -84,6 +84,7 @@ async fn start(pool: PgPool, cache_admin: &str) -> Panel {
     let mut vars = HashMap::from([
         ("DATABASE_URL".to_owned(), url),
         ("RUDDER_MASTER_KEY".to_owned(), "ee".repeat(32)),
+        ("RUDDER_SETUP_TOKEN".to_owned(), "test-setup-token".into()),
         ("RUDDER_COOKIE_SECURE".to_owned(), "false".to_owned()),
         ("RUDDER_DATA_DIR".to_owned(), dir.display().to_string()),
         ("RUDDER_CACHE_ADMIN_URL".to_owned(), cache_admin.to_owned()),
@@ -111,6 +112,7 @@ async fn start(pool: PgPool, cache_admin: &str) -> Panel {
     let response = http
         .post(format!("{base}/api/v1/setup"))
         .json(&json!({
+            "setup_token": "test-setup-token",
             "email": "owner@example.com",
             "password": "correct-horse-battery",
             "display_name": "Owner"

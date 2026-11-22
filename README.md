@@ -19,7 +19,7 @@ On a fresh Linux VPS with ports 80, 443, 3000, and 7443 open:
 curl -fsSL https://github.com/vantanminh/rudder/releases/latest/download/install.sh | sudo sh
 ```
 
-The installer sets up Docker if it is missing. It starts Postgres, Traefik, `rudder-cache`, and the panel as containers, and prints the panel URL. Open it and create the owner account. Pass `--domain panel.example.com --email you@example.com` to serve the panel over HTTPS. See `install.sh --help` for backup and restore options, and [disaster recovery](docs/disaster-recovery.md) for moving to a new host.
+The installer sets up Docker if it is missing. It starts Postgres, Traefik, `rudder-cache`, and the panel as containers, and prints a setup link with a one-time setup token (also saved in `/var/lib/rudder/setup-token`). Open it and create the owner account. Pass `--domain panel.example.com --email you@example.com` to serve the panel over HTTPS. See `install.sh --help` for backup and restore options, and [disaster recovery](docs/disaster-recovery.md) for moving to a new host.
 
 To add a second server, go to **Servers → Add server** and run the join command it shows on that machine:
 

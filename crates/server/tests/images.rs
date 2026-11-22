@@ -19,6 +19,7 @@ fn app(pool: PgPool, data_dir: &Path) -> axum::Router {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
         ("RUDDER_MASTER_KEY".into(), "dd".repeat(32)),
+        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
         ("RUDDER_COOKIE_SECURE".into(), "false".into()),
         ("RUDDER_PUBLIC_URL".into(), "https://panel.example".into()),
         ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
@@ -93,6 +94,7 @@ async fn r2_image_store_push_retention_notify_and_repush(pool: PgPool) {
         "/api/v1/setup",
         None,
         Some(json!({
+            "setup_token": "test-setup-token",
             "email": "owner@example.com",
             "password": "correct-horse-battery",
             "display_name": "Owner"
@@ -369,6 +371,7 @@ async fn compose_service_accepts_image_push(pool: PgPool) {
         "/api/v1/setup",
         None,
         Some(json!({
+            "setup_token": "test-setup-token",
             "email": "owner@example.com",
             "password": "correct-horse-battery",
             "display_name": "Owner"

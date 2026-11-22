@@ -47,7 +47,10 @@ async fn origin(State(origin): State<Origin>, uri: Uri, headers: HeaderMap) -> i
     response = match uri.path() {
         "/private" => response.header("cache-control", "private, max-age=60"),
         "/cookie" => response.header("set-cookie", "a=b"),
-        path if path.ends_with(".css") => response.header("cache-control", "public, max-age=60"),
+        path if path.starts_with("/account") => response.header("content-type", "text/html"),
+        path if path.ends_with(".css") => response
+            .header("cache-control", "public, max-age=60")
+            .header("content-type", "text/css"),
         _ => response,
     };
     response
@@ -81,6 +84,8 @@ fn rules(version: u64, upstream: &str, hosts: &[&str]) -> String {
                   "action": { "ttl_secs": 1, "respect_origin": false, "stale_if_error_secs": 60 } },
                 { "name": "swr", "match": { "path_prefixes": ["/swr"] },
                   "action": { "ttl_secs": 1, "respect_origin": false, "stale_while_revalidate_secs": 60 } },
+                { "name": "styles", "match": { "extensions": ["css"] },
+                  "action": { "ttl_secs": 60, "cache_cookies": true } },
                 { "name": "pages", "match": {}, "action": { "ttl_secs": 30, "bypass_cookies": ["session"] } }
             ]
         }]
@@ -165,6 +170,27 @@ async fn caches_purges_reloads_and_reports() {
         .headers_mut()
         .insert("cookie", "theme=dark; session=abc".parse().unwrap());
     assert_eq!(send(with_cookie).await.1, "BYPASS");
+
+    let signed_in = |path: &str| {
+        let mut request = get(path, "site.test");
+        request
+            .headers_mut()
+            .insert("cookie", "theme=dark".parse().unwrap());
+        request
+    };
+    assert_eq!(
+        send(signed_in("/account;x.css")).await.1,
+        "BYPASS",
+        "path parameters do not match extension rules and cookies skip page rules"
+    );
+    let deceived = send(get("/account;x.css", "site.test")).await;
+    assert_eq!(deceived.1, "MISS", "the signed-in page was not stored");
+    assert_eq!(send(signed_in("/account/x.css")).await.1, "MISS");
+    assert_eq!(
+        send(get("/account/x.css", "site.test")).await.1,
+        "MISS",
+        "HTML under a .css path is not stored"
+    );
     assert_eq!(send(get("/admin/x", "site.test")).await.1, "BYPASS");
     let post = http
         .post(format!("{proxy}/page"))

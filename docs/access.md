@@ -10,7 +10,7 @@ The portal is at `/access` on the panel, for example `https://panel.example.com/
 
 Sign-in offers two methods:
 
-- **Google.** One redirect URI, shown on the Rudder Access page. Put that exact URI in the Google OAuth client. Rudder accepts the Google account only when Google says the email is verified and the email is already on the allow list.
+- **Google.** One redirect URI, shown on the Rudder Access page. Put that exact URI in the Google OAuth client. Rudder accepts the Google account only when Google says the email is verified and the email is already on the allow list. Starting Google sign-in sets a short-lived `rudder_access_google` cookie, and the callback only finishes in the browser that holds it, so a sign-in link opened in another browser is refused.
 - **Email code.** Rudder emails a 6-digit code. The code expires in 10 minutes, and five wrong attempts use it up.
 
 Both methods require a Cloudflare Turnstile token. Rudder checks the token on the server with Cloudflare siteverify. The check fails closed: the token must succeed, the action must be `access_login`, and the hostname Cloudflare returns must be one of the hostnames you saved. Do not put `localhost` in that list on a production panel.
@@ -126,6 +126,6 @@ For a Compose stack, published `ports` become container-only `expose` entries on
 
 ## Panel owner and authenticator
 
-The first account created at setup is the panel owner. Other administrators can do everything else, but they cannot delete the owner or change the owner's role.
+The first account created at setup is the panel owner. Setup needs the one-time token the panel writes to `setup-token` in its data directory while it has no users (or `RUDDER_SETUP_TOKEN`, when set); `install.sh` prints a setup link that includes it, and the file is removed once the owner exists. Only one account can be the owner. Other administrators can do everything else, but they cannot delete the owner or change the owner's role.
 
 The authenticator on **Account** is the second factor for the panel account. When you enable it, Rudder shows eight recovery codes shaped like `abcde-fghij`. Each code works once at sign-in, in the same field as the authenticator code. Store them somewhere safe. They are not shown again.

@@ -16,6 +16,7 @@ fn test_config(database_url: &str) -> rudder_server::Config {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), database_url.to_owned()),
         ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
+        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
         ("RUDDER_COOKIE_SECURE".into(), "false".into()),
         ("RUDDER_LOG_FORMAT".into(), "pretty".into()),
         ("RUDDER_PUBLIC_URL".into(), "https://panel.example".into()),
@@ -115,6 +116,7 @@ async fn owner(app: &axum::Router) -> (String, String) {
         Some("application/json"),
         Some(
             json!({
+                "setup_token": "test-setup-token",
                 "email": "owner@example.com",
                 "password": "correct-horse-battery",
                 "display_name": "Owner"

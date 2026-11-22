@@ -353,9 +353,10 @@ async fn create_server(
         None,
     )
     .await;
-    let command = join_token
-        .as_ref()
-        .map(|token| crate::routes::agents::join_command(&state, &headers, token));
+    let command = match &join_token {
+        Some(token) => Some(crate::routes::agents::join_command(&state, &headers, token).await?),
+        None => None,
+    };
     Ok((
         StatusCode::CREATED,
         Json(CreatedServer {

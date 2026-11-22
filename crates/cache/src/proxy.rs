@@ -24,6 +24,7 @@ pub struct CacheProxy {
 pub struct RequestCtx {
     rules: Option<Arc<CacheDocument>>,
     host: String,
+    path: String,
     upstream: String,
     policy: Option<usize>,
     rule: Option<usize>,
@@ -83,6 +84,7 @@ impl ProxyHttp for CacheProxy {
             });
             if let RequestDecision::Lookup { rule, key } = decision {
                 ctx.rule = Some(rule);
+                ctx.path.clone_from(&path);
                 ctx.key = key;
                 ctx.encoding = encoding_class(header_str(header, http::header::ACCEPT_ENCODING));
             }
@@ -132,6 +134,9 @@ impl ProxyHttp for CacheProxy {
                 .collect();
             (!values.is_empty()).then(|| values.join(", "))
         };
+        if !rule.stores_content_type(&ctx.path, text(http::header::CONTENT_TYPE).as_deref()) {
+            return Ok(RespCacheable::Uncacheable(NoCacheReason::OriginNotCache));
+        }
         let freshness = rule.freshness(
             resp.status.as_u16(),
             text(http::header::CACHE_CONTROL).as_deref(),

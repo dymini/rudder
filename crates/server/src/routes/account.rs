@@ -1,6 +1,7 @@
 //! Setup, sessions, users, API tokens, TOTP, and the audit read API.
 
 use std::net::SocketAddr;
+use std::path::{Path as FsPath, PathBuf};
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -37,6 +38,8 @@ pub struct SessionResponse {
 
 #[derive(Deserialize, ToSchema)]
 pub struct SetupRequest {
+    /// One-time token from `setup-token` in the data directory, or `RUDDER_SETUP_TOKEN`.
+    setup_token: String,
     email: String,
     password: String,
     display_name: Option<String>,
@@ -239,7 +242,7 @@ fn request_ip(
     headers: &axum::http::HeaderMap,
     peer: Option<SocketAddr>,
 ) -> String {
-    auth::client_ip(headers, peer, state.config.trust_proxy)
+    auth::client_ip(headers, peer, &state.config.trusted_proxies)
 }
 
 async fn setup_status(State(state): State<AppState>) -> Result<Json<SetupStatus>, ApiError> {
@@ -257,29 +260,52 @@ async fn setup(
     Json(body): Json<SetupRequest>,
 ) -> Result<(CookieJar, Json<SessionResponse>), ApiError> {
     if user_count(&state).await? > 0 {
+        return Err(already_setup());
+    }
+    let expected = expected_setup_token(&state.config).await;
+    let Some(expected) = expected else {
         return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "already_setup",
-            "an owner already exists",
+            StatusCode::FORBIDDEN,
+            "setup_token_missing",
+            "no setup token is configured; restart the panel to write one to its data directory",
+        ));
+    };
+    if !auth::tokens_eq(body.setup_token.trim(), &expected) {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "invalid_setup_token",
+            "the setup token is incorrect",
         ));
     }
     let email = auth::normalize_email(&body.email)?;
     auth::validate_password(&body.password)?;
     let display_name = display_name(body.display_name.as_deref(), &email);
     let password_hash = auth::hash_password(&body.password)?;
+    // The unique owner index turns a concurrent second setup into a conflict.
     let user = sqlx::query!(
         r#"
         INSERT INTO users (email, display_name, password_hash, role, is_owner)
-        VALUES ($1, $2, $3, 'admin', TRUE)
+        SELECT $1, $2, $3, 'admin', TRUE
+        WHERE NOT EXISTS (SELECT 1 FROM users)
         RETURNING id, email, display_name, role, totp_enabled, is_owner
         "#,
         email,
         display_name,
         password_hash,
     )
-    .fetch_one(&state.pool)
+    .fetch_optional(&state.pool)
     .await
-    .map_err(ApiError::database)?;
+    .map_err(|error| {
+        if is_unique(&error) {
+            already_setup()
+        } else {
+            ApiError::database(error)
+        }
+    })?
+    .ok_or_else(already_setup)?;
+    if state.config.setup_token.is_none() {
+        remove_setup_token_file(&state.config.data_dir).await;
+    }
     let ip = request_ip(&state, &headers, peer);
     audit::record(
         &state.pool,
@@ -1383,6 +1409,89 @@ async fn issue(
             csrf_token: Some(csrf),
         }),
     ))
+}
+
+fn already_setup() -> ApiError {
+    ApiError::new(
+        StatusCode::CONFLICT,
+        "already_setup",
+        "an owner already exists",
+    )
+}
+
+const SETUP_TOKEN_FILE: &str = "setup-token";
+
+fn setup_token_path(data_dir: &FsPath) -> PathBuf {
+    data_dir.join(SETUP_TOKEN_FILE)
+}
+
+async fn expected_setup_token(config: &crate::Config) -> Option<String> {
+    if let Some(token) = &config.setup_token {
+        return Some(token.clone());
+    }
+    let contents = tokio::fs::read_to_string(setup_token_path(&config.data_dir))
+        .await
+        .ok()?;
+    let token = contents.trim();
+    (!token.is_empty()).then(|| token.to_owned())
+}
+
+async fn remove_setup_token_file(data_dir: &FsPath) {
+    let path = setup_token_path(data_dir);
+    if let Err(error) = tokio::fs::remove_file(&path).await {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            tracing::warn!(path = %path.display(), %error, "could not remove the setup token");
+        }
+    }
+}
+
+/// Writes a one-time setup token to the data directory while the panel has no
+/// users, and removes a leftover one once it has. `RUDDER_SETUP_TOKEN` replaces the file.
+pub async fn prepare_setup_token(
+    pool: &sqlx::PgPool,
+    config: &crate::Config,
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    let users = sqlx::query_scalar!(r#"SELECT COUNT(*) AS "count!" FROM users"#)
+        .fetch_one(pool)
+        .await
+        .context("count users")?;
+    if users > 0 {
+        remove_setup_token_file(&config.data_dir).await;
+        return Ok(());
+    }
+    if config.setup_token.is_some() {
+        tracing::info!("first-run setup needs the token from RUDDER_SETUP_TOKEN");
+        return Ok(());
+    }
+    let path = setup_token_path(&config.data_dir);
+    if expected_setup_token(config).await.is_none() {
+        let token = auth::random_token("");
+        write_private(&path, &format!("{token}\n"))
+            .with_context(|| format!("write the setup token to {}", path.display()))?;
+    }
+    tracing::info!(
+        path = %path.display(),
+        "first-run setup needs the token in this file"
+    );
+    Ok(())
+}
+
+fn write_private(path: &FsPath, contents: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path)?;
+    file.write_all(contents.as_bytes())?;
+    file.sync_all()
 }
 
 async fn user_count(state: &AppState) -> Result<i64, ApiError> {

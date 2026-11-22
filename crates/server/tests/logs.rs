@@ -42,6 +42,7 @@ fn app(pool: PgPool, data_dir: &Path) -> axum::Router {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
         ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
+        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
         ("RUDDER_COOKIE_SECURE".into(), "false".into()),
         ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
     ]);
@@ -63,6 +64,7 @@ impl Client {
             .header("content-type", "application/json")
             .body(Body::from(
                 json!({
+                    "setup_token": "test-setup-token",
                     "email": "owner@example.com",
                     "password": "correct-horse-battery",
                     "display_name": "Owner"
@@ -629,6 +631,7 @@ async fn collector_follows_managed_containers_and_redacts_env(pool: PgPool) {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
         ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
+        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
         ("RUDDER_COOKIE_SECURE".into(), "false".into()),
         ("RUDDER_DATA_DIR".into(), dir.path().display().to_string()),
     ]);

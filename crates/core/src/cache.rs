@@ -128,7 +128,11 @@ pub struct RuleAction {
     pub ignore_query: bool,
     /// When non-empty, only these query parameters are part of the key (sorted).
     pub query_keys: Vec<String>,
-    /// Requests carrying a cookie whose name starts with one of these skip the cache.
+    /// Look up and store requests that carry a `Cookie` header. Off by default:
+    /// any request with a cookie skips the cache.
+    pub cache_cookies: bool,
+    /// With `cache_cookies`, requests carrying a cookie whose name starts with one
+    /// of these still skip the cache.
     pub bypass_cookies: Vec<String>,
     /// Response statuses that may be stored.
     pub statuses: Vec<u16>,
@@ -144,6 +148,7 @@ impl Default for RuleAction {
             stale_if_error_secs: 0,
             ignore_query: false,
             query_keys: Vec::new(),
+            cache_cookies: false,
             bypass_cookies: Vec::new(),
             statuses: vec![200, 203, 204, 300, 301, 308, 404, 410],
         }
@@ -279,8 +284,9 @@ impl CachePolicy {
         if rule.action.mode == RuleMode::Bypass {
             return RequestDecision::Bypass("rule");
         }
-        if let Some(cookie) = request.cookie {
-            if has_bypass_cookie(cookie, &rule.action.bypass_cookies) {
+        if let Some(cookie) = request.cookie.filter(|cookie| has_cookie(cookie)) {
+            if !rule.action.cache_cookies || has_bypass_cookie(cookie, &rule.action.bypass_cookies)
+            {
                 return RequestDecision::Bypass("cookie");
             }
         }
@@ -338,6 +344,36 @@ impl CacheRule {
             }
         }
         Ok(())
+    }
+
+    /// Whether a response with this `Content-Type` may be stored for `path`. A path
+    /// with a known file extension must get a matching type, so a page served for
+    /// `/account/x.css` is never stored as a stylesheet. Extension rules also never
+    /// store HTML for other extensions.
+    pub fn stores_content_type(&self, path: &str, content_type: Option<&str>) -> bool {
+        let Some(extension) = path_extension(path) else {
+            return true;
+        };
+        let essence = content_type
+            .and_then(|value| value.split(';').next())
+            .map(|value| value.trim().to_ascii_lowercase())
+            .filter(|value| !value.is_empty());
+        match extension_types(&extension.to_ascii_lowercase()) {
+            Some(allowed) => essence.is_some_and(|essence| {
+                allowed.iter().any(|wanted| match wanted.split_once('*') {
+                    Some((prefix, suffix)) => {
+                        essence.len() > prefix.len() + suffix.len()
+                            && essence.starts_with(prefix)
+                            && essence.ends_with(suffix)
+                    }
+                    None => essence == *wanted,
+                })
+            }),
+            None if !self.matcher.extensions.is_empty() => !essence.is_some_and(|essence| {
+                essence == "text/html" || essence == "application/xhtml+xml"
+            }),
+            None => true,
+        }
     }
 
     /// How long to keep a response, or `None` when it must not be stored.
@@ -405,8 +441,7 @@ impl RuleMatch {
             return false;
         }
         if !self.extensions.is_empty() {
-            let file = path.rsplit('/').next().unwrap_or("");
-            let Some((_, extension)) = file.rsplit_once('.') else {
+            let Some(extension) = path_extension(path) else {
                 return false;
             };
             if !self
@@ -424,6 +459,52 @@ impl RuleMatch {
         }
         true
     }
+}
+
+/// The extension of the last path segment. Paths with `;` parameters have none,
+/// because many origins ignore everything after the `;`.
+fn path_extension(path: &str) -> Option<&str> {
+    if path.contains(';') || path.to_ascii_lowercase().contains("%3b") {
+        return None;
+    }
+    let file = path.rsplit('/').next().unwrap_or("");
+    file.rsplit_once('.').map(|(_, extension)| extension)
+}
+
+const BINARY: &str = "application/octet-stream";
+
+/// Content types a response for a path with this extension may have. A `*`
+/// matches any non-empty run of characters.
+fn extension_types(extension: &str) -> Option<&'static [&'static str]> {
+    Some(match extension {
+        "css" => &["text/css"],
+        "js" | "mjs" => &[
+            "text/javascript",
+            "application/javascript",
+            "application/x-javascript",
+            "application/ecmascript",
+            "text/ecmascript",
+        ],
+        "json" => &["application/json", "application/*+json"],
+        "map" => &["application/json", BINARY],
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "avif" | "ico" | "bmp" => &["image/*", BINARY],
+        "svg" => &["image/svg+xml"],
+        "woff" | "woff2" | "ttf" | "otf" | "eot" => &[
+            "font/*",
+            "application/font-*",
+            "application/x-font-*",
+            "application/vnd.ms-fontobject",
+            BINARY,
+        ],
+        "mp4" | "webm" => &["video/*", "audio/*", BINARY],
+        "mp3" => &["audio/*", BINARY],
+        "pdf" => &["application/pdf", BINARY],
+        "txt" => &["text/plain"],
+        "xml" => &["application/xml", "text/xml", "application/*+xml"],
+        "html" | "htm" => &["text/html", "application/xhtml+xml"],
+        "wasm" => &["application/wasm"],
+        _ => return None,
+    })
 }
 
 fn glob_matches(glob: &str, text: &str) -> bool {
@@ -445,6 +526,12 @@ fn glob_matches(glob: &str, text: &str) -> bool {
         }
     }
     rest.len() >= last.len() && rest.ends_with(last)
+}
+
+fn has_cookie(header: &str) -> bool {
+    header
+        .split(';')
+        .any(|pair| !pair.split('=').next().unwrap_or("").trim().is_empty())
 }
 
 fn has_bypass_cookie(header: &str, prefixes: &[String]) -> bool {
@@ -647,6 +734,7 @@ fn static_rule(ttl_secs: u32) -> CacheRule {
         action: RuleAction {
             ttl_secs,
             stale_if_error_secs: 86_400,
+            cache_cookies: true,
             ..RuleAction::default()
         },
     }
@@ -720,6 +808,7 @@ pub const CACHE_PRESETS: &[CachePreset] = &[
                         respect_origin: false,
                         stale_while_revalidate_secs: 60,
                         stale_if_error_secs: 86_400,
+                        cache_cookies: true,
                         bypass_cookies: cookies,
                         statuses: vec![200, 301, 404],
                         ..RuleAction::default()
@@ -743,6 +832,7 @@ pub const CACHE_PRESETS: &[CachePreset] = &[
                         respect_origin: false,
                         stale_while_revalidate_secs: 60,
                         stale_if_error_secs: 86_400,
+                        cache_cookies: true,
                         bypass_cookies: strings(&["ghost-admin-api-session", "ghost-members-ssr"]),
                         statuses: vec![200, 301, 404],
                         ..RuleAction::default()
@@ -767,6 +857,7 @@ pub const CACHE_PRESETS: &[CachePreset] = &[
                         ttl_secs: 365 * 86_400,
                         respect_origin: false,
                         ignore_query: true,
+                        cache_cookies: true,
                         ..RuleAction::default()
                     },
                 },
@@ -795,7 +886,7 @@ pub const CACHE_PRESETS: &[CachePreset] = &[
     CachePreset {
         slug: "api-microcache",
         name: "API micro-cache",
-        description: "Cache GET responses for 5 seconds to absorb bursts; requests with a session cookie skip it.",
+        description: "Cache GET responses for 5 seconds to absorb bursts; requests with a cookie skip it.",
         rules: || {
             vec![catch_all(
                 "Micro-cache",
@@ -803,7 +894,6 @@ pub const CACHE_PRESETS: &[CachePreset] = &[
                     ttl_secs: 5,
                     respect_origin: false,
                     stale_while_revalidate_secs: 5,
-                    bypass_cookies: strings(&["session", "sid", "token"]),
                     statuses: vec![200],
                     ..RuleAction::default()
                 },
@@ -886,6 +976,74 @@ mod tests {
             policy("static-assets").decide(&request("/", None, None)),
             RequestDecision::Bypass("no_rule")
         );
+    }
+
+    #[test]
+    fn cookies_skip_the_cache_unless_the_rule_opts_in() {
+        let mut rule = catch_all("Pages", RuleAction::default());
+        let mut pages = CachePolicy {
+            id: "p".into(),
+            name: "p".into(),
+            max_object_bytes: None,
+            rules: vec![rule.clone()],
+        };
+        assert_eq!(
+            pages.decide(&request("/account", None, Some("sid=abc"))),
+            RequestDecision::Bypass("cookie")
+        );
+        assert!(matches!(
+            pages.decide(&request("/account", None, Some(" ; "))),
+            RequestDecision::Lookup { .. }
+        ));
+        rule.action.cache_cookies = true;
+        rule.action.bypass_cookies = vec!["sid".into()];
+        pages.rules = vec![rule];
+        assert!(matches!(
+            pages.decide(&request("/account", None, Some("theme=dark"))),
+            RequestDecision::Lookup { .. }
+        ));
+        assert_eq!(
+            pages.decide(&request("/account", None, Some("theme=dark; sid=abc"))),
+            RequestDecision::Bypass("cookie")
+        );
+        let api = policy("api-microcache");
+        assert_eq!(
+            api.decide(&request("/v1/me", None, Some("connect.sid=abc"))),
+            RequestDecision::Bypass("cookie")
+        );
+    }
+
+    #[test]
+    fn extension_rules_reject_path_parameters_and_mismatched_types() {
+        let assets = policy("static-assets");
+        let rule = &assets.rules[0];
+        assert!(rule.matcher.matches("/app.css"));
+        assert!(!rule.matcher.matches("/account;x.css"));
+        assert!(!rule.matcher.matches("/account%3Bx.css"));
+        assert_eq!(
+            assets.decide(&request("/account;x.css", None, Some("session=abc"))),
+            RequestDecision::Bypass("no_rule")
+        );
+        assert!(rule.stores_content_type("/app.css", Some("text/css; charset=utf-8")));
+        assert!(!rule.stores_content_type("/account/x.css", Some("text/html; charset=utf-8")));
+        assert!(!rule.stores_content_type("/app.css", None));
+        assert!(rule.stores_content_type("/logo.PNG", Some("image/png")));
+        assert!(rule.stores_content_type("/font.woff2", Some("font/woff2")));
+        assert!(!rule.stores_content_type("/me.js", Some("application/json")));
+        assert!(rule.stores_content_type("/feed.xml", Some("application/rss+xml")));
+        let custom = CacheRule {
+            matcher: RuleMatch {
+                extensions: vec!["dat".into()],
+                ..RuleMatch::default()
+            },
+            ..CacheRule::default()
+        };
+        assert!(custom.stores_content_type("/x.dat", Some("application/x-thing")));
+        assert!(!custom.stores_content_type("/x.dat", Some("text/html")));
+        let pages = &policy("honor-origin").rules[0];
+        assert!(pages.stores_content_type("/about", Some("text/html")));
+        assert!(pages.stores_content_type("/index.php", Some("text/html")));
+        assert!(!pages.stores_content_type("/account/x.css", Some("text/html")));
     }
 
     #[test]
