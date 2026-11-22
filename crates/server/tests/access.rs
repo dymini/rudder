@@ -320,6 +320,30 @@ async fn access_blocks_unknown_people_and_limits_a_host(pool: PgPool) {
     assert_eq!(first, StatusCode::OK);
     let second = gate(&app, &secret, &access_cookie).await;
     assert_eq!(second, StatusCode::TOO_MANY_REQUESTS);
+
+    sqlx::query(
+        "INSERT INTO access_codes (email, code_hash, purpose, return_host, return_path, expires_at)
+         VALUES ($1, encode(digest($2, 'sha256'), 'hex'), 'handoff', $3, '/', now() + interval '2 minutes')",
+    )
+    .bind("accountant@example.com")
+    .bind("handoff-code")
+    .bind("invoices.example.com")
+    .execute(&pool)
+    .await
+    .unwrap();
+    let callback = "/api/v1/access/callback?code=handoff-code";
+    let replies = futures_util::future::join_all(
+        (0..8).map(|_| call(&app, "GET", callback, None, None, None)),
+    )
+    .await;
+    let redeemed = replies
+        .iter()
+        .filter(|reply| reply.status == StatusCode::TEMPORARY_REDIRECT && reply.cookie.is_some())
+        .count();
+    assert_eq!(redeemed, 1, "a handoff code must redeem exactly once");
+    let again = call(&app, "GET", callback, None, None, None).await;
+    assert_eq!(again.status, StatusCode::FORBIDDEN);
+    assert!(again.cookie.is_none());
 }
 
 async fn gate(app: &axum::Router, secret: &str, cookie: &str) -> StatusCode {

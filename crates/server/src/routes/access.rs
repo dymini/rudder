@@ -1519,9 +1519,10 @@ async fn handoff_callback(
     let hash = auth::sha256_hex(query.code.trim());
     let row = sqlx::query!(
         r#"
-        SELECT id, email, return_host, return_path, expires_at, used_at
-        FROM access_codes
+        UPDATE access_codes SET used_at = now()
         WHERE code_hash = $1 AND purpose = 'handoff'
+          AND used_at IS NULL AND expires_at > now()
+        RETURNING email, return_host, return_path
         "#,
         hash
     )
@@ -1531,19 +1532,9 @@ async fn handoff_callback(
     let Some(row) = row else {
         return Err(blocked());
     };
-    if row.used_at.is_some() || row.expires_at <= Utc::now() {
-        return Err(blocked());
-    }
     let host = row.return_host.unwrap_or_default();
     let path =
         safe_return_path(row.return_path.as_deref().unwrap_or("/")).unwrap_or_else(|| "/".into());
-    sqlx::query!(
-        r#"UPDATE access_codes SET used_at = now() WHERE id = $1"#,
-        row.id
-    )
-    .execute(&state.pool)
-    .await
-    .map_err(ApiError::database)?;
     let Some(identity) = active_identity(&state, &row.email).await? else {
         return Err(blocked());
     };
