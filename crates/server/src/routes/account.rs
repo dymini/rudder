@@ -50,6 +50,8 @@ pub struct LoginRequest {
     email: String,
     password: String,
     totp_code: Option<String>,
+    email_code: Option<String>,
+    mfa_proof: Option<String>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -72,6 +74,8 @@ pub struct RecoveryCodes {
 pub struct TotpDisable {
     password: String,
     code: String,
+    email_code: Option<String>,
+    mfa_proof: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -232,6 +236,7 @@ pub fn router() -> axum::Router<AppState> {
         .route("/api/v1/cli/auth/approve", post(cli_auth_approve))
         .route("/api/v1/cli/auth/poll", post(cli_auth_poll))
         .route("/api/v1/audit", get(list_audit))
+        .merge(super::mfa::router())
 }
 
 fn view_of(user: &AuthUser) -> UserView {
@@ -399,22 +404,17 @@ async fn login(
         .await;
         return Err(invalid_credentials());
     }
-    if row.totp_enabled {
-        let code = body.totp_code.unwrap_or_default();
-        if code.is_empty() {
-            return Err(ApiError::new(
-                StatusCode::UNAUTHORIZED,
-                "totp_required",
-                "authenticator code required",
-            ));
-        }
-        let secret = decrypt_secret(&state, row.totp_secret.as_deref())?;
-        if !totp_matches(&secret, &row.email, &code)?
-            && !consume_recovery(&state, row.id, &row.recovery_hashes, &code).await?
-        {
-            return Err(invalid_credentials());
-        }
-    }
+    super::mfa::require_factor(
+        &state,
+        row.id,
+        &super::mfa::FactorInput {
+            totp_code: body.totp_code,
+            email_code: body.email_code,
+            mfa_proof: body.mfa_proof,
+        },
+        "login",
+    )
+    .await?;
     let auth_user = AuthUser {
         mcp: None,
         id: row.id,
@@ -517,7 +517,17 @@ async fn change_password(
 async fn totp_setup(
     State(state): State<AppState>,
     auth: AuthUser,
+    headers: axum::http::HeaderMap,
+    auth::OptionalPeer(peer): auth::OptionalPeer,
+    body: Option<Json<super::mfa::MfaReauth>>,
 ) -> Result<Json<TotpSetupResponse>, ApiError> {
+    auth.require_write()?;
+    super::mfa::limit(&state, &headers, peer)?;
+    if let Some(Json(body)) = body {
+        super::mfa::reauth(&state, auth.id, &body).await?;
+    } else {
+        super::mfa::require_factor(&state, auth.id, &Default::default(), "reauth").await?;
+    }
     if auth.totp_enabled {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -569,8 +579,12 @@ async fn totp_setup(
 async fn totp_enable(
     State(state): State<AppState>,
     auth: AuthUser,
+    headers: axum::http::HeaderMap,
+    auth::OptionalPeer(peer): auth::OptionalPeer,
     Json(body): Json<TotpEnable>,
 ) -> Result<Json<RecoveryCodes>, ApiError> {
+    auth.require_write()?;
+    super::mfa::limit(&state, &headers, peer)?;
     let row = sqlx::query!(
         "SELECT email, totp_secret, totp_enabled FROM users WHERE id = $1",
         auth.id
@@ -624,8 +638,12 @@ async fn totp_enable(
 async fn totp_disable(
     State(state): State<AppState>,
     auth: AuthUser,
+    headers: axum::http::HeaderMap,
+    auth::OptionalPeer(peer): auth::OptionalPeer,
     Json(body): Json<TotpDisable>,
 ) -> Result<StatusCode, ApiError> {
+    auth.require_write()?;
+    super::mfa::limit(&state, &headers, peer)?;
     let row = sqlx::query!(
         "SELECT email, password_hash, totp_secret, totp_enabled, recovery_hashes FROM users WHERE id = $1",
         auth.id
@@ -643,16 +661,21 @@ async fn totp_disable(
     if !auth::verify_password(&body.password, &row.password_hash) {
         return Err(invalid_credentials());
     }
-    let secret = decrypt_secret(&state, row.totp_secret.as_deref())?;
-    let matched = totp_matches(&secret, &row.email, &body.code)?
-        || consume_recovery(&state, auth.id, &row.recovery_hashes, &body.code).await?;
-    if !matched {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "invalid_totp",
-            "authenticator code did not match",
-        ));
-    }
+    super::mfa::require_factor(
+        &state,
+        auth.id,
+        &super::mfa::FactorInput {
+            totp_code: if body.code.is_empty() {
+                None
+            } else {
+                Some(body.code)
+            },
+            email_code: body.email_code,
+            mfa_proof: body.mfa_proof,
+        },
+        "reauth",
+    )
+    .await?;
     sqlx::query!(
         "UPDATE users SET totp_secret = NULL, totp_enabled = FALSE, recovery_hashes = '{}', updated_at = now() WHERE id = $1",
         auth.id
@@ -1389,7 +1412,7 @@ async fn list_audit(
     ))
 }
 
-async fn issue(
+pub(super) async fn issue(
     state: &AppState,
     user: &AuthUser,
     headers: &axum::http::HeaderMap,
@@ -1533,7 +1556,7 @@ async fn ensure_owner_stays(state: &AppState, id: Uuid) -> Result<(), ApiError> 
     }
 }
 
-async fn consume_recovery(
+pub(super) async fn consume_recovery(
     state: &AppState,
     id: Uuid,
     hashes: &[String],
@@ -1552,15 +1575,16 @@ async fn consume_recovery(
     };
     let mut next = hashes.to_vec();
     next.remove(index);
-    sqlx::query!(
-        r#"UPDATE users SET recovery_hashes = $2, updated_at = now() WHERE id = $1"#,
+    let result=sqlx::query!(
+        r#"UPDATE users SET recovery_hashes = $2, updated_at = now() WHERE id = $1 AND recovery_hashes = $3"#,
         id,
         &next,
+        hashes,
     )
     .execute(&state.pool)
     .await
     .map_err(ApiError::database)?;
-    Ok(true)
+    Ok(result.rows_affected() == 1)
 }
 
 fn recovery_codes() -> Vec<String> {
@@ -1612,7 +1636,7 @@ fn is_unique(error: &sqlx::Error) -> bool {
     matches!(error, sqlx::Error::Database(db) if db.is_unique_violation())
 }
 
-fn decrypt_secret(state: &AppState, blob: Option<&[u8]>) -> Result<Vec<u8>, ApiError> {
+pub(super) fn decrypt_secret(state: &AppState, blob: Option<&[u8]>) -> Result<Vec<u8>, ApiError> {
     let Some(blob) = blob else {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -1644,7 +1668,7 @@ fn build_totp(secret: &[u8], email: &str) -> Result<Totp, ApiError> {
         })
 }
 
-fn totp_matches(secret: &[u8], email: &str, code: &str) -> Result<bool, ApiError> {
+pub(super) fn totp_matches(secret: &[u8], email: &str, code: &str) -> Result<bool, ApiError> {
     let totp = build_totp(secret, email)?;
     Ok(totp.check_current(code).is_some())
 }

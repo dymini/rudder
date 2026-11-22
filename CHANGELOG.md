@@ -9,6 +9,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Added
+- **Secure your account with passkeys or email codes.** Register and name several passkeys, use one as your second factor or sign in without a password, and opt into email verification using the existing Access mail provider. Security-method removal requires your password and a current factor.
 - **Explore the Statistics dashboard.** A new page near Monitoring provides range controls, traffic and resource charts, operational KPIs, linked service rankings, and backup and disk summaries in a mobile-friendly layout, including Vietnamese translations.
 - **Read global Rudder statistics.** A monitoring API and MCP overview combine network and request traffic, 5xx rates, server resources, service rankings, deployments, backups, restart estimates, alerts, MCP usage, and resource counts across selectable time ranges.
 - **Monitor AI activity.** The MCP page now includes filterable call history, usage charts, per-client counts, error and denied rates, latency percentiles, and each grant's last tool use, with Vietnamese translations.

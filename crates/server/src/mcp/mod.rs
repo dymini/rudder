@@ -25,6 +25,8 @@ pub(crate) fn skip_reason(route: &Route) -> Option<&'static str> {
         return Some("websocket");
     }
     match (method_name(&route.method), route.path) {
+        ("POST", path) if path.starts_with("/api/v1/auth/passkeys/") || path.starts_with("/api/v1/me/passkeys/register/") => Some("browser WebAuthn ceremony; requires authenticator user verification and origin-bound challenge"),
+        ("POST", "/api/v1/auth/mfa/email/send") => Some("browser sign-in factor delivery"),
         ("POST", "/api/v1/login" | "/api/v1/logout" | "/api/v1/setup") => Some("browser session"),
         ("GET", "/api/v1/setup/status") => Some("browser session"),
         (

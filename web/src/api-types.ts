@@ -542,6 +542,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/mfa/email/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send an email sign-in factor after verifying the password */
+        post: operations["post_v1_auth_mfa_email_send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/passkeys/login/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete discoverable passkey sign-in and issue a browser session */
+        post: operations["post_v1_auth_passkeys_login_finish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/passkeys/login/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Begin discoverable passkey sign-in */
+        post: operations["post_v1_auth_passkeys_login_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/passkeys/verify/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete passkey verification; return a single-use five-minute factor proof */
+        post: operations["post_v1_auth_passkeys_verify_finish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/passkeys/verify/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Begin a passkey second-factor or re-authentication ceremony */
+        post: operations["post_v1_auth_passkeys_verify_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/backup-jobs": {
         parameters: {
             query?: never;
@@ -1968,6 +2053,143 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List enabled MFA methods and availability */
+        get: operations["get_v1_me_mfa"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/mfa/email/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable email MFA with password and a current factor */
+        post: operations["post_v1_me_mfa_email_disable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/mfa/email/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enable email MFA with the enrollment code and password */
+        post: operations["post_v1_me_mfa_email_enable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/mfa/email/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send an enrollment or re-authentication email code */
+        post: operations["post_v1_me_mfa_email_send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List your registered passkeys */
+        get: operations["get_v1_me_passkeys"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/passkeys/register/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete a single-use passkey registration */
+        post: operations["post_v1_me_passkeys_register_finish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/passkeys/register/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Begin resident passkey registration after re-authentication */
+        post: operations["post_v1_me_passkeys_register_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/passkeys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete your passkey with password and a current factor */
+        delete: operations["delete_v1_me_passkeys__id_"];
+        options?: never;
+        head?: never;
+        /** Rename your passkey */
+        patch: operations["patch_v1_me_passkeys__id_"];
         trace?: never;
     };
     "/api/v1/me/password": {
@@ -4607,6 +4829,13 @@ export interface components {
             ip_requests: number;
             recent_blocks: components["schemas"]["BlockView"][];
         };
+        EmailMfaEnable: {
+            code: string;
+            password: string;
+        };
+        EmailMfaSend: components["schemas"]["MfaReauth"] & {
+            purpose: string;
+        };
         EnrollRequest: {
             /** @description PKCS#10 request for the agent's own key, PEM. */
             csr_pem: string;
@@ -4661,6 +4890,11 @@ export interface components {
             service_id?: string | null;
             severity: string;
             title: string;
+        };
+        FactorInput: {
+            email_code?: string | null;
+            mfa_proof?: string | null;
+            totp_code?: string | null;
         };
         GeneratedValue: {
             key: string;
@@ -5099,6 +5333,8 @@ export interface components {
         };
         LoginRequest: {
             email: string;
+            email_code?: string | null;
+            mfa_proof?: string | null;
             password: string;
             totp_code?: string | null;
         };
@@ -5285,6 +5521,28 @@ export interface components {
             /** Format: date-time */
             since: string;
         };
+        MfaChallenge: {
+            challenge_id: string;
+            options: unknown;
+        };
+        MfaFinish: {
+            challenge_id: string;
+            credential: unknown;
+        };
+        MfaMethods: {
+            email: boolean;
+            email_available: boolean;
+            passkey_origin?: string | null;
+            /** Format: int64 */
+            passkeys: number;
+            totp: boolean;
+        };
+        MfaProof: {
+            mfa_proof: string;
+        };
+        MfaReauth: components["schemas"]["FactorInput"] & {
+            password: string;
+        };
         NetworkView: {
             internal_ip?: string | null;
             isolation: boolean;
@@ -5318,6 +5576,27 @@ export interface components {
             panel_certificate_id?: string | null;
             panel_domain?: string | null;
             panel_ssl_mode: string;
+        };
+        PasskeyName: {
+            name: string;
+        };
+        PasskeyRegister: components["schemas"]["MfaReauth"] & {
+            name: string;
+        };
+        PasskeyVerify: {
+            email: string;
+            password: string;
+        };
+        PasskeyView: {
+            /** Format: int64 */
+            counter: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            last_used_at?: string | null;
+            name: string;
         };
         PasswordChange: {
             current_password: string;
@@ -6300,6 +6579,8 @@ export interface components {
         };
         TotpDisable: {
             code: string;
+            email_code?: string | null;
+            mfa_proof?: string | null;
             password: string;
         };
         TotpEnable: {
@@ -7509,6 +7790,120 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditView"][];
+                };
+            };
+        };
+    };
+    post_v1_auth_mfa_email_send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PasskeyVerify"];
+            };
+        };
+        responses: {
+            /** @description Send an email sign-in factor after verifying the password */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    post_v1_auth_passkeys_login_finish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MfaFinish"];
+            };
+        };
+        responses: {
+            /** @description Complete discoverable passkey sign-in and issue a browser session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+        };
+    };
+    post_v1_auth_passkeys_login_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Begin discoverable passkey sign-in */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaChallenge"];
+                };
+            };
+        };
+    };
+    post_v1_auth_passkeys_verify_finish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MfaFinish"];
+            };
+        };
+        responses: {
+            /** @description Complete passkey verification; return a single-use five-minute factor proof */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaProof"];
+                };
+            };
+        };
+    };
+    post_v1_auth_passkeys_verify_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PasskeyVerify"];
+            };
+        };
+        responses: {
+            /** @description Begin a passkey second-factor or re-authentication ceremony */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaChallenge"];
                 };
             };
         };
@@ -9631,6 +10026,202 @@ export interface operations {
             };
         };
     };
+    get_v1_me_mfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List enabled MFA methods and availability */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaMethods"];
+                };
+            };
+        };
+    };
+    post_v1_me_mfa_email_disable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MfaReauth"];
+            };
+        };
+        responses: {
+            /** @description Disable email MFA with password and a current factor */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    post_v1_me_mfa_email_enable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmailMfaEnable"];
+            };
+        };
+        responses: {
+            /** @description Enable email MFA with the enrollment code and password */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    post_v1_me_mfa_email_send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EmailMfaSend"];
+            };
+        };
+        responses: {
+            /** @description Send an enrollment or re-authentication email code */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_v1_me_passkeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List your registered passkeys */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyView"][];
+                };
+            };
+        };
+    };
+    post_v1_me_passkeys_register_finish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MfaFinish"];
+            };
+        };
+        responses: {
+            /** @description Complete a single-use passkey registration */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    post_v1_me_passkeys_register_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRegister"];
+            };
+        };
+        responses: {
+            /** @description Begin resident passkey registration after re-authentication */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaChallenge"];
+                };
+            };
+        };
+    };
+    delete_v1_me_passkeys__id_: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MfaReauth"];
+            };
+        };
+        responses: {
+            /** @description Delete your passkey with password and a current factor */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    patch_v1_me_passkeys__id_: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PasskeyName"];
+            };
+        };
+        responses: {
+            /** @description Rename your passkey */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     post_v1_me_password: {
         parameters: {
             query?: never;
@@ -9706,7 +10297,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MfaReauth"];
+            };
+        };
         responses: {
             /** @description Start authenticator setup */
             200: {

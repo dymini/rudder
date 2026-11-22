@@ -118,6 +118,11 @@ use rudder_core::{
     RuleAction, RuleMatch, RuleMode,
 };
 
+use crate::routes::mfa::{
+    EmailMfaEnable, EmailMfaSend, FactorInput, MfaChallenge, MfaFinish, MfaMethods, MfaProof,
+    MfaReauth, PasskeyName, PasskeyRegister, PasskeyVerify, PasskeyView,
+};
+
 #[derive(OpenApiDerive)]
 #[openapi(
     info(
@@ -126,6 +131,7 @@ use rudder_core::{
         description = "Control-plane API for the Rudder deployment panel."
     ),
     components(schemas(
+        FactorInput,MfaReauth,PasskeyRegister,PasskeyVerify,MfaFinish,MfaChallenge,MfaProof,PasskeyName,PasskeyView,MfaMethods,EmailMfaSend,EmailMfaEnable,
         HealthResponse,
         SetupStatus,
         SetupRequest,
@@ -470,6 +476,20 @@ pub fn document() -> OpenApi {
 }
 
 pub(crate) const ROUTES: &[Route] = &[
+    Route { path: "/api/v1/me/mfa", method: HttpMethod::Get, tag: "auth", summary: "List enabled MFA methods and availability", request: None, response: Some("MfaMethods"), status: 200 },
+    Route { path: "/api/v1/me/passkeys", method: HttpMethod::Get, tag: "auth", summary: "List your registered passkeys", request: None, response: Some("[PasskeyView]"), status: 200 },
+    Route { path: "/api/v1/me/passkeys/{id}", method: HttpMethod::Patch, tag: "auth", summary: "Rename your passkey", request: Some("PasskeyName"), response: None, status: 204 },
+    Route { path: "/api/v1/me/passkeys/{id}", method: HttpMethod::Delete, tag: "auth", summary: "Delete your passkey with password and a current factor", request: Some("MfaReauth"), response: None, status: 204 },
+    Route { path: "/api/v1/me/passkeys/register/start", method: HttpMethod::Post, tag: "auth", summary: "Begin resident passkey registration after re-authentication", request: Some("PasskeyRegister"), response: Some("MfaChallenge"), status: 200 },
+    Route { path: "/api/v1/me/passkeys/register/finish", method: HttpMethod::Post, tag: "auth", summary: "Complete a single-use passkey registration", request: Some("MfaFinish"), response: None, status: 204 },
+    Route { path: "/api/v1/auth/passkeys/verify/start", method: HttpMethod::Post, tag: "auth", summary: "Begin a passkey second-factor or re-authentication ceremony", request: Some("PasskeyVerify"), response: Some("MfaChallenge"), status: 200 },
+    Route { path: "/api/v1/auth/passkeys/verify/finish", method: HttpMethod::Post, tag: "auth", summary: "Complete passkey verification; return a single-use five-minute factor proof", request: Some("MfaFinish"), response: Some("MfaProof"), status: 200 },
+    Route { path: "/api/v1/auth/passkeys/login/start", method: HttpMethod::Post, tag: "auth", summary: "Begin discoverable passkey sign-in", request: None, response: Some("MfaChallenge"), status: 200 },
+    Route { path: "/api/v1/auth/passkeys/login/finish", method: HttpMethod::Post, tag: "auth", summary: "Complete discoverable passkey sign-in and issue a browser session", request: Some("MfaFinish"), response: Some("SessionResponse"), status: 200 },
+    Route { path: "/api/v1/auth/mfa/email/send", method: HttpMethod::Post, tag: "auth", summary: "Send an email sign-in factor after verifying the password", request: Some("PasskeyVerify"), response: None, status: 204 },
+    Route { path: "/api/v1/me/mfa/email/send", method: HttpMethod::Post, tag: "auth", summary: "Send an enrollment or re-authentication email code", request: Some("EmailMfaSend"), response: None, status: 204 },
+    Route { path: "/api/v1/me/mfa/email/enable", method: HttpMethod::Post, tag: "auth", summary: "Enable email MFA with the enrollment code and password", request: Some("EmailMfaEnable"), response: None, status: 204 },
+    Route { path: "/api/v1/me/mfa/email/disable", method: HttpMethod::Post, tag: "auth", summary: "Disable email MFA with password and a current factor", request: Some("MfaReauth"), response: None, status: 204 },
     Route {
         path: "/api/health",
         method: HttpMethod::Get,
@@ -673,7 +693,7 @@ pub(crate) const ROUTES: &[Route] = &[
         method: HttpMethod::Post,
         tag: "auth",
         summary: "Start authenticator setup",
-        request: None,
+        request: Some("MfaReauth"),
         response: Some("TotpSetupResponse"),
         status: 200,
     },

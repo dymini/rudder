@@ -17,6 +17,7 @@ pub mod images;
 pub mod load;
 pub mod logs;
 pub mod mcp;
+pub mod mfa;
 pub mod monitoring;
 pub mod panel_ssl;
 pub mod plugins;
