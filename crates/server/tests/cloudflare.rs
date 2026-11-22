@@ -151,6 +151,44 @@ async fn delete_dns(
     ok(json!({ "id": id }))
 }
 
+#[sqlx::test(migrations = "./migrations")]
+async fn domain_routing_migration_preserves_existing_tunnels_and_direct_defaults(pool: PgPool) {
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::raw_sql("SET LOCAL search_path TO pg_temp; CREATE TEMP TABLE domains(id int, service_id int); CREATE TEMP TABLE services(id int, server_id int); CREATE TEMP TABLE servers(id int, kind text); CREATE TEMP TABLE cloudflare_settings(tunnel_id text, tunnel_published bool); INSERT INTO servers VALUES(1,'local'),(2,'agent'); INSERT INTO services VALUES(1,1),(2,2); INSERT INTO domains VALUES(1,1),(2,2); INSERT INTO cloudflare_settings VALUES('tunnel',true);")
+        .execute(&mut *tx).await.unwrap();
+    sqlx::raw_sql(include_str!("../migrations/0019_domain_routing.sql"))
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let modes: Vec<String> = sqlx::query_scalar("SELECT routing_mode FROM domains ORDER BY id")
+        .fetch_all(&mut *tx)
+        .await
+        .unwrap();
+    assert_eq!(modes, vec!["cloudflare", "direct"]);
+    sqlx::query("INSERT INTO domains(id,service_id) VALUES(3,1)")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let mode: String = sqlx::query_scalar("SELECT routing_mode FROM domains WHERE id=3")
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert_eq!(mode, "direct");
+    tx.rollback().await.unwrap();
+}
+
+async fn get_dns(State(fake): State<Shared>, Path((_, id)): Path<(String, String)>) -> Json<Value> {
+    let record = fake
+        .lock()
+        .unwrap()
+        .dns
+        .iter()
+        .find(|r| r["id"] == id)
+        .cloned()
+        .unwrap_or(json!({}));
+    ok(record)
+}
+
 async fn create_app(State(fake): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
     let id = Uuid::new_v4().to_string();
     let mut stored = body.clone();
@@ -242,7 +280,10 @@ async fn fake_cloudflare() -> (String, Shared) {
     let router = axum::Router::new()
         .route("/zones/{id}", get(zone))
         .route("/zones/{id}/dns_records", get(list_dns).post(create_dns))
-        .route("/zones/{id}/dns_records/{record}", delete(delete_dns))
+        .route(
+            "/zones/{id}/dns_records/{record}",
+            get(get_dns).delete(delete_dns),
+        )
         .route(
             "/accounts/{account}/cfd_tunnel",
             get(empty_list).post(create_tunnel),
@@ -411,6 +452,161 @@ fn scratch_dir() -> std::path::PathBuf {
 
 fn calls(fake: &Shared) -> Vec<String> {
     fake.lock().unwrap().calls.clone()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn domain_routing_is_opt_in_and_dns_cleanup_respects_ownership(pool: PgPool) {
+    let (cloudflare, fake) = fake_cloudflare().await;
+    let data_dir = scratch_dir();
+    let app = app(pool.clone(), &data_dir, &cloudflare);
+    let session = owner(&app).await;
+    let empty = call(&app, "GET", "/api/v1/domains", &session, None).await;
+    assert_eq!(empty.status, StatusCode::OK);
+    assert_eq!(empty.body, json!([]));
+    let server = call(
+        &app,
+        "POST",
+        "/api/v1/servers",
+        &session,
+        Some(json!({"name":"local","kind":"local","public_ip":"203.0.113.10"})),
+    )
+    .await;
+    let project = call(
+        &app,
+        "POST",
+        "/api/v1/projects",
+        &session,
+        Some(json!({"name":"web"})),
+    )
+    .await;
+    let env = call(
+        &app,
+        "POST",
+        &format!(
+            "/api/v1/projects/{}/environments",
+            project.body["id"].as_str().unwrap()
+        ),
+        &session,
+        Some(json!({"name":"prod"})),
+    )
+    .await;
+    let svc = call(&app,"POST",&format!("/api/v1/environments/{}/services",env.body["id"].as_str().unwrap()),&session,Some(json!({"name":"web","kind":"application","server_id":server.body["id"],"spec":{"image":"nginx:1.27"}}))).await;
+    let path = format!(
+        "/api/v1/services/{}/domains",
+        svc.body["id"].as_str().unwrap()
+    );
+    let body = json!({"host":"managed.example.com","target_port":80,"ssl_mode":"none","routing_mode":"cloudflare"});
+    let missing = call(&app, "POST", &path, &session, Some(body.clone())).await;
+    assert_eq!(missing.status, StatusCode::BAD_REQUEST, "{}", missing.body);
+    assert!(missing.body.to_string().contains("credentials"));
+    let credentials = call(
+        &app,
+        "PUT",
+        "/api/v1/cloudflare/credentials",
+        &session,
+        Some(json!({"account_id":ACCOUNT,"zone_id":ZONE,"api_token":TOKEN})),
+    )
+    .await;
+    assert_eq!(credentials.status, StatusCode::OK);
+    let mut wrong = body.clone();
+    wrong["host"] = json!("outside.other.org");
+    let rejected = call(&app, "POST", &path, &session, Some(wrong)).await;
+    assert_eq!(rejected.status, StatusCode::BAD_REQUEST);
+    assert!(rejected.body.to_string().contains("example.com"));
+    sqlx::query("UPDATE cloudflare_settings SET tunnel_id=$1,tunnel_published=false WHERE id=TRUE")
+        .bind(TUNNEL)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let created = call(&app, "POST", &path, &session, Some(body.clone())).await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    assert_eq!(created.body["routing_mode"], "cloudflare");
+    assert!(fake
+        .lock()
+        .unwrap()
+        .dns
+        .iter()
+        .any(|r| r["name"] == "managed.example.com" && r["type"] == "A" && r["proxied"] == true));
+    let list = call(&app, "GET", "/api/v1/domains", &session, None).await;
+    assert_eq!(list.status, StatusCode::OK, "{}", list.body);
+    assert_eq!(list.body[0]["routing"], "cloudflare-proxied");
+    let domain_path = format!("/api/v1/domains/{}", created.body["id"].as_str().unwrap());
+    let deleted = call(&app, "DELETE", &domain_path, &session, None).await;
+    assert_eq!(deleted.status, StatusCode::NO_CONTENT);
+    assert!(fake.lock().unwrap().dns.is_empty());
+    sqlx::query("UPDATE cloudflare_settings SET tunnel_id=NULL WHERE id=TRUE")
+        .execute(&pool)
+        .await
+        .unwrap();
+    fake.lock().unwrap().dns.push(
+        json!({"id":"foreign","type":"A","name":"managed.example.com","content":"192.0.2.99"}),
+    );
+    let rejected = call(&app, "POST", &path, &session, Some(body.clone())).await;
+    assert_eq!(rejected.status, StatusCode::CONFLICT, "{}", rejected.body);
+    assert_eq!(fake.lock().unwrap().dns[0]["id"], "foreign");
+    let mut overwrite = body.clone();
+    overwrite["overwrite_dns"] = json!(true);
+    let created = call(&app, "POST", &path, &session, Some(overwrite)).await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    let tunnel = call(
+        &app,
+        "POST",
+        "/api/v1/cloudflare/tunnel",
+        &session,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(tunnel.status, StatusCode::CREATED, "{}", tunnel.body);
+    assert!(fake
+        .lock()
+        .unwrap()
+        .dns
+        .iter()
+        .any(|r| r["name"] == "managed.example.com" && r["type"] == "CNAME"));
+    let domain_path = format!("/api/v1/domains/{}", created.body["id"].as_str().unwrap());
+    let direct = call(
+        &app,
+        "PATCH",
+        &domain_path,
+        &session,
+        Some(json!({"routing_mode":"direct"})),
+    )
+    .await;
+    assert_eq!(direct.status, StatusCode::OK, "{}", direct.body);
+    assert!(direct.body["routing_options"]["direct_warning"]
+        .as_str()
+        .unwrap()
+        .contains("will not be reachable"));
+    assert!(fake.lock().unwrap().dns.is_empty());
+    let mut direct_body = body;
+    direct_body["host"] = json!("new-direct.example.com");
+    direct_body.as_object_mut().unwrap().remove("routing_mode");
+    let direct = call(&app, "POST", &path, &session, Some(direct_body)).await;
+    assert_eq!(direct.status, StatusCode::CREATED, "{}", direct.body);
+    assert_eq!(direct.body["routing_mode"], "direct");
+    assert!(fake.lock().unwrap().dns.is_empty());
+    sqlx::query("UPDATE panel_settings SET panel_domain='panel.example.com' WHERE id=TRUE")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE access_settings SET portal_host='access.example.com' WHERE id=TRUE")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let list = call(&app, "GET", "/api/v1/domains", &session, None).await;
+    assert_eq!(list.status, StatusCode::OK, "{}", list.body);
+    assert!(list
+        .body
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["kind"] == "panel"));
+    assert!(list
+        .body
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["kind"] == "access"));
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -643,6 +839,11 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     // The tunnel is created at Cloudflare and saved even without Docker; the
     // status says why no replica runs.
     assert!(fake.lock().unwrap().configs.is_empty());
+    // Existing pre-feature domains are backfilled when the migration finds an active tunnel.
+    sqlx::query("UPDATE domains SET routing_mode='cloudflare'")
+        .execute(&pool)
+        .await
+        .unwrap();
     // An existing DNS record must not be overwritten by automatic publication.
     fake.lock().unwrap().dns.push(json!({
         "id": "old-a", "type": "A", "name": "app.example.com", "content": "203.0.113.10",
@@ -749,7 +950,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     assert_eq!(ingress[0]["service"], "https://rudder-traefik:443");
     assert_eq!(ingress[2]["service"], "http_status:404");
     let tunnelled = std::fs::read_to_string(&routes_path).unwrap();
-    assert!(!tunnelled.contains("certResolver"), "{tunnelled}");
+    assert_eq!(tunnelled.matches("certResolver").count(), 1, "{tunnelled}");
     assert!(tunnelled.contains("tls: {}"));
 
     let report = call(&app, "GET", "/api/v1/cloudflare/preflight", &session, None).await;
@@ -798,7 +999,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
         "POST",
         &format!("/api/v1/services/{service_id}/domains"),
         &session,
-        Some(json!({"host":"late.example.com", "target_port":8080, "ssl_mode":"letsencrypt"})),
+        Some(json!({"host":"late.example.com", "target_port":8080, "ssl_mode":"letsencrypt", "routing_mode":"cloudflare"})),
     )
     .await;
     assert_eq!(late.status, StatusCode::CREATED, "{}", late.body);
@@ -839,7 +1040,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
         "POST",
         &format!("/api/v1/services/{service_id}/domains"),
         &session,
-        Some(json!({"host":"retry.example.com", "target_port":8080, "ssl_mode":"letsencrypt"})),
+        Some(json!({"host":"retry.example.com", "target_port":8080, "ssl_mode":"letsencrypt", "routing_mode":"cloudflare"})),
     )
     .await;
     assert_eq!(
@@ -1134,7 +1335,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     let no_script = call(&app, "GET", "/api/v1/cloudflare/ssh/script", &session, None).await;
     assert_eq!(no_script.status, StatusCode::BAD_REQUEST);
 
-    // Removing the tunnel undoes everything and returns Traefik to direct mode.
+    // Removing the tunnel restores origin TLS; opted-in services retain proxied DNS.
     let gone = call(&app, "DELETE", "/api/v1/cloudflare/tunnel", &session, None).await;
     assert_eq!(gone.status, StatusCode::OK, "{}", gone.body);
     assert_eq!(
@@ -1143,7 +1344,11 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     );
     {
         let fake = fake.lock().unwrap();
-        assert!(fake.dns.is_empty());
+        assert_eq!(fake.dns.len(), 1, "{:?}", fake.dns);
+        assert_eq!(fake.dns[0]["type"], "A");
+        assert_eq!(fake.dns[0]["name"], "app.example.com");
+        assert_eq!(fake.dns[0]["content"], "203.0.113.10");
+        assert_eq!(fake.dns[0]["proxied"], true);
         assert!(fake.apps.is_empty());
     }
     let after = call(&app, "GET", "/api/v1/cloudflare", &session, None).await;

@@ -14,6 +14,7 @@ mod config;
 mod db;
 mod deploy;
 mod docs;
+mod domain_routing;
 mod driver;
 mod embed;
 mod error;

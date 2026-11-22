@@ -50,6 +50,8 @@ pub struct HostQuery {
 
 #[derive(Serialize, ToSchema)]
 pub struct DomainView {
+    pub routing_mode: String,
+    pub routing_options: crate::domain_routing::DomainRoutingOptions,
     pub id: Uuid,
     pub service_id: Uuid,
     pub host: String,
@@ -70,6 +72,8 @@ pub struct DomainView {
 
 #[derive(Deserialize, ToSchema)]
 pub struct CreateDomain {
+    pub routing_mode: Option<String>,
+    pub overwrite_dns: Option<bool>,
     pub host: String,
     pub path_prefix: Option<String>,
     pub target_port: i32,
@@ -84,6 +88,8 @@ pub struct CreateDomain {
 
 #[derive(Deserialize, ToSchema)]
 pub struct UpdateDomain {
+    pub routing_mode: Option<String>,
+    pub overwrite_dns: Option<bool>,
     pub host: Option<String>,
     pub path_prefix: Option<String>,
     pub target_port: Option<i32>,
@@ -190,6 +196,11 @@ struct RegistryRow {
 
 pub fn router() -> axum::Router<AppState> {
     axum::Router::new()
+        .route("/api/v1/domains", get(crate::domain_routing::inventory))
+        .route(
+            "/api/v1/domains/routing-options",
+            get(crate::domain_routing::routing_options),
+        )
         .route(
             "/api/v1/certificates",
             get(list_certificates).post(create_certificate),
@@ -338,7 +349,7 @@ async fn list_domains(
     let certs = load_certificates(&state).await?;
     let mut views = Vec::new();
     for row in rows {
-        views.push(domain_view(row, &certs, local));
+        views.push(domain_view(&state, row, &certs, local).await?);
     }
     Ok(Json(views))
 }
@@ -357,6 +368,15 @@ async fn create_domain(
         body.target_port,
         &body.ssl_mode,
     )?;
+    let routing_mode = body.routing_mode.as_deref().unwrap_or("direct");
+    crate::domain_routing::validate(&state, service_id, &domain.host, routing_mode, None).await?;
+    crate::domain_routing::check_conflicts(
+        &state,
+        &domain.host,
+        routing_mode,
+        body.overwrite_dns.unwrap_or(false),
+    )
+    .await?;
     let hash = basic_hash(
         body.basic_auth_user.as_deref(),
         body.basic_auth_password.as_deref(),
@@ -401,22 +421,48 @@ async fn create_domain(
         Err(error) if is_fk(&error) => return Err(not_found("service not found")),
         Err(error) => return Err(ApiError::database(error)),
     };
+    sqlx::query("UPDATE domains SET routing_mode=$2 WHERE id=$1")
+        .bind(row.id)
+        .bind(routing_mode)
+        .execute(&state.pool)
+        .await
+        .map_err(ApiError::database)?;
+    if let Err(error) = crate::domain_routing::reconcile(
+        &state,
+        body.overwrite_dns.unwrap_or(false),
+        Some(&row.host),
+    )
+    .await
+    {
+        sqlx::query("DELETE FROM domains WHERE id=$1")
+            .bind(row.id)
+            .execute(&state.pool)
+            .await
+            .map_err(ApiError::database)?;
+        return Err(error);
+    }
     audit::record(
         &state.pool,
         Some(auth.id),
         "domain.create",
         "domain",
         Some(&row.id.to_string()),
-        json!({ "host": row.host, "ssl_mode": row.ssl_mode }),
+        json!({ "host": row.host, "ssl_mode": row.ssl_mode, "routing_mode": routing_mode, "overwrite_dns": body.overwrite_dns.unwrap_or(false) }),
         None,
     )
     .await;
     crate::stacks::refresh_network_later(&state, service_id);
-    let published = publish::publish_server(&state, server_id).await?;
+    let published = publish::publish_server_with_dns(
+        &state,
+        server_id,
+        body.overwrite_dns.unwrap_or(false),
+        Some(&row.host),
+    )
+    .await?;
     let certs = load_certificates(&state).await?;
     Ok((
         StatusCode::CREATED,
-        Json(domain_view(row, &certs, published)),
+        Json(domain_view(&state, row, &certs, published).await?),
     ))
 }
 
@@ -478,7 +524,7 @@ async fn create_preview(
     let certs = load_certificates(&state).await?;
     Ok((
         StatusCode::CREATED,
-        Json(domain_view(row, &certs, published)),
+        Json(domain_view(&state, row, &certs, published).await?),
     ))
 }
 
@@ -490,6 +536,33 @@ async fn update_domain(
 ) -> Result<Json<DomainView>, ApiError> {
     auth.require_write()?;
     let current = load_domain(&state, id).await?;
+    let previous_mode: String = sqlx::query_scalar("SELECT routing_mode FROM domains WHERE id=$1")
+        .bind(id)
+        .fetch_one(&state.pool)
+        .await
+        .map_err(ApiError::database)?;
+    let routing_mode = body.routing_mode.as_deref().unwrap_or(&previous_mode);
+    let requested_host = body
+        .host
+        .as_deref()
+        .unwrap_or(&current.host)
+        .trim()
+        .to_ascii_lowercase();
+    crate::domain_routing::validate(
+        &state,
+        current.service_id,
+        &requested_host,
+        routing_mode,
+        Some(id),
+    )
+    .await?;
+    crate::domain_routing::check_conflicts(
+        &state,
+        &requested_host,
+        routing_mode,
+        body.overwrite_dns.unwrap_or(false),
+    )
+    .await?;
     let host = body.host.unwrap_or(current.host);
     let path = body.path_prefix.unwrap_or(current.path_prefix);
     let port = body.target_port.unwrap_or(current.target_port);
@@ -575,9 +648,33 @@ async fn update_domain(
         Err(error) => return Err(ApiError::database(error)),
     };
     let server_id = service_server(&state, row.service_id).await?;
-    let published = publish::publish_server(&state, server_id).await?;
+    sqlx::query("UPDATE domains SET routing_mode=$2 WHERE id=$1")
+        .bind(id)
+        .bind(routing_mode)
+        .execute(&state.pool)
+        .await
+        .map_err(ApiError::database)?;
+    crate::domain_routing::reconcile(&state, body.overwrite_dns.unwrap_or(false), Some(&row.host))
+        .await?;
+    let published = publish::publish_server_with_dns(
+        &state,
+        server_id,
+        body.overwrite_dns.unwrap_or(false),
+        Some(&row.host),
+    )
+    .await?;
     let certs = load_certificates(&state).await?;
-    Ok(Json(domain_view(row, &certs, published)))
+    audit::record(
+        &state.pool,
+        Some(auth.id),
+        "domain.update",
+        "domain",
+        Some(&id.to_string()),
+        json!({"host": row.host, "routing_mode": routing_mode}),
+        None,
+    )
+    .await;
+    Ok(Json(domain_view(&state, row, &certs, published).await?))
 }
 
 async fn delete_domain(
@@ -592,6 +689,7 @@ async fn delete_domain(
         .await
         .map_err(ApiError::database)?;
     let server_id = service_server(&state, current.service_id).await?;
+    crate::domain_routing::reconcile(&state, false, None).await?;
     publish::publish_server(&state, server_id).await?;
     audit::record(
         &state.pool,
@@ -1099,7 +1197,12 @@ async fn load_domain(state: &AppState, id: Uuid) -> Result<DomainRow, ApiError> 
     .ok_or_else(|| not_found("domain not found"))
 }
 
-fn domain_view(row: DomainRow, certs: &[CertificateRow], published: bool) -> DomainView {
+async fn domain_view(
+    state: &AppState,
+    row: DomainRow,
+    certs: &[CertificateRow],
+    published: bool,
+) -> Result<DomainView, ApiError> {
     let matches: Vec<HostMatch> = certs
         .iter()
         .map(|cert| HostMatch {
@@ -1116,7 +1219,13 @@ fn domain_view(row: DomainRow, certs: &[CertificateRow], published: bool) -> Dom
             .find(|cert| cert.id.to_string() == item.name)
             .map(|cert| cert.name.clone())
     });
-    DomainView {
+    Ok(DomainView {
+        routing_mode: sqlx::query_scalar("SELECT routing_mode FROM domains WHERE id=$1")
+            .bind(row.id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(ApiError::database)?,
+        routing_options: crate::domain_routing::options(state, row.service_id, &row.host).await?,
         id: row.id,
         service_id: row.service_id,
         host: row.host,
@@ -1132,7 +1241,7 @@ fn domain_view(row: DomainRow, certs: &[CertificateRow], published: bool) -> Dom
         is_preview: row.is_preview,
         published,
         compose_service: row.compose_service,
-    }
+    })
 }
 
 async fn server_is_local(state: &AppState, server_id: Uuid) -> Result<bool, ApiError> {

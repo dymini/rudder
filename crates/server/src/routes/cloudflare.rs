@@ -391,7 +391,7 @@ async fn remove_tunnel(
     .await
     .map_err(ApiError::database)?;
     cf::refresh_mode(&state).await;
-    if let Err(error) = crate::publish::publish_local(&state).await {
+    if let Err(error) = crate::publish::publish_local_routes(&state).await {
         report.warnings.push(error.public_message());
     }
     cf::remove_replicas(&state).await;
@@ -404,6 +404,11 @@ async fn remove_tunnel(
                             .content
                             .eq_ignore_ascii_case(&tunnel_cname(&tunnel_id))
                 }) {
+                    if !cf::owned_record_or_legacy(&state, &client, &settings.zone_id, record)
+                        .await?
+                    {
+                        continue;
+                    }
                     match client.delete_dns(&settings.zone_id, &record.id).await {
                         Ok(()) => report.removed_dns.push(host.clone()),
                         Err(error) => report.warnings.push(error.public_message()),
@@ -456,6 +461,9 @@ async fn remove_tunnel(
     .await
     .map_err(ApiError::database)?;
     cf::refresh_mode(&state).await;
+    if let Err(error) = crate::publish::publish_local(&state).await {
+        report.warnings.push(error.public_message());
+    }
     audit(
         &state,
         &auth,
