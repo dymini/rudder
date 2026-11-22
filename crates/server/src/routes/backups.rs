@@ -855,7 +855,7 @@ fn encrypt_passphrase(state: &AppState, value: &str) -> Result<Vec<u8>, ApiError
     state.cipher.encrypt(value.as_bytes()).map_err(core_error)
 }
 
-async fn create_job(
+pub(super) async fn create_job(
     State(state): State<AppState>,
     auth: AuthUser,
     Json(body): Json<SaveBackupJob>,

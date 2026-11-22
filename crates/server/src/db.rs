@@ -73,6 +73,8 @@ pub async fn ensure_partitions(pool: &PgPool) -> Result<(), sqlx::Error> {
 
 /// Deployments and services interrupted by a restart cannot still be in progress.
 pub async fn recover_interrupted(pool: &PgPool) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE plugin_installs SET status='failed', last_error='interrupted by process restart; inspect the stack image and deployment before retrying', updated_at=now() WHERE status IN ('updating','installing')")
+        .execute(pool).await?;
     sqlx::query!(
         r#"
         UPDATE deployments

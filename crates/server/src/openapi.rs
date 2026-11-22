@@ -11,6 +11,7 @@ use crate::deploy::DeploymentView;
 use crate::guard::{GuardSettings, GuardView, ProtectionView};
 use crate::logs::retention::{MetricsRetention, RetentionSettings};
 use crate::logs::LogView;
+use crate::plugins::{PluginCheck, PluginRelease};
 use crate::routes::access::{
     AccessApp, AccessDepartment, AccessDepartmentGrant, AccessEmailStart, AccessEmailVerify,
     AccessGoogleStart, AccessGoogleUrl, AccessIdentity, AccessIntrospect, AccessIntrospectRequest,
@@ -83,6 +84,9 @@ use crate::routes::monitoring::{
     PruneResult, SaveAlert, SaveChannel, ServerUsage, ServiceUsage,
 };
 use crate::routes::panel_ssl::PanelSslCheck;
+use crate::routes::plugins::{
+    InstallPlugin, PluginBackup, PluginInstall, PluginInstalled, PluginView, UpdatePlugin,
+};
 use crate::routes::security::{
     BlockView, EdgeStats, RateLimitStat, RateLimitView, SaveRateLimit, SecurityFindingView,
     SecurityOverview, SecurityScanView, SslCertificateStat, SslEventView, SslSummary,
@@ -232,6 +236,14 @@ use rudder_core::{
         DeployTemplate,
         GeneratedValue,
         TemplateDeployed,
+        PluginCheck,
+        PluginRelease,
+        PluginView,
+        PluginInstall,
+        PluginInstalled,
+        PluginBackup,
+        InstallPlugin,
+        UpdatePlugin,
         AccessPublic,
         AccessSettingsView,
         UpdateAccessSettings,
@@ -1433,6 +1445,60 @@ pub(crate) const ROUTES: &[Route] = &[
         summary: "App template gallery",
         request: None,
         response: Some("[TemplateView]"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/plugins",
+        method: HttpMethod::Get,
+        tag: "stacks",
+        summary: "Plugin catalog, installs and cached release checks",
+        request: None,
+        response: Some("[PluginView]"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/plugins/{slug}",
+        method: HttpMethod::Get,
+        tag: "stacks",
+        summary: "Plugin manifest and verified releases",
+        request: None,
+        response: Some("PluginView"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/plugins/{slug}/check",
+        method: HttpMethod::Post,
+        tag: "stacks",
+        summary: "Refresh stable plugin releases from GitHub",
+        request: None,
+        response: Some("PluginCheck"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/environments/{id}/plugins/{slug}/install",
+        method: HttpMethod::Post,
+        tag: "stacks",
+        summary: "Install a digest-pinned plugin stack with optional volume backup",
+        request: Some("InstallPlugin"),
+        response: Some("PluginInstalled"),
+        status: 201,
+    },
+    Route {
+        path: "/api/v1/plugin-installs/{id}/update",
+        method: HttpMethod::Post,
+        tag: "stacks",
+        summary: "Back up and update a plugin asynchronously; restore the previous image on deployment failure",
+        request: Some("UpdatePlugin"),
+        response: Some("PluginInstall"),
+        status: 202,
+    },
+    Route {
+        path: "/api/v1/plugin-installs/{id}/backup",
+        method: HttpMethod::Post,
+        tag: "stacks",
+        summary: "Attach or replace a plugin volume backup job",
+        request: Some("PluginBackup"),
+        response: Some("PluginInstall"),
         status: 200,
     },
     Route {

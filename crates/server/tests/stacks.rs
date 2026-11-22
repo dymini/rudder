@@ -1,4 +1,4 @@
-//! Compose stacks and app templates.
+//! Compose stacks, app templates and release-backed plugins.
 //!
 //! `api_without_docker` runs everywhere. `docker_stack_lifecycle` runs real
 //! `docker compose` projects and only runs with `RUDDER_DOCKER_TESTS=1`.
@@ -226,6 +226,201 @@ async fn rename_project(client: &Client, id: &str, project: &str) -> Reply {
             })),
         )
         .await
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn plugin_catalog_install_and_update_without_docker(pool: PgPool) {
+    let data_dir = temp_dir("plugins");
+    let client = Client::owner(app(pool.clone(), &data_dir)).await;
+    let catalog = client.ok("GET", "/api/v1/plugins", None).await;
+    assert_eq!(catalog[0]["manifest"]["slug"], "dockside");
+    assert_eq!(catalog[0]["installs"], json!([]));
+    assert!(catalog[0]["last_check"].is_null());
+    assert!(!catalog[0]["manifest"]["variables"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|v| v["name"] == "PLUGIN_IMAGE"));
+    client
+        .expect(
+            StatusCode::NOT_FOUND,
+            "GET",
+            "/api/v1/plugins/missing",
+            None,
+        )
+        .await;
+    let (server, environment) = client.environment("remote").await;
+    let uri = format!("/api/v1/environments/{environment}/plugins/dockside/install");
+    let body = json!({"name":"dockside","server_id":server,"start":false,"values":{"DOMAIN":"dock.example.com","DOCKSIDE_CONFIG":"[repo]\nname = \"demo\"\n"}});
+    client
+        .expect(StatusCode::CONFLICT, "POST", &uri, Some(body.clone()))
+        .await;
+    let image = format!(
+        "ghcr.io/vantanminh/dockside-server@sha256:{}",
+        "a".repeat(64)
+    );
+    sqlx::query("INSERT INTO plugin_release_checks (plugin,latest_version,releases) VALUES ('dockside','0.2.0',$1)")
+        .bind(json!([{"version":"0.2.0","image":image,"notes":"notes","published_at":null,"html_url":null}]))
+        .execute(&pool).await.unwrap();
+    let mut reserved = body.clone();
+    reserved["values"]["PLUGIN_IMAGE"] = json!("nginx:latest");
+    client
+        .expect(StatusCode::BAD_REQUEST, "POST", &uri, Some(reserved))
+        .await;
+    let mut invalid = body.clone();
+    invalid["values"]["DOCKSIDE_RUN_VERIFY"] = json!("invalid");
+    client
+        .expect(StatusCode::BAD_REQUEST, "POST", &uri, Some(invalid))
+        .await;
+    let installed = client.ok("POST", &uri, Some(body.clone())).await;
+    assert_eq!(installed["install"]["installed_version"], "0.2.0");
+    assert_eq!(installed["generated"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        installed["generated"][0]["value"].as_str().unwrap().len(),
+        48
+    );
+    let id = installed["install"]["id"].as_str().unwrap();
+    let service = installed["service"]["id"].as_str().unwrap();
+    let env = client
+        .ok("GET", &format!("/api/v1/services/{service}/env"), None)
+        .await;
+    assert!(env
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|v| v["key"] == "DOCKSIDE_CONFIG_B64"));
+    let update = format!("/api/v1/plugin-installs/{id}/update");
+    client
+        .expect(StatusCode::CONFLICT, "POST", &update, Some(json!({})))
+        .await;
+    sqlx::query("UPDATE plugin_installs SET status='updating' WHERE id=$1")
+        .bind(uuid::Uuid::parse_str(id).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    client
+        .expect(
+            StatusCode::CONFLICT,
+            "POST",
+            &update,
+            Some(json!({"version":"0.2.0"})),
+        )
+        .await;
+    sqlx::query("UPDATE plugin_installs SET status='installed' WHERE id=$1")
+        .bind(uuid::Uuid::parse_str(id).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    // An explicit reinstall is allowed. The offline remote refuses deploy and rollback;
+    // the recorded version stays unchanged and the old encrypted image is restored.
+    client
+        .expect(
+            StatusCode::ACCEPTED,
+            "POST",
+            &update,
+            Some(json!({"version":"0.2.0"})),
+        )
+        .await;
+    for _ in 0..50 {
+        let detail = client.ok("GET", "/api/v1/plugins/dockside", None).await;
+        if detail["installs"][0]["status"] == "failed" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let detail = client.ok("GET", "/api/v1/plugins/dockside", None).await;
+    assert_eq!(detail["installs"][0]["status"], "failed");
+    assert_eq!(detail["installs"][0]["installed_version"], "0.2.0");
+    assert!(detail["installs"][0]["last_error"]
+        .as_str()
+        .unwrap()
+        .contains("rollback failed"));
+    let second = client.ok("POST", &uri, Some(json!({"name":"dockside-two","server_id":server,"start":false,"values":{"DOMAIN":"dock2.example.com"}}))).await;
+    assert_ne!(installed["install"]["id"], second["install"]["id"]);
+    let invalid_backup = client
+        .call(
+            "POST",
+            &format!("/api/v1/plugin-installs/{id}/backup"),
+            Some(json!({"destination_ids":[]})),
+        )
+        .await;
+    assert_eq!(invalid_backup.status, StatusCode::BAD_REQUEST);
+    let destination = client.ok("POST", "/api/v1/s3-destinations", Some(json!({
+        "name":"plugin-backups", "endpoint":"http://127.0.0.1:9", "region":"us-east-1", "bucket":"backups",
+        "access_key_id":"test-access", "secret_access_key":"test-secret", "path_style":true
+    }))).await;
+    let backup_body = json!({"destination_ids":[destination["id"]]});
+    let attached = client
+        .ok(
+            "POST",
+            &format!("/api/v1/plugin-installs/{id}/backup"),
+            Some(backup_body.clone()),
+        )
+        .await;
+    let job = attached["backup_job_id"].as_str().unwrap();
+    let jobs = client.ok("GET", "/api/v1/backup-jobs", None).await;
+    let job_view = jobs
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|j| j["id"] == job)
+        .unwrap();
+    assert_eq!(job_view["consistency"]["stop_service"], true);
+    assert_eq!(job_view["retention"]["keep_last"], 7);
+    assert_eq!(job_view["schedule_cron"], "@daily");
+    let stack = client
+        .ok("GET", &format!("/api/v1/services/{service}/stack"), None)
+        .await;
+    assert_eq!(
+        job_view["target_spec"]["volume"],
+        format!("{}_data", stack["project"].as_str().unwrap())
+    );
+    let replacement = client
+        .ok(
+            "POST",
+            &format!("/api/v1/plugin-installs/{id}/backup"),
+            Some(backup_body),
+        )
+        .await;
+    assert_ne!(replacement["backup_job_id"], job);
+    // A disconnected node fails its backup before any image deploy can start.
+    client
+        .expect(
+            StatusCode::ACCEPTED,
+            "POST",
+            &update,
+            Some(json!({"version":"0.2.0"})),
+        )
+        .await;
+    for _ in 0..150 {
+        let status: String = sqlx::query_scalar("SELECT status FROM plugin_installs WHERE id=$1")
+            .bind(uuid::Uuid::parse_str(id).unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        if status == "failed" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let detail = client.ok("GET", "/api/v1/plugins/dockside", None).await;
+    assert_eq!(detail["installs"][0]["status"], "failed");
+    assert!(detail["installs"][0]["last_error"]
+        .as_str()
+        .unwrap()
+        .contains("before changing image"));
+    sqlx::query("DELETE FROM services WHERE id=$1")
+        .bind(uuid::Uuid::parse_str(service).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM plugin_installs WHERE id=$1")
+        .bind(uuid::Uuid::parse_str(id).unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    std::fs::remove_dir_all(data_dir).unwrap();
 }
 
 #[sqlx::test(migrations = "./migrations")]

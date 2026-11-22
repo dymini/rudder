@@ -1252,6 +1252,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/environments/{id}/plugins/{slug}/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Install a digest-pinned plugin stack with optional volume backup */
+        post: operations["post_v1_environments__id__plugins__slug__install"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/{id}/services": {
         parameters: {
             query?: never;
@@ -2017,6 +2034,91 @@ export interface paths {
         get: operations["get_v1_panel_ssl-check"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugin-installs/{id}/backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Attach or replace a plugin volume backup job */
+        post: operations["post_v1_plugin-installs__id__backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugin-installs/{id}/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Back up and update a plugin asynchronously; restore the previous image on deployment failure */
+        post: operations["post_v1_plugin-installs__id__update"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Plugin catalog, installs and cached release checks */
+        get: operations["get_v1_plugins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Plugin manifest and verified releases */
+        get: operations["get_v1_plugins__slug_"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugins/{slug}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh stable plugin releases from GitHub */
+        post: operations["post_v1_plugins__slug__check"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4743,6 +4845,17 @@ export interface components {
         InstallLink: {
             install_url: string;
         };
+        InstallPlugin: {
+            backup?: components["schemas"]["PluginBackup"] | null;
+            name: string;
+            /** Format: uuid */
+            server_id: string;
+            start?: boolean | null;
+            values?: {
+                [key: string]: string;
+            };
+            version?: string | null;
+        };
         JoinToken: {
             /** Format: date-time */
             expires_at: string;
@@ -4937,6 +5050,67 @@ export interface components {
         };
         PauseBuilds: {
             paused: boolean;
+        };
+        PluginBackup: {
+            destination_ids: string[];
+            /** Format: int32 */
+            keep_last?: number | null;
+            schedule?: string | null;
+        };
+        PluginCheck: {
+            /** Format: date-time */
+            checked_at: string;
+            error?: string | null;
+            latest_version?: string | null;
+            releases: components["schemas"]["PluginRelease"][];
+        };
+        PluginInstall: {
+            /** Format: uuid */
+            backup_job_id?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            environment_id: string;
+            environment_name: string;
+            /** Format: uuid */
+            id: string;
+            image: string;
+            installed_version: string;
+            last_error?: string | null;
+            latest_version?: string | null;
+            pending_releases: components["schemas"]["PluginRelease"][];
+            plugin: string;
+            /** Format: uuid */
+            server_id: string;
+            server_name: string;
+            /** Format: uuid */
+            service_id: string;
+            service_name: string;
+            status: string;
+            update_available: boolean;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        PluginInstalled: components["schemas"]["TemplateDeployed"] & {
+            install: components["schemas"]["PluginInstall"];
+        };
+        PluginRelease: {
+            html_url?: string | null;
+            image: string;
+            notes: string;
+            published_at?: string | null;
+            version: string;
+        };
+        PluginView: {
+            compose: string;
+            data_volume: string;
+            descriptor_asset: string;
+            health_path: string;
+            image_variable: string;
+            installs: components["schemas"]["PluginInstall"][];
+            last_check?: components["schemas"]["PluginCheck"] | null;
+            manifest: components["schemas"]["TemplateView"];
+            repo: string;
         };
         PreflightCheckView: {
             id: string;
@@ -5898,6 +6072,9 @@ export interface components {
             panel_certificate_id?: string | null;
             panel_domain?: string | null;
             panel_ssl_mode?: string | null;
+        };
+        UpdatePlugin: {
+            version?: string | null;
         };
         UpdateRetention: {
             /** @description Days to keep per source, 1 to 365. Sources not listed keep their value. */
@@ -8022,6 +8199,30 @@ export interface operations {
             };
         };
     };
+    post_v1_environments__id__plugins__slug__install: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["InstallPlugin"];
+            };
+        };
+        responses: {
+            /** @description Install a digest-pinned plugin stack with optional volume backup */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginInstalled"];
+                };
+            };
+        };
+    };
     get_v1_environments__id__services: {
         parameters: {
             query?: never;
@@ -9096,6 +9297,114 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PanelSslCheck"];
+                };
+            };
+        };
+    };
+    "post_v1_plugin-installs__id__backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PluginBackup"];
+            };
+        };
+        responses: {
+            /** @description Attach or replace a plugin volume backup job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginInstall"];
+                };
+            };
+        };
+    };
+    "post_v1_plugin-installs__id__update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["UpdatePlugin"];
+            };
+        };
+        responses: {
+            /** @description Back up and update a plugin asynchronously; restore the previous image on deployment failure */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginInstall"];
+                };
+            };
+        };
+    };
+    get_v1_plugins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plugin catalog, installs and cached release checks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginView"][];
+                };
+            };
+        };
+    };
+    get_v1_plugins__slug_: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plugin manifest and verified releases */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginView"];
+                };
+            };
+        };
+    };
+    post_v1_plugins__slug__check: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Refresh stable plugin releases from GitHub */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginCheck"];
                 };
             };
         };

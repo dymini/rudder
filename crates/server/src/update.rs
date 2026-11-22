@@ -94,7 +94,7 @@ impl UpdateCheck {
     }
 }
 
-fn http_client() -> Result<reqwest::Client, Error> {
+pub(crate) fn http_client() -> Result<reqwest::Client, Error> {
     reqwest::Client::builder()
         .user_agent(format!("rudder/{}", rudder_core::VERSION))
         .timeout(Duration::from_secs(30))
@@ -102,7 +102,7 @@ fn http_client() -> Result<reqwest::Client, Error> {
         .map_err(|error| Error::Node(format!("http client: {error}")))
 }
 
-async fn fetch(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, Error> {
+pub(crate) async fn fetch(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, Error> {
     let response = client
         .get(url)
         .header("accept", "application/vnd.github+json")

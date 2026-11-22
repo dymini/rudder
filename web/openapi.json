@@ -2210,6 +2210,36 @@
         }
       }
     },
+    "/api/v1/environments/{id}/plugins/{slug}/install": {
+      "post": {
+        "tags": [
+          "stacks"
+        ],
+        "summary": "Install a digest-pinned plugin stack with optional volume backup",
+        "operationId": "post_v1_environments__id__plugins__slug__install",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallPlugin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Install a digest-pinned plugin stack with optional volume backup",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginInstalled"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/environments/{id}/services": {
       "get": {
         "tags": [
@@ -3388,6 +3418,132 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PanelSslCheck"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plugin-installs/{id}/backup": {
+      "post": {
+        "tags": [
+          "stacks"
+        ],
+        "summary": "Attach or replace a plugin volume backup job",
+        "operationId": "post_v1_plugin-installs__id__backup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginBackup"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Attach or replace a plugin volume backup job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginInstall"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plugin-installs/{id}/update": {
+      "post": {
+        "tags": [
+          "stacks"
+        ],
+        "summary": "Back up and update a plugin asynchronously; restore the previous image on deployment failure",
+        "operationId": "post_v1_plugin-installs__id__update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlugin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Back up and update a plugin asynchronously; restore the previous image on deployment failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginInstall"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plugins": {
+      "get": {
+        "tags": [
+          "stacks"
+        ],
+        "summary": "Plugin catalog, installs and cached release checks",
+        "operationId": "get_v1_plugins",
+        "responses": {
+          "200": {
+            "description": "Plugin catalog, installs and cached release checks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PluginView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/{slug}": {
+      "get": {
+        "tags": [
+          "stacks"
+        ],
+        "summary": "Plugin manifest and verified releases",
+        "operationId": "get_v1_plugins__slug_",
+        "responses": {
+          "200": {
+            "description": "Plugin manifest and verified releases",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/{slug}/check": {
+      "post": {
+        "tags": [
+          "stacks"
+        ],
+        "summary": "Refresh stable plugin releases from GitHub",
+        "operationId": "post_v1_plugins__slug__check",
+        "responses": {
+          "200": {
+            "description": "Refresh stable plugin releases from GitHub",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginCheck"
                 }
               }
             }
@@ -9911,6 +10067,53 @@
           }
         }
       },
+      "InstallPlugin": {
+        "type": "object",
+        "required": [
+          "name",
+          "server_id"
+        ],
+        "properties": {
+          "backup": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PluginBackup"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "server_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "start": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "values": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "JoinToken": {
         "type": "object",
         "required": [
@@ -10606,6 +10809,262 @@
         "properties": {
           "paused": {
             "type": "boolean"
+          }
+        }
+      },
+      "PluginBackup": {
+        "type": "object",
+        "required": [
+          "destination_ids"
+        ],
+        "properties": {
+          "destination_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "keep_last": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "schedule": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PluginCheck": {
+        "type": "object",
+        "required": [
+          "checked_at",
+          "releases"
+        ],
+        "properties": {
+          "checked_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "latest_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "releases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PluginRelease"
+            }
+          }
+        }
+      },
+      "PluginInstall": {
+        "type": "object",
+        "required": [
+          "id",
+          "plugin",
+          "service_id",
+          "service_name",
+          "environment_id",
+          "environment_name",
+          "server_id",
+          "server_name",
+          "installed_version",
+          "update_available",
+          "pending_releases",
+          "image",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "backup_job_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "environment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environment_name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "image": {
+            "type": "string"
+          },
+          "installed_version": {
+            "type": "string"
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "latest_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pending_releases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PluginRelease"
+            }
+          },
+          "plugin": {
+            "type": "string"
+          },
+          "server_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "server_name": {
+            "type": "string"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "service_name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "update_available": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PluginInstalled": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/TemplateDeployed"
+          },
+          {
+            "type": "object",
+            "required": [
+              "install"
+            ],
+            "properties": {
+              "install": {
+                "$ref": "#/components/schemas/PluginInstall"
+              }
+            }
+          }
+        ]
+      },
+      "PluginRelease": {
+        "type": "object",
+        "required": [
+          "version",
+          "image",
+          "notes"
+        ],
+        "properties": {
+          "html_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "image": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "published_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "PluginView": {
+        "type": "object",
+        "required": [
+          "manifest",
+          "repo",
+          "descriptor_asset",
+          "image_variable",
+          "data_volume",
+          "health_path",
+          "compose",
+          "installs"
+        ],
+        "properties": {
+          "compose": {
+            "type": "string"
+          },
+          "data_volume": {
+            "type": "string"
+          },
+          "descriptor_asset": {
+            "type": "string"
+          },
+          "health_path": {
+            "type": "string"
+          },
+          "image_variable": {
+            "type": "string"
+          },
+          "installs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PluginInstall"
+            }
+          },
+          "last_check": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PluginCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "manifest": {
+            "$ref": "#/components/schemas/TemplateView"
+          },
+          "repo": {
+            "type": "string"
           }
         }
       },
@@ -13860,6 +14319,17 @@
             ]
           },
           "panel_ssl_mode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "UpdatePlugin": {
+        "type": "object",
+        "properties": {
+          "version": {
             "type": [
               "string",
               "null"

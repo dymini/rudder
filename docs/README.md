@@ -11,6 +11,7 @@ Operating and product documentation for this repository.
 | `TEST_MATRIX.md` | Behavior-to-proof map |
 | `panel-https.md` | Warning and steps for a panel opened over plain HTTP |
 | `mcp.md` | Connecting an AI agent and the permission templates |
+| `plugins.md` | Installing and updating release-backed plugins, including Dockside |
 | `access.md` | Rudder Access sign-in for internal apps |
 | `security.md` | SSL, exposure checks, and shared rate limits |
 | `product/` | Product contracts |
