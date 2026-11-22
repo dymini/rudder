@@ -35,7 +35,7 @@ pub async fn load_access(state: &AppState, token: &str) -> Result<AuthUser, ApiE
     let hash = auth::sha256_hex(token);
     let row = sqlx::query!(
         r#"
-        SELECT a.expires_at, a.revoked_at, g.id AS grant_id, g.scopes, g.revoked_at AS grant_revoked,
+        SELECT a.expires_at, a.revoked_at, g.id AS grant_id, g.client_id, g.scopes, g.allowed_tools, g.revoked_at AS grant_revoked,
                u.id AS user_id, u.email, u.display_name, u.role, u.totp_enabled, u.is_owner
         FROM mcp_access_tokens a
         JOIN mcp_grants g ON g.id = a.grant_id
@@ -61,6 +61,11 @@ pub async fn load_access(state: &AppState, token: &str) -> Result<AuthUser, ApiE
     .await;
     state.credentials.remember(&hash);
     Ok(AuthUser {
+        mcp: Some(crate::auth::McpAuthority {
+            grant_id: Some(row.grant_id),
+            client_id: Some(row.client_id),
+            allowed_tools: row.allowed_tools.unwrap_or_default(),
+        }),
         id: row.user_id,
         email: row.email,
         display_name: row.display_name,

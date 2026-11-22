@@ -25,6 +25,22 @@ Registration reads JSON regardless of the Content-Type header. Optional metadata
 
 ## Permission templates
 
+### API keys created by an agent
+
+The `post_v1_tokens`, `get_v1_tokens`, and token-delete tools use `auth:write`
+and `auth:read`. Creation returns the secret once; lists never return secrets.
+The key records its creating MCP client and grant. Its permissions are bounded
+by that grant and checked again on every request: reducing or revoking the grant
+also reduces or revokes its delegated keys. Ordinary browser-created keys keep
+their existing behavior.
+
+The optional `agent_scopes` and `allowed_tools` fields request narrower access.
+When either is supplied, omitted permission fields mean no permissions. Without
+either, the key inherits the grant's permissions, limited by the requested
+`read`/`write` API-key scopes. Requests exceeding the grant are rejected with
+`permission_escalation`, never silently expanded. Scoped keys cannot bypass MCP
+permissions by calling the HTTP API directly or by creating another key.
+
 | Template | What the agent can do |
 | --- | --- |
 | **Full control** | Read and change every setting and all data, including users, tokens, and updates. |

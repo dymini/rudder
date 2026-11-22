@@ -28,7 +28,15 @@ pub const SESSION_COOKIE: &str = "rudder_session";
 const SESSION_DAYS: i64 = 7;
 
 #[derive(Clone, Debug)]
+pub struct McpAuthority {
+    pub grant_id: Option<Uuid>,
+    pub client_id: Option<String>,
+    pub allowed_tools: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
 pub struct AuthUser {
+    pub mcp: Option<McpAuthority>,
     pub id: Uuid,
     pub email: String,
     pub display_name: String,
@@ -55,7 +63,11 @@ impl AuthUser {
             return false;
         }
         if self.via_mcp {
-            return self.scopes.iter().any(|scope| scope.ends_with(":write"));
+            return self.scopes.iter().any(|scope| scope.ends_with(":write"))
+                || crate::mcp::tools().iter().any(|t| {
+                    t.scope.ends_with(":write")
+                        && crate::mcp::permissions::allows(self, &t.name, &t.scope)
+                });
         }
         if self.via_token {
             self.scopes.iter().any(|scope| scope == "write")
@@ -366,6 +378,7 @@ async fn load_session(state: &AppState, token: &str) -> Result<AuthUser, ApiErro
     }
     state.credentials.remember(&hash);
     Ok(AuthUser {
+        mcp: None,
         id: row.user_id,
         email: row.email,
         display_name: row.display_name,
@@ -379,7 +392,7 @@ async fn load_session(state: &AppState, token: &str) -> Result<AuthUser, ApiErro
     })
 }
 
-async fn load_token(state: &AppState, token: &str) -> Result<AuthUser, ApiError> {
+pub(crate) async fn load_token(state: &AppState, token: &str) -> Result<AuthUser, ApiError> {
     if token.starts_with(crate::mcp::ACCESS_PREFIX) {
         return crate::mcp::tokens::load_access(state, token).await;
     }
@@ -417,7 +430,8 @@ async fn load_token(state: &AppState, token: &str) -> Result<AuthUser, ApiError>
     .execute(&state.pool)
     .await;
     state.credentials.remember(&hash);
-    Ok(AuthUser {
+    let mut user = AuthUser {
+        mcp: None,
         id: row.user_id,
         email: row.email,
         display_name: row.display_name,
@@ -428,7 +442,9 @@ async fn load_token(state: &AppState, token: &str) -> Result<AuthUser, ApiError>
         scopes: row.scopes,
         via_token: true,
         via_mcp: false,
-    })
+    };
+    crate::mcp::permissions::restrict_key(state, &hash, &mut user).await?;
+    Ok(user)
 }
 
 pub fn normalize_email(email: &str) -> Result<String, ApiError> {

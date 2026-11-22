@@ -8484,6 +8484,24 @@
           "scopes"
         ],
         "properties": {
+          "agent_scopes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowed_tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
           "expires_at": {
             "type": [
               "string",
@@ -8574,8 +8592,32 @@
           "token"
         ],
         "properties": {
+          "agent_scopes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowed_tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
           "auth_method": {
             "type": "string"
+          },
+          "created_by_mcp_client": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "expires_at": {
             "type": [
@@ -14017,12 +14059,36 @@
           "created_at"
         ],
         "properties": {
+          "agent_scopes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowed_tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
           "auth_method": {
             "type": "string"
           },
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "created_by_mcp_client": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "expires_at": {
             "type": [

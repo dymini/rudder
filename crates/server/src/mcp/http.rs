@@ -752,7 +752,7 @@ fn initialize(params: &Value) -> Result<Value, Value> {
 fn tools_list(user: &AuthUser) -> Value {
     let mut tools: Vec<Value> = super::tools()
         .into_iter()
-        .filter(|tool| user.scopes.iter().any(|scope| scope == &tool.scope))
+        .filter(|tool| super::permissions::allows(user, &tool.name, &tool.scope))
         .map(tool_json)
         .collect();
     tools.insert(
@@ -833,7 +833,7 @@ async fn tools_call(
     let Some(tool) = super::tools().into_iter().find(|tool| tool.name == name) else {
         return Err("unknown tool");
     };
-    if !user.scopes.iter().any(|scope| scope == &tool.scope) {
+    if !super::permissions::allows(user, &tool.name, &tool.scope) {
         return Ok(tool_text(
             StatusCode::FORBIDDEN,
             &format!("this approval does not include {}", tool.scope),

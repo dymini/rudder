@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT a.expires_at, a.revoked_at, g.id AS grant_id, g.scopes, g.revoked_at AS grant_revoked,\n               u.id AS user_id, u.email, u.display_name, u.role, u.totp_enabled, u.is_owner\n        FROM mcp_access_tokens a\n        JOIN mcp_grants g ON g.id = a.grant_id\n        JOIN users u ON u.id = g.user_id\n        WHERE a.token_hash = $1\n        ",
+  "query": "\n        SELECT a.expires_at, a.revoked_at, g.id AS grant_id, g.client_id, g.scopes, g.allowed_tools, g.revoked_at AS grant_revoked,\n               u.id AS user_id, u.email, u.display_name, u.role, u.totp_enabled, u.is_owner\n        FROM mcp_access_tokens a\n        JOIN mcp_grants g ON g.id = a.grant_id\n        JOIN users u ON u.id = g.user_id\n        WHERE a.token_hash = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -20,41 +20,51 @@
       },
       {
         "ordinal": 3,
+        "name": "client_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
         "name": "scopes",
         "type_info": "TextArray"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
+        "name": "allowed_tools",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 6,
         "name": "grant_revoked",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 7,
         "name": "user_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 6,
+        "ordinal": 8,
         "name": "email",
         "type_info": "Text"
       },
       {
-        "ordinal": 7,
+        "ordinal": 9,
         "name": "display_name",
         "type_info": "Text"
       },
       {
-        "ordinal": 8,
+        "ordinal": 10,
         "name": "role",
         "type_info": "Text"
       },
       {
-        "ordinal": 9,
+        "ordinal": 11,
         "name": "totp_enabled",
         "type_info": "Bool"
       },
       {
-        "ordinal": 10,
+        "ordinal": 12,
         "name": "is_owner",
         "type_info": "Bool"
       }
@@ -69,6 +79,8 @@
       true,
       false,
       false,
+      false,
+      true,
       true,
       false,
       false,
@@ -78,5 +90,5 @@
       false
     ]
   },
-  "hash": "0cb4a36fda542185047442632ef630054084841dd53fe86ff9488f461e8a26d8"
+  "hash": "df47450ff0a9b0cf4a4b629c6638cd764134f54d4986b5daf702364ed10ca830"
 }

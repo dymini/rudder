@@ -6,6 +6,7 @@
 
 mod gate;
 pub(crate) mod http;
+pub(crate) mod permissions;
 pub(crate) mod tokens;
 
 use utoipa::openapi::path::HttpMethod;
@@ -58,7 +59,7 @@ pub(crate) fn skip_reason(route: &Route) -> Option<&'static str> {
 
 pub(crate) enum AgentAccess {
     /// Call is allowed when the grant has this scope.
-    Allow(String),
+    Allow { scope: String, tool: String },
     /// The path exists but agents must not call it, or it is not an API route.
     Deny,
     /// Login and the MCP endpoint itself. The handler checks the token.
@@ -74,7 +75,10 @@ pub(crate) fn agent_access(method: &str, path: &str) -> AgentAccess {
             return if skip_reason(route).is_some() {
                 AgentAccess::Deny
             } else {
-                AgentAccess::Allow(required_scope(route))
+                AgentAccess::Allow {
+                    scope: required_scope(route),
+                    tool: openapi::operation_id(route),
+                }
             };
         }
     }

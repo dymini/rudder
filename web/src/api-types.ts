@@ -4358,6 +4358,8 @@ export interface components {
             start?: boolean | null;
         };
         CreateToken: {
+            agent_scopes?: string[] | null;
+            allowed_tools?: string[] | null;
             /** Format: date-time */
             expires_at?: string | null;
             name: string;
@@ -4381,7 +4383,10 @@ export interface components {
             join_token?: string | null;
         };
         CreatedToken: {
+            agent_scopes?: string[] | null;
+            allowed_tools?: string[] | null;
             auth_method: string;
+            created_by_mcp_client?: string | null;
             /** Format: date-time */
             expires_at?: string | null;
             /** Format: uuid */
@@ -6028,9 +6033,12 @@ export interface components {
             ok: boolean;
         };
         TokenView: {
+            agent_scopes?: string[] | null;
+            allowed_tools?: string[] | null;
             auth_method: string;
             /** Format: date-time */
             created_at: string;
+            created_by_mcp_client?: string | null;
             /** Format: date-time */
             expires_at?: string | null;
             /** Format: uuid */

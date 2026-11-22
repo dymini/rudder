@@ -98,10 +98,15 @@ pub struct CreateToken {
     name: String,
     scopes: Vec<String>,
     expires_at: Option<DateTime<Utc>>,
+    agent_scopes: Option<Vec<String>>,
+    allowed_tools: Option<Vec<String>>,
 }
 
 #[derive(Serialize, ToSchema, sqlx::FromRow)]
 pub struct TokenView {
+    pub agent_scopes: Option<Vec<String>>,
+    pub allowed_tools: Option<Vec<String>>,
+    pub created_by_mcp_client: Option<String>,
     pub id: Uuid,
     pub name: String,
     pub scopes: Vec<String>,
@@ -113,6 +118,9 @@ pub struct TokenView {
 
 #[derive(Serialize, ToSchema)]
 pub struct CreatedToken {
+    pub agent_scopes: Option<Vec<String>>,
+    pub allowed_tools: Option<Vec<String>>,
+    pub created_by_mcp_client: Option<String>,
     pub id: Uuid,
     pub name: String,
     pub scopes: Vec<String>,
@@ -318,6 +326,7 @@ async fn setup(
     )
     .await;
     let auth_user = AuthUser {
+        mcp: None,
         id: user.id,
         email: user.email,
         display_name: user.display_name,
@@ -407,6 +416,7 @@ async fn login(
         }
     }
     let auth_user = AuthUser {
+        mcp: None,
         id: row.id,
         email: row.email,
         display_name: row.display_name,
@@ -860,7 +870,8 @@ async fn list_tokens(
 ) -> Result<Json<Vec<TokenView>>, ApiError> {
     let rows = sqlx::query_as::<_, TokenView>(
         r#"
-        SELECT id, name, scopes, auth_method, expires_at, last_used_at, created_at
+        SELECT id, name, scopes, auth_method, expires_at, last_used_at, created_at,
+               mcp_scopes AS agent_scopes, mcp_allowed_tools AS allowed_tools, created_by_mcp_client
         FROM api_tokens
         WHERE user_id = $1
         ORDER BY created_at DESC
@@ -887,23 +898,24 @@ async fn create_token(
         ));
     }
     let scopes = auth::validate_scopes(&body.scopes)?;
+    let permissions = crate::mcp::permissions::key_permissions(
+        &auth,
+        &scopes,
+        body.agent_scopes.as_ref(),
+        body.allowed_tools.as_ref(),
+    )?;
+    let agent_scopes = permissions.as_ref().map(|p| p.scopes.clone());
+    let allowed_tools = permissions.as_ref().map(|p| p.allowed_tools.clone());
+    let creator = auth.mcp.as_ref();
+    let client = creator.and_then(|a| a.client_id.clone());
+    let grant = creator.and_then(|a| a.grant_id);
     if scopes.iter().any(|scope| scope == "write") {
         auth.require_write()?;
     }
     let token = auth::random_token("rdr");
     let token_hash = auth::sha256_hex(&token);
-    let row = sqlx::query!(
-        r#"
-        INSERT INTO api_tokens (user_id, name, token_hash, scopes, expires_at)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id
-        "#,
-        auth.id,
-        name,
-        token_hash,
-        &scopes,
-        body.expires_at,
-    )
+    let id: Uuid = sqlx::query_scalar("INSERT INTO api_tokens (user_id, name, token_hash, scopes, expires_at, mcp_scopes, mcp_allowed_tools, created_by_mcp_grant, created_by_mcp_client) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id")
+    .bind(auth.id).bind(name).bind(token_hash).bind(&scopes).bind(body.expires_at).bind(&agent_scopes).bind(&allowed_tools).bind(grant).bind(&client)
     .fetch_one(&state.pool)
     .await
     .map_err(ApiError::database)?;
@@ -912,15 +924,18 @@ async fn create_token(
         Some(auth.id),
         "token.create",
         "api_token",
-        Some(&row.id.to_string()),
-        json!({ "scopes": scopes }),
+        Some(&id.to_string()),
+        json!({ "scopes": scopes, "created_by_mcp_client": client, "created_by_mcp_grant": grant }),
         None,
     )
     .await;
     Ok((
         StatusCode::CREATED,
         Json(CreatedToken {
-            id: row.id,
+            id,
+            agent_scopes,
+            allowed_tools,
+            created_by_mcp_client: client,
             name: name.to_owned(),
             scopes,
             auth_method: "api_key".into(),
