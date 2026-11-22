@@ -59,6 +59,7 @@ pub async fn load_access(state: &AppState, token: &str) -> Result<AuthUser, ApiE
     )
     .execute(&state.pool)
     .await;
+    state.credentials.remember(&hash);
     Ok(AuthUser {
         id: row.user_id,
         email: row.email,
