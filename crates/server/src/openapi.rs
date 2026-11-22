@@ -88,6 +88,10 @@ use crate::routes::monitoring::{
     AlertKindView, AlertView, ChannelView, MetricPoint, MetricSeries, MetricsOverview, MetricsView,
     PruneResult, SaveAlert, SaveChannel, ServerUsage, ServiceUsage,
 };
+use crate::routes::panel_backups::{
+    PanelBackupConfig, PanelBackupHealth, PanelBackupInventory, PanelBackupObject,
+    PanelBackupVerification, VerifyPanelBackup,
+};
 use crate::routes::panel_ssl::PanelSslCheck;
 use crate::routes::plugins::{
     InstallPlugin, PluginAccessSettings, PluginBackup, PluginInstall, PluginInstalled,
@@ -378,6 +382,12 @@ use crate::routes::mfa::{
         SaveChannel,
         PruneResult,
         SystemInfo,
+        PanelBackupHealth,
+        PanelBackupConfig,
+        PanelBackupObject,
+        PanelBackupVerification,
+        PanelBackupInventory,
+        VerifyPanelBackup,
         UpdateOverview,
         UpdateSettings,
         UpdateStarted,
@@ -479,6 +489,11 @@ pub fn document() -> OpenApi {
 }
 
 pub(crate) const ROUTES: &[Route] = &[
+    Route {path:"/api/v1/system/panel-backups",method:HttpMethod::Get,tag:"backups",summary:"List managed panel backup jobs and remote copies (limit 1-200 runs)",request:None,response:Some("PanelBackupInventory"),status:200},
+    Route {path:"/api/v1/system/panel-backups/health",method:HttpMethod::Get,tag:"backups",summary:"Check scheduled full-panel backup freshness and failing streak",request:None,response:Some("PanelBackupHealth"),status:200},
+    Route {path:"/api/v1/system/panel-backups/{id}/verify",method:HttpMethod::Post,tag:"backups",summary:"Verify a destination copy without executing SQL or changing live data",request:Some("VerifyPanelBackup"),response:Some("PanelBackupVerification"),status:202},
+    Route {path:"/api/v1/system/panel-backups/{id}/copies/{destination}",method:HttpMethod::Delete,tag:"backups",summary:"Delete only the selected panel backup destination copy",request:None,response:None,status:204},
+    Route {path:"/api/v1/system/panel-backups/{id}/copies/{destination}/download",method:HttpMethod::Get,tag:"backups",summary:"Download the selected panel backup copy (encrypted archive)",request:None,response:None,status:200},
     Route { path: "/api/v1/me/mfa", method: HttpMethod::Get, tag: "auth", summary: "List enabled MFA methods and availability", request: None, response: Some("MfaMethods"), status: 200 },
     Route { path: "/api/v1/me/passkeys", method: HttpMethod::Get, tag: "auth", summary: "List your registered passkeys", request: None, response: Some("[PasskeyView]"), status: 200 },
     Route { path: "/api/v1/me/passkeys/{id}", method: HttpMethod::Patch, tag: "auth", summary: "Rename your passkey", request: Some("PasskeyName"), response: None, status: 204 },

@@ -35,7 +35,7 @@ const MANIFEST: &str = "manifest.json";
 const MASTER_KEY: &str = "master.key";
 const DUMP: &str = "database.pgdump";
 const SETTINGS: &str = "settings.json";
-const ENTRIES: [&str; 4] = [MANIFEST, MASTER_KEY, DUMP, SETTINGS];
+pub(crate) const ENTRIES: [&str; 4] = [MANIFEST, MASTER_KEY, DUMP, SETTINGS];
 
 /// Tables whose rows are history rather than configuration. Skipped unless asked for.
 const HISTORY_TABLES: [&str; 4] = [
@@ -288,6 +288,16 @@ pub async fn archive(
     config: &Config,
     include_history: bool,
 ) -> Result<ByteStream, Error> {
+    archive_with_manifest(pool, config, include_history)
+        .await
+        .map(|(stream, _)| stream)
+}
+
+pub(crate) async fn archive_with_manifest(
+    pool: &PgPool,
+    config: &Config,
+    include_history: bool,
+) -> Result<(ByteStream, Manifest), Error> {
     let work = WorkDir::create(&config.data_dir.join("tmp"), "panel-backup")
         .map_err(io_error("create a scratch directory"))?;
     let env = pg_env(&config.database_url)?;
@@ -327,7 +337,144 @@ pub async fn archive(
     key.push('\n');
     write_private(&work.file(MASTER_KEY), key.as_bytes())
         .map_err(io_error("write the master key"))?;
-    Ok(tar_stream(work))
+    Ok((tar_stream(work), manifest))
+}
+
+pub(crate) async fn verify_backup(
+    mut stream: ByteStream,
+    expected: &str,
+    compression: Compression,
+    passphrase: Option<&str>,
+    settings_only: bool,
+    config: &Config,
+) -> anyhow::Result<Value> {
+    use sha2::{Digest, Sha256};
+    use tokio::io::AsyncWriteExt;
+    let work = WorkDir::create(&config.data_dir.join("tmp"), "panel-verify")?;
+    let path = work.file("download");
+    write_private(&path, b"")?;
+    let mut file = tokio::fs::OpenOptions::new()
+        .write(true)
+        .open(&path)
+        .await?;
+    let mut hash = Sha256::new();
+    let mut size = 0u64;
+    while let Some(chunk) = stream.try_next().await? {
+        size += chunk.len() as u64;
+        if size > 4 * 1024 * 1024 * 1024 {
+            bail!("verification download exceeds the 4 GiB limit");
+        }
+        hash.update(&chunk);
+        file.write_all(&chunk).await?;
+    }
+    file.shutdown().await?;
+    if hex::encode(hash.finalize()) != expected {
+        bail!("backup checksum mismatch");
+    }
+    let file = tokio::fs::File::open(&path).await?;
+    let mut stream: ByteStream =
+        Box::pin(ReaderStream::new(file).map_err(|e| Error::Node(e.to_string())));
+    if let Some(passphrase) = passphrase {
+        stream = pipeline::decrypt(stream, passphrase);
+    }
+    let stream = pipeline::decompress(stream, compression);
+    let reader = SyncIoBridge::new(StreamReader::new(
+        stream.map_err(|e| std::io::Error::other(e.to_string())),
+    ));
+    let dir = work.path.clone();
+    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        use std::io::Read;
+        let mut reader = reader.take(16 * 1024 * 1024 * 1024 + 1);
+        if settings_only {
+            let mut bytes = Vec::new();
+            reader
+                .by_ref()
+                .take(16 * 1024 * 1024 + 1)
+                .read_to_end(&mut bytes)?;
+            if bytes.len() > 16 * 1024 * 1024 {
+                bail!("settings export exceeds 16 MiB");
+            }
+            let settings: Value = serde_json::from_slice(&bytes)?;
+            if settings["format"] != "rudder-settings-export" || settings["version"] != 1 {
+                bail!("invalid settings export");
+            }
+            write_private(&dir.join(SETTINGS), &bytes)?;
+        } else {
+            let mut archive = tar::Archive::new(reader.by_ref());
+            let mut total = 0u64;
+            for entry in archive.entries()? {
+                let mut entry = entry?;
+                let path = entry.path()?.to_string_lossy().into_owned();
+                let name = path.strip_prefix("./").unwrap_or(&path);
+                if !ENTRIES.contains(&name) || !entry.header().entry_type().is_file() {
+                    bail!("unexpected archive entry");
+                }
+                total = total
+                    .checked_add(entry.size())
+                    .context("archive size overflow")?;
+                if total > 16 * 1024 * 1024 * 1024
+                    || (name != DUMP && entry.size() > 16 * 1024 * 1024)
+                {
+                    bail!("verification archive expansion limit exceeded");
+                }
+                let mut options = std::fs::OpenOptions::new();
+                options.write(true).create_new(true);
+                #[cfg(unix)]
+                options.mode(0o600);
+                std::io::copy(&mut entry, &mut options.open(dir.join(name))?)?;
+            }
+            let reader = archive.into_inner();
+            let mut buf = [0u8; 8192];
+            loop {
+                let count = reader.read(&mut buf)?;
+                if count == 0 {
+                    break;
+                }
+                if buf[..count].iter().any(|b| *b != 0) {
+                    bail!("unexpected trailing archive data");
+                }
+            }
+        }
+        if reader.limit() == 0 {
+            bail!("verification archive expansion limit exceeded");
+        }
+        Ok(())
+    })
+    .await??;
+    let settings: Value = serde_json::from_slice(&std::fs::read(work.file(SETTINGS))?)?;
+    if settings["format"] != "rudder-settings-export" || settings["version"] != 1 {
+        bail!("invalid settings export");
+    }
+    if settings_only {
+        return Ok(
+            serde_json::json!({"format":"rudder-settings-export","version":1,"rudder_version":settings["rudder_version"],"contents":[SETTINGS],"sql_check":"not_applicable"}),
+        );
+    }
+    let manifest: Manifest = serde_json::from_slice(&std::fs::read(work.file(MANIFEST))?)?;
+    if manifest.format != FORMAT
+        || manifest.version != FORMAT_VERSION
+        || manifest.rudder_version.is_empty()
+        || manifest.migration < 0
+    {
+        bail!("unsupported panel manifest");
+    }
+    let _key = parse_key(&std::fs::read_to_string(work.file(MASTER_KEY))?)?;
+    let result = tokio::process::Command::new(&config.pg_restore)
+        .arg("--list")
+        .arg(work.file(DUMP))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .status()
+        .await
+        .context("pg_restore is required to verify the SQL dump")?;
+    if !result.success() {
+        bail!("pg_restore --list rejected the dump; use a compatible PostgreSQL client version");
+    }
+    let mut result = serde_json::to_value(manifest)?;
+    result["contents"] = serde_json::json!(ENTRIES);
+    result["sql_check"] = Value::from("pg_restore --list (no SQL executed)");
+    Ok(result)
 }
 
 fn to_json(value: &impl Serialize) -> Result<Vec<u8>, Error> {
@@ -837,6 +984,126 @@ fn database_name(env: &[(&'static str, String)]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn verify_checks_checksum_decryption_manifest_and_pg_dump_without_writing_database(
+        pool: PgPool,
+    ) {
+        let work = WorkDir::create(&std::env::temp_dir(), "panel-verify-test").unwrap();
+        let base = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://rudder:rudder@localhost:5432/rudder".into());
+        let mut url = url::Url::parse(&base).unwrap();
+        url.set_path(pool.connect_options().get_database().unwrap());
+        let config = Config::from_map(
+            &std::collections::HashMap::from([
+                ("DATABASE_URL".into(), url.to_string()),
+                ("RUDDER_MASTER_KEY".into(), "ab".repeat(32)),
+                ("RUDDER_DATA_DIR".into(), work.path.display().to_string()),
+            ]),
+            |_| unreachable!(),
+        )
+        .unwrap();
+        let archive = archive(&pool, &config, false).await.unwrap();
+        let passphrase = "verification-test-passphrase";
+        let sealed = seal(archive, passphrase)
+            .unwrap()
+            .try_fold(Vec::new(), |mut out, chunk| async move {
+                out.extend_from_slice(&chunk);
+                Ok(out)
+            })
+            .await
+            .unwrap();
+        let stream = |data: Vec<u8>| -> ByteStream {
+            Box::pin(futures_util::stream::once(async move {
+                Ok(bytes::Bytes::from(data))
+            }))
+        };
+        let checksum = pipeline::sha256_of(stream(sealed.clone())).await.unwrap().0;
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM _sqlx_migrations")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let result = verify_backup(
+            stream(sealed.clone()),
+            &checksum,
+            Compression::Zstd,
+            Some(passphrase),
+            false,
+            &config,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["format"], FORMAT);
+        assert_eq!(result["contents"], serde_json::json!(ENTRIES));
+        assert_eq!(result["sql_check"], "pg_restore --list (no SQL executed)");
+        let after: i64 = sqlx::query_scalar("SELECT count(*) FROM _sqlx_migrations")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, after);
+        assert!(verify_backup(
+            stream(sealed.clone()),
+            &"0".repeat(64),
+            Compression::Zstd,
+            Some(passphrase),
+            false,
+            &config
+        )
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("checksum"));
+        assert!(verify_backup(
+            stream(sealed.clone()),
+            &checksum,
+            Compression::Zstd,
+            Some("wrong-password"),
+            false,
+            &config
+        )
+        .await
+        .is_err());
+        let mut corrupt = sealed.clone();
+        corrupt.truncate(corrupt.len() / 2);
+        let corrupt_sum = pipeline::sha256_of(stream(corrupt.clone()))
+            .await
+            .unwrap()
+            .0;
+        assert!(verify_backup(
+            stream(corrupt),
+            &corrupt_sum,
+            Compression::Zstd,
+            Some(passphrase),
+            false,
+            &config
+        )
+        .await
+        .is_err());
+        assert!(verify_backup(
+            stream(Vec::new()),
+            &checksum,
+            Compression::Zstd,
+            Some(passphrase),
+            false,
+            &config
+        )
+        .await
+        .is_err());
+        let mut plain = pipeline::decrypt(stream(sealed), passphrase)
+            .try_fold(Vec::new(), |mut out, c| async move {
+                out.extend_from_slice(&c);
+                Ok(out)
+            })
+            .await
+            .unwrap();
+        plain[0] ^= 0xff;
+        let sum = pipeline::sha256_of(stream(plain.clone())).await.unwrap().0;
+        assert!(
+            verify_backup(stream(plain), &sum, Compression::Zstd, None, false, &config)
+                .await
+                .is_err()
+        );
+    }
     use serde_json::json;
 
     #[test]

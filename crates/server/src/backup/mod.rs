@@ -65,6 +65,7 @@ pub struct Job {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RunMeta {
+    pub panel_manifest: Option<Value>,
     pub target_kind: String,
     pub engine: Option<String>,
     pub dump_all: bool,
@@ -482,12 +483,20 @@ async fn prepare(
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
             log.line("dumping the panel database with pg_dump");
-            let stream = crate::panel::archive(&state.pool, &state.config, include_history)
-                .await
-                .map_err(core_error)?;
+            let (stream, manifest) =
+                crate::panel::archive_with_manifest(&state.pool, &state.config, include_history)
+                    .await
+                    .map_err(core_error)?;
+            let mut captured = serde_json::to_value(manifest)
+                .map_err(|_| bad("invalid", "could not record panel manifest"))?;
+            captured["contents"] = json!(crate::panel::ENTRIES);
+            meta.panel_manifest = Some(captured);
             (stream, ".tar")
         } else {
             let export = crate::panel::settings_export(&state.pool).await?;
+            meta.panel_manifest = Some(
+                json!({"format":export["format"],"version":export["version"],"rudder_version":export["rudder_version"],"created_at":export["exported_at"],"contents":["settings.json"]}),
+            );
             let bytes = serde_json::to_vec_pretty(&export)
                 .map_err(|_| bad("invalid", "could not serialize the settings export"))?;
             (
@@ -1537,6 +1546,7 @@ pub async fn schedule_once(state: &AppState) -> Result<usize, sqlx::Error> {
             Err(error) => tracing::warn!(job_id = %row.id, %error, "backup schedule is invalid"),
         }
     }
+    crate::routes::panel_backups::monitor(state).await?;
     Ok(started)
 }
 
