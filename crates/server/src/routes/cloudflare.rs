@@ -36,6 +36,18 @@ pub fn router() -> axum::Router<AppState> {
             post(create_tunnel).delete(remove_tunnel),
         )
         .route("/api/v1/cloudflare/tunnel/replicas", put(set_replicas))
+        .route(
+            "/api/v1/cloudflare/tunnel/status",
+            get(crate::tunnel::status),
+        )
+        .route(
+            "/api/v1/cloudflare/tunnel/check",
+            post(crate::tunnel::check),
+        )
+        .route(
+            "/api/v1/cloudflare/tunnel/update",
+            post(crate::tunnel_update::update),
+        )
         .route("/api/v1/cloudflare/tunnel/publish", post(publish))
         .route("/api/v1/cloudflare/access", put(setup_access))
         .route(
@@ -186,6 +198,7 @@ async fn save_credentials(
     Json(request): Json<SaveCredentials>,
 ) -> Result<Json<CloudflareStatus>, ApiError> {
     auth.require_write()?;
+    let _guard = crate::tunnel::lock(&state).await?;
     let account_id = request.account_id.trim().to_ascii_lowercase();
     let zone_id = request.zone_id.trim().to_ascii_lowercase();
     validate_cloudflare_id("account id", &account_id).map_err(core_error)?;
@@ -253,6 +266,7 @@ async fn create_tunnel(
     Json(request): Json<CreateTunnel>,
 ) -> Result<(StatusCode, Json<CloudflareStatus>), ApiError> {
     auth.require_write()?;
+    let _guard = crate::tunnel::lock(&state).await?;
     let replicas = validate_replicas(request.replicas.unwrap_or(2)).map_err(core_error)?;
     let settings = cf::load(&state.pool).await?;
     if settings.tunnel_id.is_some() {
@@ -312,6 +326,7 @@ async fn set_replicas(
     Json(request): Json<SetReplicas>,
 ) -> Result<Json<CloudflareStatus>, ApiError> {
     auth.require_write()?;
+    let _guard = crate::tunnel::lock(&state).await?;
     let replicas = validate_replicas(request.replicas).map_err(core_error)?;
     let settings = cf::load(&state.pool).await?;
     cf::require_tunnel(&settings)?;
@@ -376,6 +391,7 @@ async fn remove_tunnel(
     auth: AuthUser,
 ) -> Result<Json<TeardownReport>, ApiError> {
     auth.require_write()?;
+    let _guard = crate::tunnel::lock(&state).await?;
     let settings = cf::load(&state.pool).await?;
     let tunnel_id = cf::require_tunnel(&settings)?.to_owned();
     let mut report = TeardownReport {

@@ -1064,6 +1064,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cloudflare/tunnel/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh the cached stable cloudflared release from GitHub (admin, write) */
+        post: operations["post_v1_cloudflare_tunnel_check"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cloudflare/tunnel/publish": {
         parameters: {
             query?: never;
@@ -1092,6 +1109,40 @@ export interface paths {
         /** Set the number of tunnel replicas, 1 to 5 (admin, write) */
         put: operations["put_v1_cloudflare_tunnel_replicas"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/tunnel/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect Cloudflare connections, local replicas, versions and rolling update progress (admin) */
+        get: operations["get_v1_cloudflare_tunnel_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/tunnel/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Roll tunnel connectors one at a time using a registered surge (admin, write) */
+        post: operations["post_v1_cloudflare_tunnel_update"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4169,6 +4220,11 @@ export interface components {
             zone_id: string;
             zone_name: string;
         };
+        CloudflaredRelease: {
+            html_url?: string | null;
+            published_at?: string | null;
+            version: string;
+        };
         CompleteGithubApp: {
             code: string;
             state: string;
@@ -5995,6 +6051,58 @@ export interface components {
             otpauth_url: string;
             secret: string;
         };
+        TunnelConnection: {
+            colo?: string | null;
+            connection_id?: string | null;
+            connector_id: string;
+            healthy: boolean;
+            opened_at?: string | null;
+            origin_ip?: string | null;
+            version?: string | null;
+        };
+        TunnelReplica: {
+            digest?: string | null;
+            id: string;
+            image: string;
+            name: string;
+            /** Format: int64 */
+            restarts: number;
+            state: string;
+            /** Format: int64 */
+            uptime_seconds?: number | null;
+            version?: string | null;
+        };
+        TunnelStatus: {
+            check_error?: string | null;
+            /** Format: date-time */
+            checked_at?: string | null;
+            connection_error?: string | null;
+            connections: components["schemas"]["TunnelConnection"][];
+            image_overridden: boolean;
+            latest_release?: components["schemas"]["CloudflaredRelease"] | null;
+            pinned_version?: string | null;
+            replica_error?: string | null;
+            replicas: components["schemas"]["TunnelReplica"][];
+            tunnel_id?: string | null;
+            update?: components["schemas"]["TunnelUpdateProgress"] | null;
+            update_available: boolean;
+        };
+        TunnelUpdateProgress: {
+            /** Format: int32 */
+            completed: number;
+            /** Format: date-time */
+            finished_at?: string | null;
+            image: string;
+            message?: string | null;
+            /** Format: int32 */
+            replica?: number | null;
+            /** Format: date-time */
+            started_at: string;
+            status: string;
+            /** Format: int32 */
+            total: number;
+            version: string;
+        };
         UpdateAccessSettings: {
             clear_portal_host?: boolean | null;
             cloudflare_account_id?: string | null;
@@ -6210,6 +6318,9 @@ export interface components {
         UpdateStarted: {
             /** Format: uuid */
             history_id: string;
+        };
+        UpdateTunnel: {
+            version?: string | null;
         };
         UpdateUser: {
             role: string;
@@ -8018,6 +8129,26 @@ export interface operations {
             };
         };
     };
+    post_v1_cloudflare_tunnel_check: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Refresh the cached stable cloudflared release from GitHub (admin, write) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TunnelStatus"];
+                };
+            };
+        };
+    };
     post_v1_cloudflare_tunnel_publish: {
         parameters: {
             query?: never;
@@ -8062,6 +8193,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CloudflareStatus"];
+                };
+            };
+        };
+    };
+    get_v1_cloudflare_tunnel_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Inspect Cloudflare connections, local replicas, versions and rolling update progress (admin) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TunnelStatus"];
+                };
+            };
+        };
+    };
+    post_v1_cloudflare_tunnel_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["UpdateTunnel"];
+            };
+        };
+        responses: {
+            /** @description Roll tunnel connectors one at a time using a registered surge (admin, write) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TunnelUpdateProgress"];
                 };
             };
         };

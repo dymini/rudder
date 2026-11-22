@@ -40,6 +40,8 @@ mod stacks;
 mod state;
 pub mod telemetry;
 mod templates;
+mod tunnel;
+mod tunnel_update;
 mod update;
 
 use anyhow::Context;

@@ -30,6 +30,7 @@ const CA_KEY: &str =
 #[derive(Default)]
 struct Fake {
     fail_config: bool,
+    fail_releases: bool,
     dns: Vec<Value>,
     configs: Vec<Value>,
     apps: HashMap<String, Value>,
@@ -56,6 +57,9 @@ async fn authenticate(State(fake): State<Shared>, request: AxumRequest, next: Ne
         .to_owned();
     let path = request.uri().path().to_owned();
     record(&fake, format!("{} {}", request.method(), path));
+    if path.starts_with("/repos/cloudflare/cloudflared/") {
+        return next.run(request).await;
+    }
     if header == "Bearer denied" && path.contains("/cfd_tunnel") {
         return (
             StatusCode::FORBIDDEN,
@@ -117,6 +121,23 @@ async fn connections() -> Json<Value> {
 
 async fn nothing() -> Json<Value> {
     ok(Value::Null)
+}
+
+async fn releases(State(fake): State<Shared>) -> (StatusCode, Json<Value>) {
+    if fake.lock().unwrap().fail_releases {
+        return (
+            StatusCode::BAD_GATEWAY,
+            Json(json!({"message":"upstream unavailable"})),
+        );
+    }
+    (
+        StatusCode::OK,
+        Json(json!([
+            {"tag_name":"2026.9.0"},
+            {"tag_name":"2026.11.0", "html_url":"https://github.com/cloudflare/cloudflared/releases/tag/2026.11.0"},
+            {"tag_name":"2027.1.0", "prerelease":true}
+        ])),
+    )
 }
 
 async fn list_dns(
@@ -289,6 +310,7 @@ async fn fake_cloudflare() -> (String, Shared) {
             get(empty_list).post(create_tunnel),
         )
         .route("/accounts/{account}/cfd_tunnel/{id}", delete(nothing))
+        .route("/repos/cloudflare/cloudflared/releases", get(releases))
         .route(
             "/accounts/{account}/cfd_tunnel/{id}/token",
             get(tunnel_token),
@@ -351,6 +373,7 @@ fn app(pool: PgPool, data_dir: &std::path::Path, cloudflare: &str) -> axum::Rout
         ("RUDDER_COOKIE_SECURE".into(), "false".into()),
         ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
         ("RUDDER_CLOUDFLARE_API_URL".into(), cloudflare.to_owned()),
+        ("RUDDER_GITHUB_API_URL".into(), cloudflare.to_owned()),
         // These assertions describe a host without Docker, even when one is running.
         (
             "RUDDER_DOCKER_SOCKET".into(),
@@ -452,6 +475,164 @@ fn scratch_dir() -> std::path::PathBuf {
 
 fn calls(fake: &Shared) -> Vec<String> {
     fake.lock().unwrap().calls.clone()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn connector_status_caches_versions_and_serializes_updates(pool: PgPool) {
+    let (cloudflare, fake) = fake_cloudflare().await;
+    let data_dir = scratch_dir();
+    let app = app(pool.clone(), &data_dir, &cloudflare);
+    let session = owner(&app).await;
+    let status = call(
+        &app,
+        "GET",
+        "/api/v1/cloudflare/tunnel/status",
+        &session,
+        None,
+    )
+    .await;
+    assert_eq!(status.status, StatusCode::OK, "{}", status.body);
+    assert_eq!(status.body["connections"], json!([]));
+    assert_eq!(status.body["replicas"], json!([]));
+    assert_eq!(status.body["update_available"], false);
+    assert_eq!(status.body["latest_release"]["version"], "2026.11.0");
+    assert!(status.body["replica_error"].is_string());
+    call(
+        &app,
+        "GET",
+        "/api/v1/cloudflare/tunnel/status",
+        &session,
+        None,
+    )
+    .await;
+    assert_eq!(
+        calls(&fake)
+            .iter()
+            .filter(|s| s.contains("/repos/cloudflare/cloudflared/releases"))
+            .count(),
+        1
+    );
+    call(
+        &app,
+        "POST",
+        "/api/v1/cloudflare/tunnel/check",
+        &session,
+        None,
+    )
+    .await;
+    assert_eq!(
+        calls(&fake)
+            .iter()
+            .filter(|s| s.contains("/repos/cloudflare/cloudflared/releases"))
+            .count(),
+        2
+    );
+    fake.lock().unwrap().fail_releases = true;
+    let failed_check = call(
+        &app,
+        "POST",
+        "/api/v1/cloudflare/tunnel/check",
+        &session,
+        None,
+    )
+    .await;
+    assert!(failed_check.body["check_error"].is_string());
+    assert_eq!(failed_check.body["latest_release"]["version"], "2026.11.0");
+    fake.lock().unwrap().fail_releases = false;
+    let credentials = call(
+        &app,
+        "PUT",
+        "/api/v1/cloudflare/credentials",
+        &session,
+        Some(json!({"account_id":ACCOUNT,"zone_id":ZONE,"api_token":TOKEN})),
+    )
+    .await;
+    assert_eq!(credentials.status, StatusCode::OK, "{}", credentials.body);
+    let created = call(
+        &app,
+        "POST",
+        "/api/v1/cloudflare/tunnel",
+        &session,
+        Some(json!({"replicas":1})),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    let status = call(
+        &app,
+        "GET",
+        "/api/v1/cloudflare/tunnel/status",
+        &session,
+        None,
+    )
+    .await;
+    assert_eq!(status.body["connections"].as_array().unwrap().len(), 2);
+    assert_eq!(status.body["pinned_version"], "2026.11.0");
+    assert!(!status.body.to_string().contains(TOKEN));
+    let invalid = call(
+        &app,
+        "POST",
+        "/api/v1/cloudflare/tunnel/update",
+        &session,
+        Some(json!({"version":"latest"})),
+    )
+    .await;
+    assert_eq!(invalid.status, StatusCode::BAD_REQUEST);
+    let mut guard = pool.begin().await.unwrap();
+    sqlx::query("SELECT pg_advisory_xact_lock(77302461)")
+        .execute(&mut *guard)
+        .await
+        .unwrap();
+    let busy = call(
+        &app,
+        "POST",
+        "/api/v1/cloudflare/tunnel/update",
+        &session,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(busy.status, StatusCode::CONFLICT);
+    let scale = call(
+        &app,
+        "PUT",
+        "/api/v1/cloudflare/tunnel/replicas",
+        &session,
+        Some(json!({"replicas":2})),
+    )
+    .await;
+    assert_eq!(scale.status, StatusCode::CONFLICT);
+    guard.rollback().await.unwrap();
+    let accepted = call(
+        &app,
+        "POST",
+        "/api/v1/cloudflare/tunnel/update",
+        &session,
+        Some(json!({"version":"2026.10.0"})),
+    )
+    .await;
+    assert_eq!(accepted.status, StatusCode::ACCEPTED, "{}", accepted.body);
+    let mut done = false;
+    for _ in 0..30 {
+        let status = call(
+            &app,
+            "GET",
+            "/api/v1/cloudflare/tunnel/status",
+            &session,
+            None,
+        )
+        .await;
+        if status.body["update"]["status"] == "failed" {
+            assert_eq!(status.body["pinned_version"], "2026.11.0");
+            assert_eq!(status.body["update"]["completed"], 0);
+            done = true;
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    assert!(
+        done,
+        "Docker-less update must report a failure, without changing the pin"
+    );
+    std::fs::remove_dir_all(data_dir).unwrap();
 }
 
 #[sqlx::test(migrations = "./migrations")]

@@ -15,6 +15,7 @@ import {
 } from "../components/ui";
 import { useT } from "../i18n";
 import type { Schemas } from "../types";
+import { TunnelManagement } from "../components/tunnel-management";
 
 type Status = Schemas["CloudflareStatus"];
 
@@ -164,6 +165,7 @@ function Account({ status }: { status: Status }) {
 
 function Tunnel({ status }: { status: Status }) {
   const t = useT();
+  const [updating, setUpdating] = useState(false);
   const [replicas, setReplicas] = useState(String(status.replicas));
   const options = Array.from({ length: status.max_replicas }, (_, index) => index + 1);
   const create = useSave(
@@ -247,7 +249,7 @@ function Tunnel({ status }: { status: Status }) {
           <div className="grid items-end gap-3 md:grid-cols-3">
             {picker}
             <div>
-              <Button quiet disabled={scale.isPending} onClick={() => scale.mutate(undefined)}>
+              <Button quiet disabled={scale.isPending || updating} onClick={() => scale.mutate(undefined)}>
                 {t("Apply")}
               </Button>
             </div>
@@ -255,7 +257,7 @@ function Tunnel({ status }: { status: Status }) {
           <div>
             <Button
               variant="danger"
-              disabled={remove.isPending}
+              disabled={remove.isPending || updating}
               onClick={() => {
                 if (
                   window.confirm(
@@ -271,6 +273,7 @@ function Tunnel({ status }: { status: Status }) {
               {t("Remove the tunnel")}
             </Button>
           </div>
+          <TunnelManagement onRunningChange={setUpdating} />
         </div>
       ) : (
         <div className="grid items-end gap-3 md:grid-cols-3">
