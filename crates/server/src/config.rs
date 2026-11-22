@@ -132,6 +132,7 @@ pub struct Config {
     pub cloudflare_api_url: String,
     /// Image the tunnel replicas run.
     pub cloudflared_image: String,
+    pub cloudflared_image_overridden: bool,
     /// Token first-run setup requires. `None` uses `setup-token` in the data directory.
     pub setup_token: Option<String>,
 }
@@ -357,6 +358,9 @@ impl Config {
             .cloned()
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| rudder_core::DEFAULT_CLOUDFLARED_IMAGE.to_owned());
+        let cloudflared_image_overridden = vars
+            .get("RUDDER_CLOUDFLARED_IMAGE")
+            .is_some_and(|v| !v.is_empty());
         let setup_token = vars
             .get("RUDDER_SETUP_TOKEN")
             .map(|v| v.trim().to_owned())
@@ -392,6 +396,7 @@ impl Config {
             google_userinfo_url,
             cloudflare_api_url,
             cloudflared_image,
+            cloudflared_image_overridden,
             setup_token,
         })
     }
