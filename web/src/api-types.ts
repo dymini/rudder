@@ -2382,6 +2382,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plugin-installs/{id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Enable or disable the manifest-managed Access policy; other paths stay protected */
+        put: operations["put_v1_plugin-installs__id__access"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/plugin-installs/{id}/backup": {
         parameters: {
             query?: never;
@@ -2393,6 +2410,23 @@ export interface paths {
         put?: never;
         /** Attach or replace a plugin volume backup job */
         post: operations["post_v1_plugin-installs__id__backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/plugin-installs/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop, safety-backup and restore plugin data; check health and roll back on failure */
+        post: operations["post_v1_plugin-installs__id__restore"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4011,6 +4045,7 @@ export interface components {
             rank_slug?: string | null;
         };
         AccessPolicyView: {
+            bypass_paths: string[];
             enabled: boolean;
             rules: components["schemas"]["AccessRuleView"][];
             token_configured: boolean;
@@ -5264,6 +5299,7 @@ export interface components {
             install_url: string;
         };
         InstallPlugin: {
+            access_enabled?: boolean | null;
             backup?: components["schemas"]["PluginBackup"] | null;
             name: string;
             /** Format: uuid */
@@ -5605,6 +5641,9 @@ export interface components {
         PauseBuilds: {
             paused: boolean;
         };
+        PluginAccessSettings: {
+            enabled: boolean;
+        };
         PluginBackup: {
             destination_ids: string[];
             /** Format: int32 */
@@ -5619,6 +5658,8 @@ export interface components {
             releases: components["schemas"]["PluginRelease"][];
         };
         PluginInstall: {
+            access_bypass_paths: string[];
+            access_enabled: boolean;
             /** Format: uuid */
             backup_job_id?: string | null;
             /** Format: date-time */
@@ -5634,6 +5675,8 @@ export interface components {
             latest_version?: string | null;
             pending_releases: components["schemas"]["PluginRelease"][];
             plugin: string;
+            /** Format: uuid */
+            safety_run_id?: string | null;
             /** Format: uuid */
             server_id: string;
             server_name: string;
@@ -5654,6 +5697,10 @@ export interface components {
             notes: string;
             published_at?: string | null;
             version: string;
+        };
+        PluginRestore: {
+            /** Format: uuid */
+            run_id: string;
         };
         PluginView: {
             compose: string;
@@ -5937,6 +5984,7 @@ export interface components {
             run_id: string;
         };
         SaveAccessPolicy: {
+            bypass_paths?: string[] | null;
             enabled: boolean;
             rules: components["schemas"]["RuleInput"][];
         };
@@ -10524,6 +10572,30 @@ export interface operations {
             };
         };
     };
+    "put_v1_plugin-installs__id__access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PluginAccessSettings"];
+            };
+        };
+        responses: {
+            /** @description Enable or disable the manifest-managed Access policy; other paths stay protected */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginInstall"];
+                };
+            };
+        };
+    };
     "post_v1_plugin-installs__id__backup": {
         parameters: {
             query?: never;
@@ -10539,6 +10611,30 @@ export interface operations {
         responses: {
             /** @description Attach or replace a plugin volume backup job */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginInstall"];
+                };
+            };
+        };
+    };
+    "post_v1_plugin-installs__id__restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PluginRestore"];
+            };
+        };
+        responses: {
+            /** @description Stop, safety-backup and restore plugin data; check health and roll back on failure */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

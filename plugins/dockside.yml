@@ -9,6 +9,23 @@ port: 7420
 image_variable: PLUGIN_IMAGE
 data_volume: data
 health_path: /v1/health
+health_command: [sh, -c, 'curl -fsS -H "Authorization: Bearer $DOCKSIDE_AUTH_TOKEN" http://127.0.0.1:7420/v1/health >/dev/null']
+access:
+  bypass_paths:
+    - path: /v1/blobs
+    - path: /v1/revisions
+    - path: /v1/import
+    - path: /v1/changesets
+    - path: /v1/leases
+    - path: /v1/sequences
+    - path: /v1/deployments
+    - path: /v1/releases
+    - path: /v1/rollbacks
+    - path: /v1/health
+      minimum_version: 0.2.2
+backup:
+  minimum_version: 0.2.2
+  pre_hook: [dockside-server, checkpoint]
 notes: Back up /data before updates. Edit configuration later in the stack Environment tab; DOCKSIDE_CONFIG_B64 must contain base64-encoded dockside.toml.
 variables:
   - name: PLUGIN_IMAGE
@@ -88,7 +105,7 @@ compose: |
         CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
       volumes: [data:/data]
       healthcheck:
-        test: [CMD-SHELL, 'curl -fsS http://127.0.0.1:7420/v1/health || exit 1']
+        test: [CMD-SHELL, 'curl -fsS -H "Authorization: Bearer $$DOCKSIDE_AUTH_TOKEN" http://127.0.0.1:7420/v1/health || exit 1']
         interval: 30s
         timeout: 5s
         retries: 3

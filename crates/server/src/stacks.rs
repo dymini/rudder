@@ -725,6 +725,7 @@ pub async fn start_action_with_image(
     image_ref: Option<&str>,
 ) -> Result<DeploymentView, ApiError> {
     let stack = load(state, id).await?;
+    crate::routes::plugins::protect_stack_action(state, id, trigger).await?;
     if stack.spec.project.is_empty() {
         return Err(conflict("not_configured", "save a compose file first"));
     }

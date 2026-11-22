@@ -90,7 +90,8 @@ use crate::routes::monitoring::{
 };
 use crate::routes::panel_ssl::PanelSslCheck;
 use crate::routes::plugins::{
-    InstallPlugin, PluginBackup, PluginInstall, PluginInstalled, PluginView, UpdatePlugin,
+    InstallPlugin, PluginAccessSettings, PluginBackup, PluginInstall, PluginInstalled,
+    PluginRestore, PluginView, UpdatePlugin,
 };
 use crate::routes::security::{
     BlockView, EdgeStats, RateLimitStat, RateLimitView, SaveRateLimit, SecurityFindingView,
@@ -264,6 +265,8 @@ use crate::routes::mfa::{
         PluginInstall,
         PluginInstalled,
         PluginBackup,
+        PluginAccessSettings,
+        PluginRestore,
         InstallPlugin,
         UpdatePlugin,
         AccessPublic,
@@ -1560,6 +1563,24 @@ pub(crate) const ROUTES: &[Route] = &[
         request: Some("PluginBackup"),
         response: Some("PluginInstall"),
         status: 200,
+    },
+    Route {
+        path: "/api/v1/plugin-installs/{id}/access",
+        method: HttpMethod::Put,
+        tag: "stacks",
+        summary: "Enable or disable the manifest-managed Access policy; other paths stay protected",
+        request: Some("PluginAccessSettings"),
+        response: Some("PluginInstall"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/plugin-installs/{id}/restore",
+        method: HttpMethod::Post,
+        tag: "backups",
+        summary: "Stop, safety-backup and restore plugin data; check health and roll back on failure",
+        request: Some("PluginRestore"),
+        response: Some("PluginInstall"),
+        status: 202,
     },
     Route {
         path: "/api/v1/templates/{slug}",

@@ -1,5 +1,81 @@
 # Plugins
 
+## Dashboard protection and agent paths
+
+Dockside plugin installs default to **Rudder Access enabled**. The plugin settings
+drawer includes a protection toggle. Configure Access sign-in (portal, Turnstile,
+and email or Google) before opening the dashboard. New policies allow only the
+original panel owner's email and create that Access identity if absent; they do
+not make the identity an Access administrator or unblock a blocked identity.
+Existing policies retain their people/department/rank rules. Updates synchronize
+the manifest's path bypasses and the saved toggle, including older installs.
+An offline server cannot apply proxy changes until connected; API errors report
+publication failure rather than pretending the live proxy was updated. A stopped
+offline install can store its policy; protection is published before starting it.
+
+The manifest `access.bypass_paths` is a list of `{path, minimum_version?}` entries.
+Every other path, including `/`, unknown future paths and `/v1/queue/drain`, stays
+behind Access. This is a general service-policy capability, not an edge-gate
+Dockside exception. `PUT /api/v1/access/services/{id}` accepts an optional
+`bypass_paths` array; omitting it preserves existing bypasses. Prefixes match
+complete path segments, never lookalike names, encoded paths or dot segments.
+Shared hostnames bypass only when every enabled Access policy agrees. Use a
+dedicated hostname for a plugin, and do not expose its container port directly.
+Edge security/rate limits still apply to bypassed requests.
+
+**Paths bypassing Access:** `/v1/blobs`, `/v1/revisions`, `/v1/import`,
+`/v1/changesets`, `/v1/leases`, `/v1/sequences`, `/v1/deployments`, `/v1/releases`,
+and `/v1/rollbacks`, including their subpaths. They still require
+`DOCKSIDE_AUTH_TOKEN`. `/v1/health` and subpaths join that list only on Dockside
+**0.2.2 or later**, where health also requires the bearer token. Older Dockside
+health checks remain Access-protected externally; run CLI health internally or
+upgrade for external CLI health. No dashboard/UI path bypasses Access. With the
+toggle off, dashboard HTML becomes public again; API bearer authentication does
+not change. Descriptor images stay digest-pinned, and the maintenance changes do
+not publish a Dockside release automatically: release/tag 0.2.2 before selecting it.
+
+## Backup management and recovery
+
+Plugin settings show **all jobs attached to the install's service**, including
+disabled/replaced jobs and restore safety jobs. Each includes destinations,
+schedule/timezone, retention and recent runs with size, duration, status and logs.
+Run now, edit schedule/keep-last (preserving other retention settings), or load
+more history. General backup APIs provide these operations under `backups`;
+the plugin Access toggle uses `stacks`. All are MCP tools.
+
+Normal Dockside backups stop the service for the entire volume copy. On 0.2.2+,
+the manifest's versioned `backup.pre_hook` runs `dockside-server checkpoint`
+first. It flushes WAL and fails on a busy checkpoint; the subsequent stop is
+still essential. Older versions use a cold whole-volume copy, including WAL/SHM.
+The metadata database and CAS must be copied together. Hooks are skipped for an
+already stopped service; it remains stopped afterward.
+
+`POST /api/v1/plugin-installs/{id}/restore` with `{"run_id":"…"}` accepts a
+successful/partial volume backup of **this install's data volume**. It returns
+202 and the install's `restoring` status; poll the plugin catalog for progress,
+`last_error`, and `safety_run_id`. Service-targeted generic restores reject plugin
+targets so the normal UI/API cannot accidentally skip safety orchestration.
+
+1. Claim the install and stop the container. Plugin backups/updates are serialized.
+2. Create a separate, disabled, unfiltered full-volume safety job using the source
+   job's destinations and encryption. Require its backup to succeed before writing.
+   Its independent retention does not prune the selected source run.
+3. Clear the stopped data volume, including stale SQLite side files, and restore
+   the selected archive. Extraction is replacement, not an overlay.
+4. Start and health-check using an in-container bearer-authenticated probe.
+5. On restore/start/health failure, stop, clear, restore the safety run, start and
+   check health again. `rolled_back` and the reason remain visible. If rollback
+   also fails, the error identifies the safety run for operator recovery.
+
+Safety jobs remain disabled and their run stays available for manual management;
+they are not scheduled or automatically deleted with another job's retention.
+If a backup/restore is still active or its completion cannot be established,
+Rudder refuses to clear or restart concurrently. Background orchestration runs in
+the panel process: a panel crash requires operator recovery from the retained
+safety run rather than promising crash-resumable transactions. Avoid deployment,
+manual container actions or direct volume writes during recovery. Real Docker,
+S3 and Access-provider connectivity must be verified in your deployment.
+
 Plugins are curated compose stacks whose images are pinned to verified GitHub release
 descriptors. **Deploy → Plugins → Dockside → Check for updates → Install** is the first
 supported integration. Multiple installations of the same plugin are allowed, including

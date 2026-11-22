@@ -9,6 +9,8 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Added
+- **Protect plugin dashboards automatically.** Dockside installs and updates enable Rudder Access by default, preserving existing allow rules and bypassing only declared bearer-authenticated agent API prefixes. Plugin settings can disable protection; Access sign-in must be configured first. Older Dockside releases keep health behind Access until 0.2.2 adds bearer authentication there.
+- **Manage and safely restore plugin backups.** Plugin settings show attached jobs, destinations, schedules, retention, run sizes, durations and logs, with run-now and schedule/retention editing. Restores stop the service, save a separate full safety copy, replace the data volume, restart and health-check; failures automatically restore the safety copy. Dockside 0.2.2 adds a checkpoint pre-hook before normal stopped-service backups.
 - **Manage MFA from Account.** New passkey and email controls share a security-change confirmation form, and sign-in offers email codes, passkey verification, or discoverable passkey sign-in, with Vietnamese translations.
 - **Secure your account with passkeys or email codes.** Register and name several passkeys, use one as your second factor or sign in without a password, and opt into email verification using the existing Access mail provider. Security-method removal requires your password and a current factor.
 - **Explore the Statistics dashboard.** A new page near Monitoring provides range controls, traffic and resource charts, operational KPIs, linked service rankings, and backup and disk summaries in a mobile-friendly layout, including Vietnamese translations.

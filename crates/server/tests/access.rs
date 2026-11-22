@@ -279,11 +279,59 @@ async fn access_blocks_unknown_people_and_limits_a_host(pool: PgPool) {
         Some(csrf),
         Some(json!({
             "enabled": true,
+            "bypass_paths": ["/v1/blobs"],
             "rules": [{ "kind": "email", "email": "accountant@example.com" }]
         })),
     )
     .await;
     assert_eq!(policy.status, StatusCode::OK, "{}", policy.body);
+    let domain: uuid::Uuid = sqlx::query_scalar("INSERT INTO domains(service_id,host,target_port,ssl_mode) VALUES($1,'invoices.example.com',80,'none') RETURNING id")
+        .bind(uuid::Uuid::parse_str(service_id).unwrap()).fetch_one(&pool).await.unwrap();
+    let path_app = rudder_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
+    let secret = gate_secret(&pool).await;
+    for path in ["/v1/blobs", "/v1/blobs/abc?download=1"] {
+        assert_eq!(
+            gate_path(&path_app, &secret, "", path).await,
+            StatusCode::OK
+        );
+    }
+    for path in [
+        "/",
+        "/dashboard",
+        "/v1/blobs-extra",
+        "/v1/blobs/%2e%2e/admin",
+    ] {
+        assert_ne!(
+            gate_path(&path_app, &secret, "", path).await,
+            StatusCode::OK,
+            "{path}"
+        );
+    }
+    let invalid = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/access/services/{service_id}"),
+        Some(&panel_cookie),
+        Some(csrf),
+        Some(json!({"enabled":true,"bypass_paths":["/"],"rules":[]})),
+    )
+    .await;
+    assert_eq!(invalid.status, StatusCode::BAD_REQUEST);
+    let preserved = call(
+        &app,
+        "GET",
+        &format!("/api/v1/access/services/{service_id}"),
+        Some(&panel_cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(preserved.body["bypass_paths"], json!(["/v1/blobs"]));
+    sqlx::query("DELETE FROM domains WHERE id=$1")
+        .bind(domain)
+        .execute(&pool)
+        .await
+        .unwrap();
 
     let apps = call(
         &app,
@@ -347,10 +395,14 @@ async fn access_blocks_unknown_people_and_limits_a_host(pool: PgPool) {
 }
 
 async fn gate(app: &axum::Router, secret: &str, cookie: &str) -> StatusCode {
+    gate_path(app, secret, cookie, "/").await
+}
+
+async fn gate_path(app: &axum::Router, secret: &str, cookie: &str, path: &str) -> StatusCode {
     let request = Request::builder()
         .uri(format!("/api/v1/edge/gate?k={secret}"))
         .header("x-forwarded-host", "invoices.example.com")
-        .header("x-forwarded-uri", "/")
+        .header("x-forwarded-uri", path)
         .header("x-forwarded-method", "GET")
         .header("x-forwarded-for", "203.0.113.8")
         .header("cookie", cookie)

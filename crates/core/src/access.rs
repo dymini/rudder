@@ -7,6 +7,36 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
+pub fn validate_access_path(path: &str) -> Result<(), crate::Error> {
+    if path.len() > 1
+        && path.len() <= 512
+        && path.starts_with('/')
+        && !path.ends_with('/')
+        && !path.contains("//")
+        && path
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"/-_.".contains(&b))
+        && !path.split('/').any(|p| p == "." || p == "..")
+    {
+        Ok(())
+    } else {
+        Err(crate::Error::Validation("Access bypass paths must be absolute paths of 2 to 512 ASCII letters, digits, /, -, _ or ., without trailing/repeated slashes or dot segments; / cannot bypass Access.".into()))
+    }
+}
+
+pub fn access_path_bypasses(path: &str, prefixes: &[String]) -> bool {
+    if path.contains("//") || validate_access_path(path.trim_end_matches('/')).is_err() {
+        return false;
+    }
+    prefixes.iter().any(|prefix| {
+        validate_access_path(prefix).is_ok()
+            && (path == prefix
+                || path
+                    .strip_prefix(prefix)
+                    .is_some_and(|tail| tail.starts_with('/')))
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Membership {
     pub department: String,
@@ -168,6 +198,38 @@ pub const ACCESS_LOGIN_ACTION: &str = "access_login";
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn path_bypass_is_segment_scoped_and_fails_closed() {
+        let paths = vec!["/v1/blobs".into()];
+        for path in ["/v1/blobs", "/v1/blobs/abc", "/v1/blobs/"] {
+            assert!(access_path_bypasses(path, &paths), "{path}");
+        }
+        for path in [
+            "/",
+            "",
+            "/v1/blobs-extra",
+            "/v1/blobs/../admin",
+            "/v1/blobs/%2e%2e/admin",
+            "/v1/blobs//admin",
+            "/v1/blobs\\admin",
+            "/v1/health",
+            "/v1/blobs?next=/",
+        ] {
+            assert!(!access_path_bypasses(path, &paths), "{path}");
+        }
+        assert!(!access_path_bypasses("/v1/blobs", &[]));
+        for path in [
+            "/",
+            "v1/blobs",
+            "/v1/blobs/",
+            "/v1//blobs",
+            "/v1/../admin",
+            "/v1/%2fadmin",
+        ] {
+            assert!(validate_access_path(path).is_err(), "{path}");
+        }
+    }
     use serde_json::json;
 
     fn closure() -> BTreeMap<String, BTreeSet<String>> {

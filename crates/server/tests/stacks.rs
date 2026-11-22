@@ -281,6 +281,28 @@ async fn plugin_catalog_install_and_update_without_docker(pool: PgPool) {
     );
     let id = installed["install"]["id"].as_str().unwrap();
     let service = installed["service"]["id"].as_str().unwrap();
+    assert_eq!(installed["install"]["access_enabled"], true);
+    let policy = client
+        .ok("GET", &format!("/api/v1/access/services/{service}"), None)
+        .await;
+    assert_eq!(policy["enabled"], true);
+    assert_eq!(policy["rules"][0]["email"], "owner@example.com");
+    assert!(policy["bypass_paths"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("/v1/blobs")));
+    assert!(!policy["bypass_paths"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("/v1/health")));
+    client
+        .expect(
+            StatusCode::NOT_FOUND,
+            "POST",
+            &format!("/api/v1/plugin-installs/{id}/restore"),
+            Some(json!({"run_id":uuid::Uuid::new_v4()})),
+        )
+        .await;
     let env = client
         .ok("GET", &format!("/api/v1/services/{service}/env"), None)
         .await;
@@ -311,8 +333,7 @@ async fn plugin_catalog_install_and_update_without_docker(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    // An explicit reinstall is allowed. The offline remote refuses deploy and rollback;
-    // the recorded version stays unchanged and the old encrypted image is restored.
+    // Access must publish before deploying an update; an offline remote fails closed.
     client
         .expect(
             StatusCode::ACCEPTED,
@@ -334,7 +355,7 @@ async fn plugin_catalog_install_and_update_without_docker(pool: PgPool) {
     assert!(detail["installs"][0]["last_error"]
         .as_str()
         .unwrap()
-        .contains("rollback failed"));
+        .contains("not connected"));
     let second = client.ok("POST", &uri, Some(json!({"name":"dockside-two","server_id":server,"start":false,"values":{"DOMAIN":"dock2.example.com"}}))).await;
     assert_ne!(installed["install"]["id"], second["install"]["id"]);
     let invalid_backup = client
@@ -375,6 +396,66 @@ async fn plugin_catalog_install_and_update_without_docker(pool: PgPool) {
         job_view["target_spec"]["volume"],
         format!("{}_data", stack["project"].as_str().unwrap())
     );
+    let instance = uuid::Uuid::parse_str(id).unwrap();
+    let service_id = uuid::Uuid::parse_str(service).unwrap();
+    let source_run: uuid::Uuid = sqlx::query_scalar("INSERT INTO backup_runs (job_id,status,kind,trigger,object_keys,destination_ids,meta) VALUES ($1,'succeeded','backup','test',ARRAY['source.tar'],ARRAY[]::uuid[],$2) RETURNING id")
+        .bind(uuid::Uuid::parse_str(job).unwrap())
+        .bind(json!({"target_kind":"volume","source":{"kind":"volume","name":"unrelated-volume"}}))
+        .fetch_one(&pool).await.unwrap();
+    client
+        .expect(
+            StatusCode::BAD_REQUEST,
+            "POST",
+            &format!("/api/v1/plugin-installs/{id}/restore"),
+            Some(json!({"run_id":source_run})),
+        )
+        .await;
+    client
+        .expect(
+            StatusCode::CONFLICT,
+            "POST",
+            &format!("/api/v1/backup-runs/{source_run}/restore"),
+            Some(json!({"target_service_id":service_id})),
+        )
+        .await;
+    sqlx::query("UPDATE backup_runs SET meta=$2 WHERE id=$1").bind(source_run)
+        .bind(json!({"target_kind":"volume","source":{"kind":"volume","name":job_view["target_spec"]["volume"]}}))
+        .execute(&pool).await.unwrap();
+    // The correct source is recognized before the offline-agent preflight refuses it.
+    client
+        .expect(
+            StatusCode::CONFLICT,
+            "POST",
+            &format!("/api/v1/plugin-installs/{id}/restore"),
+            Some(json!({"run_id":source_run})),
+        )
+        .await;
+    sqlx::query("UPDATE plugin_installs SET status='restoring' WHERE id=$1")
+        .bind(instance)
+        .execute(&pool)
+        .await
+        .unwrap();
+    client
+        .expect(
+            StatusCode::CONFLICT,
+            "POST",
+            &format!("/api/v1/backup-jobs/{job}/run"),
+            None,
+        )
+        .await;
+    client
+        .expect(
+            StatusCode::CONFLICT,
+            "PUT",
+            &format!("/api/v1/plugin-installs/{id}/access"),
+            Some(json!({"enabled":false})),
+        )
+        .await;
+    sqlx::query("UPDATE plugin_installs SET status='installed' WHERE id=$1")
+        .bind(instance)
+        .execute(&pool)
+        .await
+        .unwrap();
     let replacement = client
         .ok(
             "POST",
@@ -408,7 +489,7 @@ async fn plugin_catalog_install_and_update_without_docker(pool: PgPool) {
     assert!(detail["installs"][0]["last_error"]
         .as_str()
         .unwrap()
-        .contains("before changing image"));
+        .contains("not connected"));
     sqlx::query("DELETE FROM services WHERE id=$1")
         .bind(uuid::Uuid::parse_str(service).unwrap())
         .execute(&pool)

@@ -3962,6 +3962,36 @@
         }
       }
     },
+    "/api/v1/plugin-installs/{id}/access": {
+      "put": {
+        "tags": [
+          "stacks"
+        ],
+        "summary": "Enable or disable the manifest-managed Access policy; other paths stay protected",
+        "operationId": "put_v1_plugin-installs__id__access",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginAccessSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Enable or disable the manifest-managed Access policy; other paths stay protected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginInstall"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/plugin-installs/{id}/backup": {
       "post": {
         "tags": [
@@ -3981,6 +4011,36 @@
         "responses": {
           "200": {
             "description": "Attach or replace a plugin volume backup job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginInstall"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plugin-installs/{id}/restore": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Stop, safety-backup and restore plugin data; check health and roll back on failure",
+        "operationId": "post_v1_plugin-installs__id__restore",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginRestore"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Stop, safety-backup and restore plugin data; check health and roll back on failure",
             "content": {
               "application/json": {
                 "schema": {
@@ -6872,10 +6932,17 @@
         "type": "object",
         "required": [
           "enabled",
+          "bypass_paths",
           "rules",
           "token_configured"
         ],
         "properties": {
+          "bypass_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "enabled": {
             "type": "boolean"
           },
@@ -10928,6 +10995,12 @@
           "server_id"
         ],
         "properties": {
+          "access_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "backup": {
             "oneOf": [
               {
@@ -12162,6 +12235,17 @@
           }
         }
       },
+      "PluginAccessSettings": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
       "PluginBackup": {
         "type": "object",
         "required": [
@@ -12237,11 +12321,22 @@
           "update_available",
           "pending_releases",
           "image",
+          "access_enabled",
+          "access_bypass_paths",
           "status",
           "created_at",
           "updated_at"
         ],
         "properties": {
+          "access_bypass_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "access_enabled": {
+            "type": "boolean"
+          },
           "backup_job_id": {
             "type": [
               "string",
@@ -12290,6 +12385,13 @@
           },
           "plugin": {
             "type": "string"
+          },
+          "safety_run_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
           },
           "server_id": {
             "type": "string",
@@ -12363,6 +12465,18 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "PluginRestore": {
+        "type": "object",
+        "required": [
+          "run_id"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
@@ -13206,6 +13320,15 @@
           "rules"
         ],
         "properties": {
+          "bypass_paths": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
           "enabled": {
             "type": "boolean"
           },

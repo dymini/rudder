@@ -13,6 +13,62 @@ pub struct Plugin {
     pub image_variable: String,
     pub data_volume: String,
     pub health_path: String,
+    #[serde(default)]
+    pub health_command: Vec<String>,
+    pub access: Option<PluginAccess>,
+    pub backup: Option<PluginBackupHook>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginAccess {
+    pub bypass_paths: Vec<PluginAccessPath>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginAccessPath {
+    pub path: String,
+    pub minimum_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginBackupHook {
+    pub minimum_version: String,
+    pub pre_hook: Vec<String>,
+}
+
+impl Plugin {
+    pub fn access_paths(&self, version: &str) -> Vec<String> {
+        self.access
+            .as_ref()
+            .map(|a| {
+                a.bypass_paths
+                    .iter()
+                    .filter(|p| {
+                        p.minimum_version.as_ref().is_none_or(|min| {
+                            match (parse_version(version), parse_version(min)) {
+                                (Ok(version), Ok(min)) => version >= min,
+                                _ => false,
+                            }
+                        })
+                    })
+                    .map(|p| p.path.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn backup_hook(&self, version: &str) -> Vec<String> {
+        self.backup
+            .as_ref()
+            .filter(
+                |hook| match (parse_version(version), parse_version(&hook.minimum_version)) {
+                    (Ok(version), Ok(min)) => version >= min,
+                    _ => false,
+                },
+            )
+            .map(|hook| hook.pre_hook.clone())
+            .unwrap_or_default()
+    }
 }
 
 fn descriptor_asset() -> String {
@@ -58,6 +114,25 @@ impl Plugin {
         }
         if !plugin.health_path.starts_with('/') || plugin.health_path.contains(['\r', '\n']) {
             return Err(Error::Validation("invalid plugin health path".into()));
+        }
+        if let Some(access) = &plugin.access {
+            if access.bypass_paths.len() > 100 {
+                return Err(Error::Validation("at most 100 Access bypass paths".into()));
+            }
+            for path in &access.bypass_paths {
+                crate::validate_access_path(&path.path)?;
+                if let Some(version) = &path.minimum_version {
+                    parse_version(version)?;
+                }
+            }
+        }
+        if let Some(hook) = &plugin.backup {
+            parse_version(&hook.minimum_version)?;
+            if hook.pre_hook.is_empty() {
+                return Err(Error::Validation(
+                    "backup pre-hook command cannot be empty".into(),
+                ));
+            }
         }
         Ok(plugin)
     }
