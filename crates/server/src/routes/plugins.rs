@@ -1,5 +1,9 @@
 //! Plugin catalog, release checks, installs and protected upgrades.
 
+#[path = "plugin_restore.rs"]
+mod restore;
+pub use restore::PluginRestore;
+
 use super::{
     backups::{create_job, SaveBackupJob},
     catalog::{bad, conflict, core_error, not_found},
@@ -45,6 +49,9 @@ pub struct PluginInstall {
     pub pending_releases: Vec<PluginRelease>,
     pub image: String,
     pub backup_job_id: Option<Uuid>,
+    pub access_enabled: bool,
+    pub access_bypass_paths: Vec<String>,
+    pub safety_run_id: Option<Uuid>,
     pub status: String,
     pub last_error: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -80,6 +87,12 @@ pub struct InstallPlugin {
     pub start: Option<bool>,
     pub version: Option<String>,
     pub backup: Option<PluginBackup>,
+    pub access_enabled: Option<bool>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct PluginAccessSettings {
+    pub enabled: bool,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -105,6 +118,14 @@ pub fn router() -> Router<AppState> {
         )
         .route("/api/v1/plugin-installs/{id}/update", post(update))
         .route("/api/v1/plugin-installs/{id}/backup", post(backup))
+        .route(
+            "/api/v1/plugin-installs/{id}/access",
+            axum::routing::put(access_settings),
+        )
+        .route(
+            "/api/v1/plugin-installs/{id}/restore",
+            post(restore::restore),
+        )
 }
 
 async fn cached(state: &AppState, slug: &str) -> Result<Option<PluginCheck>, ApiError> {
@@ -170,6 +191,12 @@ async fn installs(state: &AppState, slug: &str) -> Result<Vec<PluginInstall>, Ap
                 update_available,
                 image: row.try_get("image").map_err(ApiError::database)?,
                 backup_job_id: row.try_get("backup_job_id").map_err(ApiError::database)?,
+                access_enabled: row.try_get("access_enabled").map_err(ApiError::database)?,
+                access_bypass_paths: manifest(slug)?.access_paths(
+                    &row.try_get::<String, _>("installed_version")
+                        .map_err(ApiError::database)?,
+                ),
+                safety_run_id: row.try_get("safety_run_id").map_err(ApiError::database)?,
                 status: row.try_get("status").map_err(ApiError::database)?,
                 last_error: row.try_get("last_error").map_err(ApiError::database)?,
                 created_at: row.try_get("created_at").map_err(ApiError::database)?,
@@ -341,6 +368,7 @@ async fn attach_backup(
             }),
             consistency: Some(Consistency {
                 stop_service: true,
+                pre_hook: plugin.backup_hook(&install.installed_version),
                 ..Default::default()
             }),
             ..Default::default()
@@ -403,6 +431,9 @@ async fn install(
         let id: Uuid = sqlx::query_scalar("INSERT INTO plugin_installs (plugin,service_id,installed_version,image,status) VALUES ($1,$2,$3,$4,$5) RETURNING id")
             .bind(&slug).bind(service_id).bind(&release.version).bind(&release.image).bind(if body.start.unwrap_or(true) { "installing" } else { "installed" }).fetch_one(&state.pool).await.map_err(ApiError::database)?;
         let installed = load_install(&state, id).await?;
+        configure_access(&state, &installed, body.access_enabled.unwrap_or(true)).await?;
+        let published = crate::publish::publish_for_service(&state, service_id).await;
+        if body.start.unwrap_or(true) { published?; }
         if let Some(backup) = body.backup { attach_backup(&state, auth.clone(), &installed, backup).await?; }
         Ok::<_, ApiError>(id)
     }.await;
@@ -493,16 +524,126 @@ async fn backup(
     Ok(Json(load_install(&state, id).await?))
 }
 
+async fn configure_access(
+    state: &AppState,
+    install: &PluginInstall,
+    enabled: bool,
+) -> Result<(), ApiError> {
+    let plugin = manifest(&install.plugin)?;
+    if plugin.access.is_none() {
+        return Ok(());
+    }
+    let mut tx = state.pool.begin().await.map_err(ApiError::database)?;
+    let created: bool = sqlx::query_scalar("INSERT INTO access_policies (service_id,enabled,bypass_paths) VALUES ($1,$2,$3) ON CONFLICT (service_id) DO UPDATE SET enabled=$2,bypass_paths=$3,updated_at=now() RETURNING (xmax=0)")
+        .bind(install.service_id).bind(enabled).bind(plugin.access_paths(&install.installed_version))
+        .fetch_one(&mut *tx).await.map_err(ApiError::database)?;
+    if created {
+        sqlx::query("INSERT INTO access_identities (email,display_name) SELECT email,display_name FROM users WHERE is_owner ON CONFLICT (email) DO NOTHING")
+            .execute(&mut *tx).await.map_err(ApiError::database)?;
+        sqlx::query("INSERT INTO access_rules (service_id,kind,email) SELECT $1,'email',email FROM users WHERE is_owner")
+            .bind(install.service_id).execute(&mut *tx).await.map_err(ApiError::database)?;
+    }
+    sqlx::query("UPDATE plugin_installs SET access_enabled=$2,updated_at=now() WHERE id=$1")
+        .bind(install.id)
+        .bind(enabled)
+        .execute(&mut *tx)
+        .await
+        .map_err(ApiError::database)?;
+    tx.commit().await.map_err(ApiError::database)?;
+    Ok(())
+}
+
+pub(crate) async fn protect_stack_action(
+    state: &AppState,
+    service: Uuid,
+    trigger: &str,
+) -> Result<(), ApiError> {
+    let id: Option<Uuid> = sqlx::query_scalar("SELECT id FROM plugin_installs WHERE service_id=$1")
+        .bind(service)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(ApiError::database)?;
+    let Some(id) = id else {
+        return Ok(());
+    };
+    let install = load_install(state, id).await?;
+    let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM backup_runs r JOIN backup_jobs j ON j.id=r.job_id WHERE j.service_id=$1 AND r.status IN ('queued','running'))")
+        .bind(service).fetch_one(&state.pool).await.map_err(ApiError::database)?;
+    if active
+        || install.status == "restoring"
+        || (install.status == "installing" && trigger != "plugin.install")
+        || (install.status == "updating" && trigger != "plugin.update")
+    {
+        return Err(conflict(
+            "plugin_busy",
+            "a plugin operation is already running",
+        ));
+    }
+    configure_access(state, &install, install.access_enabled).await?;
+    crate::publish::publish_for_service(state, service).await
+}
+
+async fn access_settings(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(body): Json<PluginAccessSettings>,
+) -> Result<Json<PluginInstall>, ApiError> {
+    auth.require_write()?;
+    claim(&state, id).await?;
+    let result = async {
+        let install = load_install(&state, id).await?;
+        configure_access(&state, &install, body.enabled).await?;
+        crate::publish::publish_for_service(&state, install.service_id).await?;
+        audit::record(
+            &state.pool,
+            Some(auth.id),
+            "plugin.access",
+            "plugin_install",
+            Some(&id.to_string()),
+            json!({"enabled":body.enabled}),
+            None,
+        )
+        .await;
+        Ok::<_, ApiError>(())
+    }
+    .await;
+    set_status(
+        &state,
+        id,
+        "installed",
+        result.as_ref().err().map(|e| e.public_message()).as_deref(),
+    )
+    .await?;
+    result?;
+    Ok(Json(load_install(&state, id).await?))
+}
+
 async fn claim(state: &AppState, id: Uuid) -> Result<(), ApiError> {
-    load_install(state, id).await?;
-    let changed = sqlx::query("UPDATE plugin_installs SET status='updating', last_error=NULL, updated_at=now() WHERE id=$1 AND status NOT IN ('updating','installing')")
-        .bind(id).execute(&state.pool).await.map_err(ApiError::database)?.rows_affected();
-    if changed == 0 {
+    let mut tx = state.pool.begin().await.map_err(ApiError::database)?;
+    let (status, service): (String, Uuid) =
+        sqlx::query_as("SELECT status,service_id FROM plugin_installs WHERE id=$1 FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(ApiError::database)?
+            .ok_or_else(|| not_found("plugin install not found"))?;
+    let backing_up: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM backup_runs r JOIN backup_jobs j ON j.id=r.job_id WHERE j.service_id=$1 AND r.status IN ('queued','running')) OR EXISTS(SELECT 1 FROM deployments WHERE service_id=$1 AND status IN ('queued','running'))")
+        .bind(service).fetch_one(&mut *tx).await.map_err(ApiError::database)?;
+    if matches!(status.as_str(), "updating" | "installing" | "restoring") || backing_up {
         return Err(conflict(
             "plugin_busy",
             "an operation is already running for this install",
         ));
     }
+    sqlx::query(
+        "UPDATE plugin_installs SET status='updating',last_error=NULL,updated_at=now() WHERE id=$1",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .map_err(ApiError::database)?;
+    tx.commit().await.map_err(ApiError::database)?;
     Ok(())
 }
 
@@ -637,11 +778,18 @@ async fn wait_healthy(state: &AppState, service: Uuid, plugin: &Plugin) -> Resul
         .ok_or_else(|| conflict("plugin_health", "plugin main container is missing"))?;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(180);
     loop {
-        if driver
-            .http_ready(container, plugin.template.port, &plugin.health_path)
-            .await
-            .unwrap_or(false)
-        {
+        let healthy = if plugin.health_command.is_empty() {
+            driver
+                .http_ready(container, plugin.template.port, &plugin.health_path)
+                .await
+                .unwrap_or(false)
+        } else {
+            driver
+                .exec(container, plugin.health_command.clone())
+                .await
+                .is_ok_and(|output| output.exit_code == 0)
+        };
+        if healthy {
             return Ok(());
         }
         if tokio::time::Instant::now() >= deadline {
@@ -660,6 +808,8 @@ async fn update_install(
     plugin: &Plugin,
     release: &PluginRelease,
 ) -> Result<(), ApiError> {
+    configure_access(state, install, install.access_enabled).await?;
+    crate::publish::publish_for_service(state, install.service_id).await?;
     if let Some(job) = install.backup_job_id {
         let run = crate::backup::start_run(state, job, "plugin.update").await?;
         wait_result(state, "backup_runs", run, Duration::from_secs(7200))
@@ -707,6 +857,16 @@ async fn update_install(
     }
     sqlx::query("UPDATE plugin_installs SET installed_version=$2,image=$3,status='installed',last_error=NULL,updated_at=now() WHERE id=$1")
         .bind(install.id).bind(&release.version).bind(&release.image).execute(&state.pool).await.map_err(ApiError::database)?;
+    let installed = load_install(state, install.id).await?;
+    configure_access(state, &installed, installed.access_enabled).await?;
+    if let Some(job) = installed.backup_job_id {
+        sqlx::query("UPDATE backup_jobs SET consistency=consistency || $2 WHERE id=$1")
+            .bind(job)
+            .bind(json!({"stop_service":true,"pre_hook":plugin.backup_hook(&release.version)}))
+            .execute(&state.pool)
+            .await
+            .map_err(ApiError::database)?;
+    }
     audit::record(
         &state.pool,
         None,

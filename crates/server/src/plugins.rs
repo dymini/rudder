@@ -126,6 +126,28 @@ pub(crate) async fn discover_at(plugin: &Plugin, base: &str) -> Result<Vec<Plugi
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dockside_paths_and_hooks_are_version_guarded() {
+        let plugin = super::get("dockside").unwrap();
+        assert!(!plugin
+            .access_paths("0.2.1")
+            .iter()
+            .any(|p| p == "/v1/health"));
+        assert!(plugin
+            .access_paths("0.2.2")
+            .iter()
+            .any(|p| p == "/v1/health"));
+        assert!(!plugin
+            .access_paths("0.2.2")
+            .iter()
+            .any(|p| p == "/v1/queue/drain" || p == "/"));
+        assert!(plugin.backup_hook("0.2.1").is_empty());
+        assert_eq!(
+            plugin.backup_hook("0.2.2"),
+            vec!["dockside-server", "checkpoint"]
+        );
+        assert!(!plugin.health_command.is_empty());
+    }
     #[tokio::test]
     async fn discovery_uses_stubbed_releases_and_rejects_invalid_descriptors() {
         use axum::{routing::get, Json, Router};

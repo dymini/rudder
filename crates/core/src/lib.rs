@@ -37,8 +37,9 @@ mod validate;
 mod webhook;
 
 pub use access::{
-    accept_turnstile, access_allowed, department_closure, parse_turnstile, safe_return_path,
-    AccessRule, Membership, TurnstileResult, ACCESS_LOGIN_ACTION,
+    accept_turnstile, access_allowed, access_path_bypasses, department_closure, parse_turnstile,
+    safe_return_path, validate_access_path, AccessRule, Membership, TurnstileResult,
+    ACCESS_LOGIN_ACTION,
 };
 pub use backup::{
     dump_command, dump_extension, filter_databases, mysql_list_databases_command, object_key,

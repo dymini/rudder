@@ -218,6 +218,7 @@ pub struct AccessRuleView {
 #[derive(Serialize, ToSchema)]
 pub struct AccessPolicyView {
     pub enabled: bool,
+    pub bypass_paths: Vec<String>,
     pub rules: Vec<AccessRuleView>,
     pub token_configured: bool,
 }
@@ -233,6 +234,7 @@ pub struct RuleInput {
 #[derive(Deserialize, ToSchema)]
 pub struct SaveAccessPolicy {
     pub enabled: bool,
+    pub bypass_paths: Option<Vec<String>>,
     pub rules: Vec<RuleInput>,
 }
 
@@ -1065,6 +1067,14 @@ async fn put_policy(
     if body.rules.len() > 100 {
         return Err(bad("invalid", "at most 100 rules"));
     }
+    if let Some(paths) = &body.bypass_paths {
+        if paths.len() > 100 {
+            return Err(bad("invalid", "at most 100 Access bypass paths"));
+        }
+        for path in paths {
+            rudder_core::validate_access_path(path).map_err(core_error)?;
+        }
+    }
     let service = sqlx::query_scalar!(r#"SELECT id FROM services WHERE id = $1"#, id)
         .fetch_optional(&state.pool)
         .await
@@ -1111,6 +1121,14 @@ async fn put_policy(
                 ApiError::database(error)
             }
         })?;
+    }
+    if let Some(paths) = &body.bypass_paths {
+        sqlx::query("UPDATE access_policies SET bypass_paths=$2 WHERE service_id=$1")
+            .bind(id)
+            .bind(paths)
+            .execute(&mut *tx)
+            .await
+            .map_err(ApiError::database)?;
     }
     tx.commit().await.map_err(ApiError::database)?;
     audit::record(
@@ -1699,6 +1717,20 @@ async fn edge_gate(
     let Some(service_id) = protected else {
         return StatusCode::OK.into_response();
     };
+    let paths = sqlx::query_scalar::<_, Vec<String>>("SELECT p.bypass_paths FROM access_policies p JOIN domains d ON d.service_id=p.service_id WHERE d.host=$1 AND p.enabled")
+        .bind(strip_port(&host)).fetch_all(&state.pool).await;
+    match paths {
+        Ok(paths)
+            if !paths.is_empty()
+                && paths
+                    .iter()
+                    .all(|prefixes| rudder_core::access_path_bypasses(path, prefixes)) =>
+        {
+            return StatusCode::OK.into_response()
+        }
+        Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        _ => {}
+    }
     let Some(token) = cookie_value(&headers, ACCESS_COOKIE) else {
         return redirect_to_login(&state, &host, path).await;
     };
@@ -2484,6 +2516,14 @@ async fn policy_view(state: &AppState, id: Uuid) -> Result<AccessPolicyView, Api
     .map_err(ApiError::database)?;
     Ok(AccessPolicyView {
         enabled,
+        bypass_paths: sqlx::query_scalar(
+            "SELECT bypass_paths FROM access_policies WHERE service_id=$1",
+        )
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(ApiError::database)?
+        .unwrap_or_default(),
         rules: rules
             .into_iter()
             .map(|row| AccessRuleView {

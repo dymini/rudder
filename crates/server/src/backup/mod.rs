@@ -587,7 +587,11 @@ async fn prepare(
         let (name, container, _) = service_container(state, service_id).await?;
         service_name = name;
         if let Some(container) = container {
-            if !job.consistency.pre_hook.is_empty() {
+            let running = driver
+                .container_running(&container)
+                .await
+                .map_err(core_error)?;
+            if running && !job.consistency.pre_hook.is_empty() {
                 run_hook(
                     driver,
                     &container,
@@ -597,15 +601,10 @@ async fn prepare(
                 )
                 .await?;
             }
-            if !job.consistency.post_hook.is_empty() {
+            if running && !job.consistency.post_hook.is_empty() {
                 after.post_hook = Some((container.clone(), job.consistency.post_hook.clone()));
             }
-            if job.consistency.stop_service
-                && driver
-                    .container_running(&container)
-                    .await
-                    .map_err(core_error)?
-            {
+            if job.consistency.stop_service && running {
                 driver
                     .stop_container(&container, 30)
                     .await
@@ -844,6 +843,31 @@ async fn slot(state: &AppState, server_id: Uuid) -> Arc<Semaphore> {
 /// Queue a backup run and execute it in the background.
 pub async fn start_run(state: &AppState, job_id: Uuid, trigger: &str) -> Result<Uuid, ApiError> {
     let job = load_job(state, job_id).await?;
+    let mut tx = state.pool.begin().await.map_err(ApiError::database)?;
+    if let Some(service) = job.service_id {
+        let status: Option<String> =
+            sqlx::query_scalar("SELECT status FROM plugin_installs WHERE service_id=$1 FOR UPDATE")
+                .bind(service)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(ApiError::database)?;
+        if let Some(status) = status {
+            let permitted = match status.as_str() {
+                "restoring" => trigger == "plugin.restore.safety",
+                "updating" => trigger == "plugin.update",
+                "installing" => false,
+                _ => true,
+            };
+            let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM backup_runs r JOIN backup_jobs j ON j.id=r.job_id WHERE j.service_id=$1 AND r.status IN ('queued','running'))")
+                .bind(service).fetch_one(&mut *tx).await.map_err(ApiError::database)?;
+            if !permitted || active {
+                return Err(conflict(
+                    "plugin_busy",
+                    "a plugin operation or backup is already running",
+                ));
+            }
+        }
+    }
     let run_id = sqlx::query_scalar!(
         r#"
         INSERT INTO backup_runs (job_id, status, kind, trigger)
@@ -853,9 +877,10 @@ pub async fn start_run(state: &AppState, job_id: Uuid, trigger: &str) -> Result<
         job.id,
         trigger
     )
-    .fetch_one(&state.pool)
+    .fetch_one(&mut *tx)
     .await
     .map_err(ApiError::database)?;
+    tx.commit().await.map_err(ApiError::database)?;
     let state = state.clone();
     tokio::spawn(async move {
         execute_run(&state, run_id, job).await;
@@ -1177,6 +1202,23 @@ pub async fn start_restore(
     source_run_id: Uuid,
     request: RestoreRequest,
 ) -> Result<Uuid, ApiError> {
+    start_restore_mode(state, source_run_id, request, false).await
+}
+
+pub(crate) async fn start_plugin_restore(
+    state: &AppState,
+    source_run_id: Uuid,
+    request: RestoreRequest,
+) -> Result<Uuid, ApiError> {
+    start_restore_mode(state, source_run_id, request, true).await
+}
+
+async fn start_restore_mode(
+    state: &AppState,
+    source_run_id: Uuid,
+    request: RestoreRequest,
+    managed: bool,
+) -> Result<Uuid, ApiError> {
     let source = load_source_run(state, source_run_id).await?;
     if source.meta.target_kind.starts_with("panel_") {
         return Err(conflict(
@@ -1185,6 +1227,47 @@ pub async fn start_restore(
         ));
     }
     let job = load_job(state, source.job_id).await?;
+    if !managed {
+        let volume = request
+            .target_volume
+            .as_deref()
+            .or(match &source.meta.source {
+                Some(ArchiveSource::Volume { name }) => Some(name.as_str()),
+                _ => None,
+            });
+        if let Some(volume) = volume {
+            let installs: Vec<(String,Value)> = sqlx::query_as("SELECT i.plugin,s.spec FROM plugin_installs i JOIN services s ON s.id=i.service_id")
+                .fetch_all(&state.pool).await.map_err(ApiError::database)?;
+            if installs.iter().any(|(slug, spec)| {
+                crate::plugins::get(slug).is_some_and(|plugin| {
+                    spec.get("project")
+                        .and_then(Value::as_str)
+                        .is_some_and(|project| {
+                            volume == format!("{}_{}", project, plugin.data_volume)
+                        })
+                })
+            }) {
+                return Err(conflict("plugin_restore_required", "restore plugin data through the plugin install so Rudder takes a safety backup and checks health"));
+            }
+        }
+    }
+    if let Some(service) = request.target_service_id.or(job.service_id) {
+        let plugin: Option<String> =
+            sqlx::query_scalar("SELECT status FROM plugin_installs WHERE service_id=$1")
+                .bind(service)
+                .fetch_optional(&state.pool)
+                .await
+                .map_err(ApiError::database)?;
+        if plugin.is_some() && !managed {
+            return Err(conflict("plugin_restore_required", "restore plugin data through the plugin install so Rudder takes a safety backup and checks health"));
+        }
+        if managed && plugin.as_deref() != Some("restoring") {
+            return Err(conflict(
+                "plugin_busy",
+                "the plugin restore lock is not held",
+            ));
+        }
+    }
     if let Some(volume) = &request.target_volume {
         ArchiveSource::Volume {
             name: volume.clone(),
