@@ -24,6 +24,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     label: msg("Observe"),
     items: [
       ["/monitoring", msg("Monitoring"), "activity"],
+      ["/statistics", msg("Statistics"), "activity"],
       ["/load", msg("Load"), "gauge"],
       ["/logs", msg("Logs"), "logs"],
       ["/alerts", msg("Alerts"), "bell"],
