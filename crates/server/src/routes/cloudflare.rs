@@ -294,6 +294,8 @@ async fn create_tunnel(
         json!({ "tunnel": name, "replicas": replicas }),
     )
     .await;
+    cf::sync(&state, false).await?;
+    cf::refresh_mode(&state).await;
     let mut status = build_status(&state).await?;
     status.replica_error = started.err().map(|error| error.public_message());
     Ok((StatusCode::CREATED, Json(status)))

@@ -814,6 +814,15 @@ pub struct SyncReport {
 /// Push the hostnames to the tunnel, point their DNS at it, and switch Traefik
 /// to the tunnel variant.
 pub async fn sync(state: &AppState, overwrite_dns: bool) -> Result<SyncReport, ApiError> {
+    let report = sync_hostnames(state, overwrite_dns).await?;
+    crate::publish::publish_local_routes(state).await?;
+    Ok(report)
+}
+
+pub(crate) async fn sync_hostnames(
+    state: &AppState,
+    overwrite_dns: bool,
+) -> Result<SyncReport, ApiError> {
     let settings = load(&state.pool).await?;
     let tunnel_id = require_tunnel(&settings)?.to_owned();
     if settings.zone_id.is_empty() {
@@ -900,7 +909,6 @@ pub async fn sync(state: &AppState, overwrite_dns: bool) -> Result<SyncReport, A
     .execute(&state.pool)
     .await
     .map_err(ApiError::database)?;
-    crate::publish::publish_local(state).await?;
     let pending = dns.iter().filter(|d| d.action == "conflict").count();
     Ok(SyncReport {
         hostnames: hosts,
