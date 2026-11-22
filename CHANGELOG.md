@@ -9,6 +9,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Added
+- **Monitor AI activity.** The MCP page now includes filterable call history, usage charts, per-client counts, error and denied rates, latency percentiles, and each grant's last tool use, with Vietnamese translations.
 - **Inspect MCP call history and statistics.** Monitoring API/MCP tools report calls, errors, denials, per-client counts, last use per grant, and p50/p95 latency. Records retain no arguments or secrets and are pruned after 30 days; calls do not execute if their initial activity record cannot be saved.
 - **Choose exactly which tools an agent may use.** OAuth consent offers expandable permission groups and individual tools. Edit approved clients later; changes immediately affect tool discovery, calls, and delegated API keys.
 - **Let agents create bounded API keys.** MCP token creation, listing, and revocation use auth permissions. New keys record their creating client, return their secret once, and cannot exceed the creating grant; later grant restrictions and revocation also apply to them.
