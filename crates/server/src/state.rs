@@ -46,6 +46,8 @@ pub struct AppState {
     pub edge: Arc<crate::gate::EdgeMemory>,
     /// Cached Cloudflare Access settings and signing keys.
     pub cloudflare: Arc<crate::cloudflare::Runtime>,
+    /// Recently verified sessions and tokens, which skip the anonymous slots.
+    pub credentials: Arc<crate::shed::Known>,
 }
 
 impl AppState {
@@ -78,6 +80,7 @@ impl AppState {
             guard: Arc::default(),
             edge: crate::gate::memory(),
             cloudflare: Arc::default(),
+            credentials: Arc::default(),
         }
     }
 }

@@ -9,7 +9,7 @@ A small server runs the panel, its database, Traefik, your builds and your apps 
 | Load guard | Reads memory, CPU and pressure of the panel server every 3 seconds. Holds new builds while the server is busy and stops running builds before memory runs out. |
 | OOM priority | App, database and stack containers start with `oom_score_adj=300`; the panel, its database and Traefik with `-900`. When memory runs out the kernel kills an app, never the panel first. |
 | CPU priority | The panel and its database get 8× the CPU weight of an app, Traefik 2×. CPU weight only matters when the CPU is contended: then the panel gets the little it needs at once. |
-| Request priority | Requests from people who are signed in and from API tokens always reach the panel. Anonymous requests (webhooks, sign-in pages, scanners) share 64 slots and get `503` with `Retry-After: 5` when those are busy. |
+| Request priority | Requests whose session or API/agent token the panel has verified in the last 5 minutes always reach the panel. Anonymous requests (webhooks, sign-in pages, scanners), and requests with an unknown or made-up credential, share 64 slots and get `503` with `Retry-After: 5` when those are busy. |
 | Direct port | The panel listens on port 3000 as well as behind Traefik. If Traefik is overwhelmed by traffic to your apps, open `http://<server-ip>:3000`. |
 
 ## Levels

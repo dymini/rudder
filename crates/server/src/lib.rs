@@ -355,7 +355,7 @@ pub fn router(state: AppState) -> axum::Router {
             mcp::gate,
         ))
         .layer(axum::middleware::from_fn_with_state(
-            shed::slots(),
+            shed::Shed::new(state.credentials.clone()),
             shed::middleware,
         ))
         .layer(TraceLayer::new_for_http())
