@@ -12,29 +12,37 @@ use axum::response::{IntoResponse, Response};
 use crate::error::ApiError;
 use crate::state::AppState;
 
-use super::{agent_access, tokens, AgentAccess, ACCESS_PREFIX};
+use super::{agent_access, permissions, AgentAccess};
 
 pub async fn middleware(State(state): State<AppState>, request: Request, next: Next) -> Response {
     let Some(token) = bearer(request.headers()) else {
         return next.run(request).await;
     };
-    if !token.starts_with(ACCESS_PREFIX) {
+    if !token.starts_with("rdr_") {
         return next.run(request).await;
     }
     let path = request.uri().path().to_owned();
     let method = request.method().as_str().to_owned();
+    if matches!(agent_access(&method, &path), AgentAccess::Pass) {
+        return next.run(request).await;
+    }
+    let user = match crate::auth::load_token(&state, &token).await {
+        Ok(user) if user.via_mcp => user,
+        _ => return next.run(request).await,
+    };
     match agent_access(&method, &path) {
         AgentAccess::Pass => next.run(request).await,
-        AgentAccess::Allow(scope) => match tokens::load_access(&state, &token).await {
-            Ok(user) if user.scopes.iter().any(|have| have == &scope) => next.run(request).await,
-            Ok(_) => ApiError::new(
+        AgentAccess::Allow { scope, tool } => {
+            if permissions::allows(&user, &tool, &scope) {
+                return next.run(request).await;
+            }
+            ApiError::new(
                 StatusCode::FORBIDDEN,
                 "forbidden",
-                format!("this agent approval does not include {scope}"),
+                format!("This approval grants neither tool {tool} nor scope {scope}."),
             )
-            .into_response(),
-            Err(error) => error.into_response(),
-        },
+            .into_response()
+        }
         AgentAccess::Deny => {
             let mut response = ApiError::new(
                 StatusCode::FORBIDDEN,

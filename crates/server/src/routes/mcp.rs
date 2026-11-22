@@ -35,6 +35,7 @@ pub struct McpTemplateView {
 
 #[derive(Serialize, ToSchema)]
 pub struct McpCatalog {
+    pub tools: Vec<McpToolView>,
     pub scopes: Vec<McpScopeView>,
     pub templates: Vec<McpTemplateView>,
 }
@@ -54,6 +55,8 @@ pub struct McpClientView {
 
 #[derive(Serialize, ToSchema)]
 pub struct McpGrantView {
+    pub client_id: String,
+    pub allowed_tools: Option<Vec<String>>,
     pub id: Uuid,
     pub name: String,
     pub client_name: String,
@@ -65,6 +68,8 @@ pub struct McpGrantView {
 
 #[derive(Deserialize, ToSchema)]
 pub struct McpConsentRequest {
+    #[serde(default)]
+    pub allowed_tools: Vec<String>,
     pub client_id: String,
     pub redirect_uri: String,
     pub code_challenge: String,
@@ -86,13 +91,102 @@ pub struct McpConsentResponse {
     pub redirect: String,
 }
 
+#[derive(Serialize, ToSchema)]
+pub struct McpToolView {
+    pub name: String,
+    pub description: String,
+    pub scope: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct McpGrantUpdate {
+    pub template: String,
+    #[serde(default)]
+    pub scopes: Vec<String>,
+    #[serde(default)]
+    pub allowed_tools: Vec<String>,
+}
+
+fn permissions(
+    template: &str,
+    scopes: &[String],
+    tools: &[String],
+) -> Result<mcp::permissions::Permissions, ApiError> {
+    let scopes = if template == "custom" && scopes.is_empty() {
+        Vec::new()
+    } else {
+        validate_agent_scopes(template, scopes)
+            .map_err(|m| ApiError::new(StatusCode::BAD_REQUEST, "invalid_scopes", m))?
+    };
+    let allowed_tools = if template == "custom" {
+        tools
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let permissions = mcp::permissions::Permissions {
+        scopes,
+        allowed_tools,
+    };
+    permissions.validate()?;
+    if permissions.scopes.is_empty() && permissions.allowed_tools.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_permissions",
+            "Choose at least one scope or individual tool.",
+        ));
+    }
+    Ok(permissions)
+}
+
+async fn update_grant(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(body): Json<McpGrantUpdate>,
+) -> Result<StatusCode, ApiError> {
+    auth.require_admin()?;
+    auth.require_write()?;
+    let requested = permissions(&body.template, &body.scopes, &body.allowed_tools)?;
+    mcp::permissions::ceiling(&auth, &requested)?;
+    let changed = sqlx::query("UPDATE mcp_grants SET template=$2,scopes=$3,allowed_tools=$4 WHERE id=$1 AND revoked_at IS NULL")
+        .bind(id).bind(&body.template).bind(&requested.scopes).bind(&requested.allowed_tools).execute(&state.pool).await.map_err(ApiError::database)?;
+    if changed.rows_affected() == 0 {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "Active MCP grant not found.",
+        ));
+    }
+    audit::record(
+        &state.pool,
+        Some(auth.id),
+        "mcp.permissions",
+        "mcp_grant",
+        Some(&id.to_string()),
+        json!({"scopes":requested.scopes,"allowed_tools":requested.allowed_tools}),
+        None,
+    )
+    .await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub fn router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/api/v1/mcp/info", get(info))
+        .route("/api/v1/mcp/calls", get(mcp::usage::calls))
+        .route("/api/v1/mcp/stats", get(mcp::usage::stats))
         .route("/api/v1/mcp/catalog", get(catalog))
         .route("/api/v1/mcp/clients/{client_id}", get(client))
         .route("/api/v1/mcp/grants", get(grants))
-        .route("/api/v1/mcp/grants/{id}", axum::routing::delete(revoke))
+        .route(
+            "/api/v1/mcp/grants/{id}",
+            axum::routing::delete(revoke).put(update_grant),
+        )
         .route("/api/v1/mcp/consent", post(consent))
 }
 
@@ -105,6 +199,14 @@ async fn info(_auth: AuthUser) -> Json<McpInfo> {
 async fn catalog(auth: AuthUser) -> Result<Json<McpCatalog>, ApiError> {
     auth.require_admin()?;
     Ok(Json(McpCatalog {
+        tools: mcp::tools()
+            .into_iter()
+            .map(|t| McpToolView {
+                name: t.name,
+                description: t.description,
+                scope: t.scope,
+            })
+            .collect(),
         scopes: MCP_SCOPES
             .iter()
             .map(|scope| McpScopeView {
@@ -164,7 +266,7 @@ async fn grants(
     auth.require_admin()?;
     let rows = sqlx::query!(
         r#"
-        SELECT g.id, g.name, g.template, g.scopes, g.created_at, g.last_used_at, c.client_name
+        SELECT g.id, g.name, g.template, g.scopes, g.allowed_tools, g.client_id, g.created_at, g.last_used_at, c.client_name
         FROM mcp_grants g
         JOIN oauth_clients c ON c.client_id = g.client_id
         WHERE g.revoked_at IS NULL
@@ -178,6 +280,8 @@ async fn grants(
     Ok(Json(
         rows.into_iter()
             .map(|row| McpGrantView {
+                client_id: row.client_id,
+                allowed_tools: row.allowed_tools,
                 id: row.id,
                 name: row.name,
                 client_name: row.client_name,
@@ -239,8 +343,7 @@ async fn consent(
     )?;
     let (client_name, redirect_uri) =
         http::load_client_redirect(&state, &body.client_id, &body.redirect_uri).await?;
-    let scopes = validate_agent_scopes(&body.template, &body.scopes)
-        .map_err(|message| ApiError::new(StatusCode::BAD_REQUEST, "invalid_scopes", message))?;
+    let requested = permissions(&body.template, &body.scopes, &body.allowed_tools)?;
     let name = {
         let trimmed = body.name.trim();
         let chosen = if trimmed.is_empty() {
@@ -263,7 +366,7 @@ async fn consent(
         &body.client_id,
         &name,
         &body.template,
-        &scopes,
+        &requested,
         &redirect_uri,
         &body.code_challenge,
     )

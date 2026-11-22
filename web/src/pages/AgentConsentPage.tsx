@@ -1,10 +1,11 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { api, ApiError } from "../api";
 import { Button, Card, Field, TextInput } from "../components/ui";
 import { useT } from "../i18n";
+import { McpPermissions, type PermissionCatalog } from "../components/mcp-permissions";
 
 interface Scope {
   id: string;
@@ -23,6 +24,7 @@ interface Template {
 interface Catalog {
   scopes: Scope[];
   templates: Template[];
+  tools: PermissionCatalog["tools"];
 }
 
 interface ClientView {
@@ -60,41 +62,6 @@ function templateCopy(t: (key: string) => string, id: string): { name: string; s
   }
 }
 
-function areaLabel(t: (key: string) => string, group: string): string {
-  switch (group) {
-    case "auth":
-      return t("Users, sessions, API tokens, and the audit log");
-    case "catalog":
-      return t("Servers, projects, environments, and services");
-    case "agent":
-      return t("Agent install tokens");
-    case "edge":
-      return t("Domains, certificates, registries, and deploys");
-    case "source":
-      return t("Git providers and builds");
-    case "databases":
-      return t("Managed databases");
-    case "backups":
-      return t("Backups and S3 destinations");
-    case "stacks":
-      return t("Compose stacks and app templates");
-    case "cache":
-      return t("HTTP cache policies, purge, and stats");
-    case "logs":
-      return t("Logs and retention");
-    case "monitoring":
-      return t("Metrics, alerts, and notifications");
-    case "access":
-      return t("Rudder Access people, departments, and app sign-in");
-    case "security":
-      return t("Security checks, SSL activity, and rate limits");
-    case "cloudflare":
-      return t("Cloudflare tunnel, Access, and SSH for the optional Zero Trust mode");
-    default:
-      return t("Panel settings, load, and updates");
-  }
-}
-
 export function AgentConsentPage() {
   const t = useT();
   const [params] = useSearchParams();
@@ -115,24 +82,8 @@ export function AgentConsentPage() {
   });
   const [template, setTemplate] = useState("full");
   const [custom, setCustom] = useState<string[]>([]);
+  const [tools, setTools] = useState<string[]>([]);
   const [name, setName] = useState("");
-
-  const groups = useMemo(() => {
-    const order: string[] = [];
-    const byGroup = new Map<string, Scope[]>();
-    for (const scope of catalog.data?.scopes ?? []) {
-      if (!byGroup.has(scope.group)) {
-        order.push(scope.group);
-        byGroup.set(scope.group, []);
-      }
-      byGroup.get(scope.group)?.push(scope);
-    }
-    return order.map((group) => ({
-      group,
-      summary: byGroup.get(group)?.[0]?.summary ?? group,
-      scopes: byGroup.get(group) ?? [],
-    }));
-  }, [catalog.data]);
 
   const approve = useMutation({
     mutationFn: () =>
@@ -147,6 +98,7 @@ export function AgentConsentPage() {
           resource,
           template: template === "custom" ? "custom" : template,
           scopes: template === "custom" ? custom : [],
+          allowed_tools: template === "custom" ? tools : [],
           name,
         }),
       }),
@@ -156,22 +108,6 @@ export function AgentConsentPage() {
     onError: (error) =>
       toast.error(error instanceof ApiError ? error.message : t("Could not approve the agent")),
   });
-
-  function toggle(id: string, write: boolean, checked: boolean) {
-    setTemplate("custom");
-    setCustom((current) => {
-      const next = new Set(current);
-      const read = id.replace(":write", ":read");
-      if (checked) {
-        next.add(id);
-        if (write) next.add(read);
-      } else {
-        next.delete(id);
-        if (!write) next.delete(id.replace(":read", ":write"));
-      }
-      return [...next];
-    });
-  }
 
   const missing = !clientId || !redirectUri || !challenge || !state;
 
@@ -237,27 +173,7 @@ export function AgentConsentPage() {
               </span>
             </label>
           </div>
-          {template === "custom" ? (
-            <ul className="mt-4 space-y-3">
-              {groups.map((group) => (
-                <li key={group.group} className="rounded-md border border-line p-3">
-                  <p className="text-sm font-medium">{areaLabel(t, group.group)}</p>
-                  <div className="mt-2 flex flex-wrap gap-4 text-sm">
-                    {group.scopes.map((scope) => (
-                      <label key={scope.id} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={custom.includes(scope.id)}
-                          onChange={(event) => toggle(scope.id, scope.write, event.target.checked)}
-                        />
-                        {scope.write ? t("Change") : t("Read")}
-                      </label>
-                    ))}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : null}
+          {template === "custom" && catalog.data ? <McpPermissions catalog={catalog.data} scopes={custom} tools={tools} onChange={(scopes, tools) => { setCustom(scopes); setTools(tools); }} /> : null}
           <form
             className="mt-4 grid gap-3"
             onSubmit={(event) => {

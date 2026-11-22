@@ -105,6 +105,27 @@ fn code_from(redirect: &str) -> String {
         .into_owned()
 }
 
+#[sqlx::test(migrations = "./migrations")]
+async fn browser_can_consent_to_individual_tools_without_scopes(pool: PgPool) {
+    let app = app(pool);
+    let (cookie, csrf) = owner(&app).await;
+    let registered = call(&app,"POST","/oauth/register",None,None,None,Some("application/json"),Some(json!({"client_name":"Tool-only client","redirect_uris":["http://127.0.0.1:9/callback"]}).to_string().into_bytes())).await;
+    let client = registered.body["client_id"].as_str().unwrap();
+    let verifier = "x".repeat(64);
+    let consent = call(&app,"POST","/api/v1/mcp/consent",Some(&cookie),Some(&csrf),None,Some("application/json"),Some(json!({"client_id":client,"redirect_uri":"http://127.0.0.1:9/callback","code_challenge":s256(&verifier),"code_challenge_method":"S256","state":"safe-state","template":"custom","allowed_tools":["get_v1_projects"]}).to_string().into_bytes())).await;
+    assert_eq!(consent.status, StatusCode::OK, "{:?}", consent.body);
+    let code = code_from(consent.body["redirect"].as_str().unwrap());
+    let tokens = token_request(&app,&format!("grant_type=authorization_code&code={code}&redirect_uri={}&client_id={client}&code_verifier={verifier}",percent("http://127.0.0.1:9/callback"))).await;
+    assert_eq!(tokens.status, StatusCode::OK);
+    let listed = rpc(
+        &app,
+        tokens.body["access_token"].as_str().unwrap(),
+        json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}),
+    )
+    .await;
+    assert_eq!(listed.body["result"]["tools"].as_array().unwrap().len(), 2);
+}
+
 async fn owner(app: &axum::Router) -> (String, String) {
     let created = call(
         app,

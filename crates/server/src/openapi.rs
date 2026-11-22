@@ -12,6 +12,10 @@ use crate::domain_routing::{DnsCheck, DomainRoutingOptions, GlobalDomainView};
 use crate::guard::{GuardSettings, GuardView, ProtectionView};
 use crate::logs::retention::{MetricsRetention, RetentionSettings};
 use crate::logs::LogView;
+use crate::mcp::usage::{
+    McpCall, McpClientUsage, McpGrantUsage, McpToolUsage, McpUsageBucket, McpUsageStats,
+    McpUsageSummary,
+};
 use crate::plugins::{PluginCheck, PluginRelease};
 use crate::routes::access::{
     AccessApp, AccessDepartment, AccessDepartmentGrant, AccessEmailStart, AccessEmailVerify,
@@ -77,8 +81,8 @@ use crate::routes::images::{
 use crate::routes::load::{BuildLoad, BuildsCancelled, LoadView, PauseBuilds, UpdateGuard};
 use crate::routes::logs::{IngestEntry, IngestRequest, IngestResult, LogPage, UpdateRetention};
 use crate::routes::mcp::{
-    McpCatalog, McpClientView, McpConsentRequest, McpConsentResponse, McpGrantView, McpInfo,
-    McpScopeView, McpTemplateView,
+    McpCatalog, McpClientView, McpConsentRequest, McpConsentResponse, McpGrantUpdate, McpGrantView,
+    McpInfo, McpScopeView, McpTemplateView, McpToolView,
 };
 use crate::routes::monitoring::{
     AlertKindView, AlertView, ChannelView, MetricPoint, MetricSeries, MetricsOverview, MetricsView,
@@ -377,6 +381,15 @@ use rudder_core::{
         PauseBuilds,
         BuildsCancelled,
         McpCatalog,
+        McpCall,
+        McpUsageStats,
+        McpUsageSummary,
+        McpUsageBucket,
+        McpToolUsage,
+        McpClientUsage,
+        McpGrantUsage,
+        McpToolView,
+        McpGrantUpdate,
         McpScopeView,
         McpTemplateView,
         McpInfo,
@@ -2254,6 +2267,24 @@ pub(crate) const ROUTES: &[Route] = &[
         status: 200,
     },
     Route {
+        path: "/api/v1/mcp/calls",
+        method: HttpMethod::Get,
+        tag: "monitoring",
+        summary: "Recent MCP tool calls without arguments or secrets; filter by client_id, tool, status, days, limit, offset (admin)",
+        request: None,
+        response: Some("[McpCall]"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/mcp/stats",
+        method: HttpMethod::Get,
+        tag: "monitoring",
+        summary: "MCP call counts, UTC hour/day buckets, tools, clients, grants, failure rates and p50/p95 latency; filter by client_id, tool, status, days, bucket (admin)",
+        request: None,
+        response: Some("McpUsageStats"),
+        status: 200,
+    },
+    Route {
         path: "/api/v1/mcp/catalog",
         method: HttpMethod::Get,
         tag: "auth",
@@ -2279,6 +2310,15 @@ pub(crate) const ROUTES: &[Route] = &[
         request: None,
         response: Some("[McpGrantView]"),
         status: 200,
+    },
+    Route {
+        path: "/api/v1/mcp/grants/{id}",
+        method: HttpMethod::Put,
+        tag: "auth",
+        summary: "Edit an MCP grant's scopes and individual tools (admin, write)",
+        request: Some("McpGrantUpdate"),
+        response: None,
+        status: 204,
     },
     Route {
         path: "/api/v1/mcp/grants/{id}",
