@@ -29,6 +29,7 @@ const CA_KEY: &str =
 
 #[derive(Default)]
 struct Fake {
+    fail_config: bool,
     dns: Vec<Value>,
     configs: Vec<Value>,
     apps: HashMap<String, Value>,
@@ -101,6 +102,11 @@ async fn tunnel_token() -> Json<Value> {
 }
 
 async fn put_config(State(fake): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    if fake.lock().unwrap().fail_config {
+        return Json(
+            json!({"success":false,"errors":[{"code":10000,"message":"configuration unavailable"}],"result":null}),
+        );
+    }
     fake.lock().unwrap().configs.push(body.clone());
     ok(body)
 }
@@ -522,6 +528,41 @@ async fn credentials_are_checked_and_never_returned(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn tunnel_creation_publishes_an_empty_ingress(pool: PgPool) {
+    let (cloudflare, fake) = fake_cloudflare().await;
+    let data_dir = scratch_dir();
+    let app = app(pool, &data_dir, &cloudflare);
+    let session = owner(&app).await;
+    let credentials = call(
+        &app,
+        "PUT",
+        "/api/v1/cloudflare/credentials",
+        &session,
+        Some(json!({"account_id":ACCOUNT,"zone_id":ZONE,"api_token":TOKEN})),
+    )
+    .await;
+    assert_eq!(credentials.status, StatusCode::OK);
+    let tunnel = call(
+        &app,
+        "POST",
+        "/api/v1/cloudflare/tunnel",
+        &session,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(tunnel.status, StatusCode::CREATED, "{}", tunnel.body);
+    assert_eq!(tunnel.body["tunnel_published"], true);
+    assert_eq!(tunnel.body["published_hosts"], json!([]));
+    let fake = fake.lock().unwrap();
+    assert_eq!(fake.configs.len(), 1);
+    assert_eq!(
+        fake.configs[0]["config"]["ingress"],
+        json!([{"service":"http_status:404"}])
+    );
+    assert!(fake.dns.is_empty());
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     let (cloudflare, fake) = fake_cloudflare().await;
     let data_dir = scratch_dir();
@@ -601,6 +642,11 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
 
     // The tunnel is created at Cloudflare and saved even without Docker; the
     // status says why no replica runs.
+    assert!(fake.lock().unwrap().configs.is_empty());
+    // An existing DNS record must not be overwritten by automatic publication.
+    fake.lock().unwrap().dns.push(json!({
+        "id": "old-a", "type": "A", "name": "app.example.com", "content": "203.0.113.10",
+    }));
     let too_many = call(
         &app,
         "POST",
@@ -623,6 +669,24 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     assert_eq!(tunnel.body["replicas"], 3);
     assert_eq!(tunnel.body["replicas_running"], 0);
     assert_eq!(tunnel.body["connections"], 2);
+    assert_eq!(tunnel.body["tunnel_published"], true);
+    assert_eq!(tunnel.body["published_hosts"], json!(["panel.example.com"]));
+    {
+        let fake = fake.lock().unwrap();
+        let ingress = fake.configs.last().unwrap()["config"]["ingress"]
+            .as_array()
+            .unwrap();
+        assert_eq!(ingress.len(), 3);
+        assert_eq!(ingress[0]["hostname"], "app.example.com");
+        assert_eq!(ingress[1]["hostname"], "panel.example.com");
+        assert!(fake
+            .dns
+            .iter()
+            .any(|record| record["name"] == "panel.example.com"
+                && record["type"] == "CNAME"
+                && record["content"] == format!("{TUNNEL}.cfargotunnel.com")));
+        assert!(fake.dns.iter().any(|record| record["id"] == "old-a"));
+    }
     assert!(tunnel.body["replica_error"].is_string(), "{}", tunnel.body);
     assert!(!tunnel.body.to_string().contains("dGVzdC10dW5uZWwtdG9rZW4"));
     let twice = call(
@@ -644,10 +708,6 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     .await;
     assert_eq!(scaled.status, StatusCode::BAD_REQUEST);
 
-    // An A record already sits on the app hostname.
-    fake.lock().unwrap().dns.push(json!({
-        "id": "old-a", "type": "A", "name": "app.example.com", "content": "203.0.113.10",
-    }));
     let first = call(
         &app,
         "POST",
@@ -675,7 +735,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
         })
         .collect();
     assert_eq!(actions["app.example.com"], "conflict");
-    assert_eq!(actions["panel.example.com"], "created");
+    assert_eq!(actions["panel.example.com"], "kept");
     assert!(fake
         .lock()
         .unwrap()
@@ -731,6 +791,125 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
         settled.body["published_hosts"],
         json!(["app.example.com", "panel.example.com"])
     );
+
+    // Domains added after connecting need no separate Publish action.
+    let late = call(
+        &app,
+        "POST",
+        &format!("/api/v1/services/{service_id}/domains"),
+        &session,
+        Some(json!({"host":"late.example.com", "target_port":8080, "ssl_mode":"letsencrypt"})),
+    )
+    .await;
+    assert_eq!(late.status, StatusCode::CREATED, "{}", late.body);
+    {
+        let fake = fake.lock().unwrap();
+        assert!(fake.configs.last().unwrap()["config"]["ingress"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|rule| rule["hostname"] == "late.example.com"));
+        assert!(fake
+            .dns
+            .iter()
+            .any(|record| record["name"] == "late.example.com"
+                && record["content"] == format!("{TUNNEL}.cfargotunnel.com")
+                && record["proxied"] == true));
+    }
+    let removed = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/domains/{}", late.body["id"].as_str().unwrap()),
+        &session,
+        None,
+    )
+    .await;
+    assert_eq!(removed.status, StatusCode::NO_CONTENT, "{}", removed.body);
+    assert!(!fake
+        .lock()
+        .unwrap()
+        .dns
+        .iter()
+        .any(|record| record["name"] == "late.example.com"));
+
+    // A failed automatic sync is visible and can be retried without losing domains.
+    fake.lock().unwrap().fail_config = true;
+    let failed = call(
+        &app,
+        "POST",
+        &format!("/api/v1/services/{service_id}/domains"),
+        &session,
+        Some(json!({"host":"retry.example.com", "target_port":8080, "ssl_mode":"letsencrypt"})),
+    )
+    .await;
+    assert_eq!(
+        failed.status,
+        StatusCode::FAILED_DEPENDENCY,
+        "{}",
+        failed.body
+    );
+    assert!(!fake
+        .lock()
+        .unwrap()
+        .dns
+        .iter()
+        .any(|record| record["name"] == "retry.example.com"));
+    fake.lock().unwrap().fail_config = false;
+    let retried = call(
+        &app,
+        "POST",
+        "/api/v1/cloudflare/tunnel/publish",
+        &session,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(retried.status, StatusCode::OK, "{}", retried.body);
+    assert!(fake
+        .lock()
+        .unwrap()
+        .dns
+        .iter()
+        .any(|record| record["name"] == "retry.example.com"));
+    let retry_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM domains WHERE host='retry.example.com'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let removed = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/domains/{retry_id}"),
+        &session,
+        None,
+    )
+    .await;
+    assert_eq!(removed.status, StatusCode::NO_CONTENT);
+
+    // Panel domain edits use the same automatic reconciliation path.
+    for host in ["panel-new.example.com", "panel.example.com"] {
+        let changed = call(
+            &app,
+            "PATCH",
+            "/api/v1/panel",
+            &session,
+            Some(json!({"panel_domain":host})),
+        )
+        .await;
+        assert_eq!(changed.status, StatusCode::OK, "{}", changed.body);
+        let fake = fake.lock().unwrap();
+        assert!(fake.configs.last().unwrap()["config"]["ingress"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|rule| rule["hostname"] == host));
+        assert!(fake.dns.iter().any(|record| record["name"] == host));
+    }
+    assert!(!fake
+        .lock()
+        .unwrap()
+        .dns
+        .iter()
+        .any(|record| record["name"] == "panel-new.example.com"));
 
     // Access in front of the panel.
     for body in [
