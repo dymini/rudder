@@ -21,6 +21,13 @@ Open **Logs** in the sidebar, or the **Logs** tab of a service. Filter by source
 
 **Live tail** opens a WebSocket and streams new lines that match the current filters. If the browser falls behind, it shows how many lines were skipped.
 
+Log viewers render ANSI colors, bold, dim, italic, and underline as safe styled text.
+Other terminal controls (including cursor moves and OSC hyperlinks) are discarded, not
+executed. Colors adapt for readability in either theme; console panels stay dark.
+This is presentation only: stored messages, search, API/MCP responses, and raw downloads
+retain the original text. Search terms spanning an escape sequence must be searched as
+separate fragments. The interactive Terminal tab remains a full terminal.
+
 **Export NDJSON** and **Export CSV** download up to 100,000 matching lines. In the CSV, cells that start with `=`, `+`, `-`, or `@` are prefixed with `'` so spreadsheets do not run them as formulas.
 
 ## API
