@@ -4,15 +4,15 @@ created_at: "2026-11-22T16:09:16.228391706+00:00"
 e2e: 0
 evidence: null
 id: US-DOMAINS
-integration: 0
+integration: 1
 lane: normal
-notes: "Need routing precedence decision: current active local tunnel publishes all local domains and selects tunnel TLS mode server-wide. Explicit direct opt-out and cleanup conflict with preserving that behavior; propose opt-in cloudflare routing, backfilling existing published hosts to preserve connectivity."
+notes: "Implemented opt-in per-domain Cloudflare routing, legacy active-tunnel backfill, mixed TLS rendering, tracked DNS ownership, scoped overwrite, and global inventory with DNS checks. Direct warnings are conservative for local tunnel servers because installer port closure is not persisted in the panel database. Verified fmt, offline workspace clippy, sqlx prepare with --all-targets, 144 core and 79 server unit tests, Cloudflare/edge/stacks/OpenAPI integration tests, MCP parity, web i18n/build and 7 parser tests. Browser component fixtures verified inventory, direct warning, disabled Cloudflare reason, routing save, DNS recheck, empty/error states at 390px and desktop at 1280px; evidence /home/ubuntu/rudder-domains-evidence. Real Cloudflare and cloudflared connectivity are not verified."
 platform: 0
-status: blocked
+status: implemented
 title: Manage domain routing and inspect DNS globally
 type: story
-unit: 0
-updated_at: "2026-11-22T16:09:51.679201289+00:00"
+unit: 1
+updated_at: "2026-11-22T16:31:17.685345015+00:00"
 verify: null
 ---
 

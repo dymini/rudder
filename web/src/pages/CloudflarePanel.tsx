@@ -306,7 +306,7 @@ function Publish({ status }: { status: Status }) {
     <Card
       title={<Step number={3}>{t("Publish domains")}</Step>}
       description={t(
-        "Sends every app domain, the panel domain, and the Rudder Access portal through the tunnel and points their DNS at it. Traefik then serves them without Let's Encrypt, because Cloudflare presents the public certificate.",
+        "Sends Cloudflare-routed app domains, the panel domain, and the Rudder Access portal through the tunnel. New app domains default to direct routing; opt in to Cloudflare in each domain's settings.",
       )}
       actions={status.tunnel_published ? <Badge value="published" tone="success" /> : null}
     >

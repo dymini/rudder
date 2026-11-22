@@ -35,6 +35,9 @@ const BackupsPage = lazy(() =>
 const CachePoliciesPage = lazy(() =>
   import("./pages/CachePoliciesPage").then((m) => ({ default: m.CachePoliciesPage })),
 );
+const DomainsPage = lazy(() =>
+  import("./pages/DomainsPage").then((m) => ({ default: m.DomainsPage })),
+);
 const CertificatesPage = lazy(() =>
   import("./pages/CertificatesPage").then((m) => ({ default: m.CertificatesPage })),
 );
@@ -138,6 +141,7 @@ function AppRoutes() {
         <Route path="rudder-image" element={<RudderImagePage />} />
         <Route path="cache" element={<CachePoliciesPage />} />
         <Route path="certificates" element={<CertificatesPage />} />
+        <Route path="domains" element={<DomainsPage />} />
         <Route path="security" element={<SecurityPage />} />
         <Route path="access-admin" element={<AccessAdminPage />} />
         <Route path="registries" element={<RegistriesPage />} />

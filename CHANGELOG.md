@@ -10,6 +10,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ### Added
 - **Choose how each domain is reached.** Service domains can opt in to Cloudflare tunnels or proxied DNS to their server's public IP. New domains default to direct routing; an upgrade preserves existing tunnel domains. Switching back to direct or deleting a domain cleans up only Rudder-managed records, and direct domains warn when closed public ports would make them unreachable.
+- **All your domains in one place.** The new Domains page lists service, stack, panel, and Access hostnames with their servers, routing, TLS and DNS checks. Re-check DNS, change routing, or remove a service domain without opening each service.
 
 ## [0.11.1] - 2026-11-22
 

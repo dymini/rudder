@@ -42,6 +42,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       ["/security", msg("Security"), "shield"],
       ["/certificates", msg("Certificates"), "lock"],
+      ["/domains", msg("Domains"), "globe"],
       ["/cache", msg("Cache"), "zap"],
     ],
   },

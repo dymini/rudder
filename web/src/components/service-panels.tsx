@@ -10,6 +10,7 @@ import { BUILD_STRATEGIES, ENV_KEYS, IMAGES, PORTS, SSL_MODES } from "../presets
 import type { Schemas } from "../types";
 import { useConfirmSecret } from "../insecure";
 import { useStack } from "./stacks";
+import { DomainRouting } from "./domain-routing";
 import { BranchField, RepositoryField } from "./git-pickers";
 import { Icon, type IconName } from "./icons";
 import {
@@ -477,6 +478,8 @@ function AddDomainDialog({
   const t = useT();
   const queryClient = useQueryClient();
   const [host, setHost] = useState("");
+  const [routingMode, setRoutingMode] = useState("direct");
+  const [overwriteDns, setOverwriteDns] = useState(false);
   const [port, setPort] = useState("80");
   const [sslMode, setSslMode] = useState("letsencrypt");
   const [composeService, setComposeService] = useState("");
@@ -493,6 +496,8 @@ function AddDomainDialog({
         method: "POST",
         body: JSON.stringify({
           host,
+          routing_mode: routingMode,
+          overwrite_dns: overwriteDns,
           target_port: Number(port),
           ssl_mode: sslMode,
           compose_service: isStack ? composeService || undefined : undefined,
@@ -593,6 +598,14 @@ function AddDomainDialog({
             </Select>
           </Field>
         ) : null}
+        <DomainRouting
+          serviceId={serviceId}
+          host={host}
+          value={routingMode}
+          onChange={setRoutingMode}
+          overwrite={overwriteDns}
+          onOverwrite={setOverwriteDns}
+        />
         <PickField label={t("SSL")} options={SSL_MODES} value={sslMode} onPick={setSslMode} />
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           <Button
@@ -633,6 +646,8 @@ function EditDomainDialog({
   const t = useT();
   const queryClient = useQueryClient();
   const [host, setHost] = useState(domain.host);
+  const [routingMode, setRoutingMode] = useState(domain.routing_mode);
+  const [overwriteDns, setOverwriteDns] = useState(false);
   const [port, setPort] = useState(String(domain.target_port));
   const [sslMode, setSslMode] = useState(domain.ssl_mode);
   const [composeService, setComposeService] = useState(domain.compose_service ?? "");
@@ -643,6 +658,8 @@ function EditDomainDialog({
         method: "PATCH",
         body: JSON.stringify({
           host,
+          routing_mode: routingMode,
+          overwrite_dns: overwriteDns,
           target_port: Number(port),
           ssl_mode: sslMode,
           compose_service: isStack ? composeService : undefined,
@@ -691,6 +708,14 @@ function EditDomainDialog({
             </Select>
           </Field>
         ) : null}
+        <DomainRouting
+          serviceId={serviceId}
+          host={host}
+          value={routingMode}
+          onChange={setRoutingMode}
+          overwrite={overwriteDns}
+          onOverwrite={setOverwriteDns}
+        />
         <PickField label={t("SSL")} options={SSL_MODES} value={sslMode} onPick={setSslMode} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>
