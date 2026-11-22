@@ -9,6 +9,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Added
+- **Tunnel management dashboard.** Cloudflare settings show connector connections, local replicas, current and latest versions, manual release checks, and rolling-update progress. Replica changes and removal are disabled while an update is running.
 - **Inspect tunnel connectors.** The API and MCP show Cloudflare connections, local container versions and digests, and cached upstream releases, with separate errors when one source is unavailable.
 - **Update tunnels one connector at a time.** Rolling updates start a connected replacement before retiring each old replica, including on single-replica tunnels; progress and failures remain visible. Managed images are version-pinned, while `RUDDER_CLOUDFLARED_IMAGE` keeps precedence.
 - **Choose how each domain is reached.** Service domains can opt in to Cloudflare tunnels or proxied DNS to their server's public IP. New domains default to direct routing; an upgrade preserves existing tunnel domains. Switching back to direct or deleting a domain cleans up only Rudder-managed records, and direct domains warn when closed public ports would make them unreachable.
