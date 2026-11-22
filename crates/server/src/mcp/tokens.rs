@@ -83,7 +83,7 @@ pub async fn describe(state: &AppState, token: &str) -> Result<Value, ApiError> 
     let hash = auth::sha256_hex(token);
     let row = sqlx::query!(
         r#"
-        SELECT a.expires_at, g.template, g.scopes, g.name, g.created_at, u.email, u.display_name, u.role
+        SELECT a.expires_at, g.template, g.scopes, g.allowed_tools, g.client_id, g.id AS grant_id, g.name, g.created_at, u.email, u.display_name, u.role
         FROM mcp_access_tokens a
         JOIN mcp_grants g ON g.id = a.grant_id
         JOIN users u ON u.id = g.user_id
@@ -104,6 +104,9 @@ pub async fn describe(state: &AppState, token: &str) -> Result<Value, ApiError> 
         "approval": row.name,
         "template": row.template,
         "scopes": row.scopes,
+        "allowed_tools": row.allowed_tools,
+        "client_id": row.client_id,
+        "grant_id": row.grant_id,
         "approved_at": row.created_at,
         "access_expires_at": row.expires_at,
     }))
@@ -116,23 +119,13 @@ pub async fn store_code(
     client_id: &str,
     name: &str,
     template: &str,
-    scopes: &[String],
+    permissions: &super::permissions::Permissions,
     redirect_uri: &str,
     code_challenge: &str,
 ) -> Result<String, ApiError> {
     let mut tx = state.pool.begin().await.map_err(ApiError::database)?;
-    let grant_id = sqlx::query_scalar!(
-        r#"
-        INSERT INTO mcp_grants (user_id, client_id, name, template, scopes)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id
-        "#,
-        user_id,
-        client_id,
-        name,
-        template,
-        scopes,
-    )
+    let grant_id: Uuid = sqlx::query_scalar("INSERT INTO mcp_grants (user_id,client_id,name,template,scopes,allowed_tools) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id")
+    .bind(user_id).bind(client_id).bind(name).bind(template).bind(&permissions.scopes).bind(&permissions.allowed_tools)
     .fetch_one(&mut *tx)
     .await
     .map_err(ApiError::database)?;

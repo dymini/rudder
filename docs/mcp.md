@@ -51,6 +51,21 @@ permissions by calling the HTTP API directly or by creating another key.
 
 Only an administrator can approve an agent, and only from a signed-in browser. An agent cannot approve a wider grant for itself.
 
+### Groups and individual tools
+
+Choose **Custom** on consent to expand groups and select read/change scopes or
+individual tools. A tool is allowed when either its scope is granted or its name
+is explicitly selected. Group scopes include future tools in that scope;
+individual selections do not. To remove one tool from a group, clear the group
+scope and select the tools you want instead. The agent's `tools/list` advertises
+only its permitted tools. Self-inspection (`rudder_whoami`) is always available.
+
+Use **AI agents → Edit permissions** to change an active approval without signing
+in again. The same checks protect direct HTTP requests and delegated API keys.
+Edits made through an agent cannot exceed that agent's own permissions. The
+catalog includes tool names, descriptions and scopes; `PUT /api/v1/mcp/grants/{id}`
+accepts `template`, `scopes`, and `allowed_tools` under `auth:write`.
+
 ## Reading container logs
 
 With `logs:read`, `get_v1_services__id__logs` returns recent container logs of any service (`tail`, default 200). For a Compose stack it combines every compose service under `==> name <==` headers. To read one compose service, call `get_v1_services__id__stack_logs` (`stacks:read`) with `service=<name>`; omit `service` to get the combined logs, and read the stack's service names from `services`. Secret environment values are masked as `***`: values under a credential-looking key (`*_PASSWORD`, `*_TOKEN`, `*_SECRET`, `*_KEY`, `DATABASE_URL`, …), values that look generated, and passwords inside connection URLs. Masking applies to whole tokens only, and booleans, `null` and short numbers are never masked. Live tail and the container terminal are browser-only (WebSocket) and are not MCP tools.

@@ -141,3 +141,104 @@ async fn delegated_keys_cannot_escalate_and_track_the_creating_client(pool: PgPo
         StatusCode::UNAUTHORIZED
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn tool_grants_filter_enforce_and_edit_without_escalation(pool: PgPool) {
+    let (app, token, grant) = fixture(
+        &pool,
+        vec!["auth:read"],
+        vec!["post_v1_projects", "put_v1_mcp_grants__id_"],
+    )
+    .await;
+    let listed = request(
+        &app,
+        "POST",
+        "/mcp",
+        &token,
+        Some(json!({"jsonrpc":"2.0","id":1,"method":"tools/list"})),
+    )
+    .await
+    .1;
+    let names: Vec<&str> = listed["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"post_v1_projects"));
+    assert!(names.contains(&"get_v1_me"));
+    assert!(!names.contains(&"get_v1_projects"));
+    assert_eq!(
+        rpc(
+            &app,
+            &token,
+            "post_v1_projects",
+            json!({"body":{"name":"tool-only"}})
+        )
+        .await["result"]["isError"],
+        false
+    );
+    assert_eq!(
+        request(&app, "GET", "/api/v1/projects", &token, None)
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+    let path = format!("/api/v1/mcp/grants/{grant}");
+    assert_eq!(
+        request(&app, "PUT", &path, &token, Some(json!({"template":"full"})))
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        request(
+            &app,
+            "PUT",
+            &path,
+            &token,
+            Some(json!({"template":"custom"}))
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        request(
+            &app,
+            "PUT",
+            &path,
+            &token,
+            Some(json!({"template":"custom","allowed_tools":["unknown-tool"]}))
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        request(
+            &app,
+            "PUT",
+            &path,
+            &token,
+            Some(json!({"template":"custom","allowed_tools":["post_v1_projects"]}))
+        )
+        .await
+        .0,
+        StatusCode::NO_CONTENT
+    );
+    let after = request(
+        &app,
+        "POST",
+        "/mcp",
+        &token,
+        Some(json!({"jsonrpc":"2.0","id":1,"method":"tools/list"})),
+    )
+    .await
+    .1;
+    assert_eq!(after["result"]["tools"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        request(&app, "GET", "/api/v1/me", &token, None).await.0,
+        StatusCode::FORBIDDEN
+    );
+}

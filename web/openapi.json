@@ -3163,6 +3163,27 @@
       }
     },
     "/api/v1/mcp/grants/{id}": {
+      "put": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Edit an MCP grant's scopes and individual tools (admin, write)",
+        "operationId": "put_v1_mcp_grants__id_",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpGrantUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Edit an MCP grant's scopes and individual tools (admin, write)"
+          }
+        }
+      },
       "delete": {
         "tags": [
           "auth"
@@ -10658,6 +10679,7 @@
       "McpCatalog": {
         "type": "object",
         "required": [
+          "tools",
           "scopes",
           "templates"
         ],
@@ -10672,6 +10694,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/McpTemplateView"
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/McpToolView"
             }
           }
         }
@@ -10709,6 +10737,12 @@
           "template"
         ],
         "properties": {
+          "allowed_tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "client_id": {
             "type": "string"
           },
@@ -10757,9 +10791,33 @@
           }
         }
       },
+      "McpGrantUpdate": {
+        "type": "object",
+        "required": [
+          "template"
+        ],
+        "properties": {
+          "allowed_tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "template": {
+            "type": "string"
+          }
+        }
+      },
       "McpGrantView": {
         "type": "object",
         "required": [
+          "client_id",
           "id",
           "name",
           "client_name",
@@ -10768,6 +10826,18 @@
           "created_at"
         ],
         "properties": {
+          "allowed_tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "client_id": {
+            "type": "string"
+          },
           "client_name": {
             "type": "string"
           },
@@ -10857,6 +10927,25 @@
             }
           },
           "summary": {
+            "type": "string"
+          }
+        }
+      },
+      "McpToolView": {
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "scope"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scope": {
             "type": "string"
           }
         }

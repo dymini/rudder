@@ -174,7 +174,12 @@ pub async fn restrict_key(
         })
         .map(|t| t.name)
         .collect();
-    user.scopes.clear();
+    user.scopes = saved
+        .scopes
+        .iter()
+        .filter(|s| parent.as_ref().is_none_or(|p| p.scopes.contains(s)))
+        .cloned()
+        .collect();
     user.via_mcp = true;
     user.mcp = Some(McpAuthority {
         grant_id: row.created_by_mcp_grant,

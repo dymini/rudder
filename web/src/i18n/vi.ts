@@ -1,5 +1,14 @@
 // Vietnamese strings, keyed by the English source text. Missing keys fall back to English.
 export const vi: Record<string, string> = {
+  "Group permissions include every tool in that scope. Clear a group permission to choose its tools individually.": "Quyền theo nhóm bao gồm mọi công cụ trong phạm vi đó. Bỏ chọn quyền nhóm để chọn từng công cụ riêng lẻ.",
+  "Change entire group": "Thay đổi toàn bộ nhóm",
+  "Read entire group": "Đọc toàn bộ nhóm",
+  "Agent permissions saved": "Đã lưu quyền của tác nhân",
+  "Edit permissions": "Chỉnh sửa quyền",
+  "Edit agent permissions": "Chỉnh sửa quyền của tác nhân",
+  "Permission template": "Mẫu quyền",
+  "Changes apply immediately to this agent and its delegated API keys.": "Thay đổi có hiệu lực ngay với tác nhân này và các khóa API được ủy quyền của nó.",
+  "Save permissions": "Lưu quyền",
   "Never": "Chưa từng",
   "Retry": "Thử lại",
   "Retry update": "Thử cập nhật lại",

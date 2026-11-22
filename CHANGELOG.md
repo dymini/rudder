@@ -9,6 +9,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Added
+- **Choose exactly which tools an agent may use.** OAuth consent offers expandable permission groups and individual tools. Edit approved clients later; changes immediately affect tool discovery, calls, and delegated API keys.
 - **Let agents create bounded API keys.** MCP token creation, listing, and revocation use auth permissions. New keys record their creating client, return their secret once, and cannot exceed the creating grant; later grant restrictions and revocation also apply to them.
 - **Tunnel management dashboard.** Cloudflare settings show connector connections, local replicas, current and latest versions, manual release checks, and rolling-update progress. Replica changes and removal are disabled while an update is running.
 - **Inspect tunnel connectors.** The API and MCP show Cloudflare connections, local container versions and digests, and cached upstream releases, with separate errors when one source is unavailable.

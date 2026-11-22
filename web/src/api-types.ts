@@ -1892,7 +1892,8 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
+        /** Edit an MCP grant's scopes and individual tools (admin, write) */
+        put: operations["put_v1_mcp_grants__id_"];
         post?: never;
         /** Revoke an agent approval (admin, write) */
         delete: operations["delete_v1_mcp_grants__id_"];
@@ -5045,6 +5046,7 @@ export interface components {
         McpCatalog: {
             scopes: components["schemas"]["McpScopeView"][];
             templates: components["schemas"]["McpTemplateView"][];
+            tools: components["schemas"]["McpToolView"][];
         };
         McpClientView: {
             client_id: string;
@@ -5052,6 +5054,7 @@ export interface components {
             redirect_uris: string[];
         };
         McpConsentRequest: {
+            allowed_tools?: string[];
             client_id: string;
             code_challenge: string;
             code_challenge_method: string;
@@ -5067,7 +5070,14 @@ export interface components {
             /** @description Send the browser here. It carries the one-time code. */
             redirect: string;
         };
+        McpGrantUpdate: {
+            allowed_tools?: string[];
+            scopes?: string[];
+            template: string;
+        };
         McpGrantView: {
+            allowed_tools?: string[] | null;
+            client_id: string;
             client_name: string;
             /** Format: date-time */
             created_at: string;
@@ -5094,6 +5104,11 @@ export interface components {
             name: string;
             scopes: string[];
             summary: string;
+        };
+        McpToolView: {
+            description: string;
+            name: string;
+            scope: string;
         };
         MembershipInput: {
             /** Format: uuid */
@@ -9238,6 +9253,28 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["McpGrantView"][];
                 };
+            };
+        };
+    };
+    put_v1_mcp_grants__id_: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["McpGrantUpdate"];
+            };
+        };
+        responses: {
+            /** @description Edit an MCP grant's scopes and individual tools (admin, write) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

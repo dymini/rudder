@@ -77,8 +77,8 @@ use crate::routes::images::{
 use crate::routes::load::{BuildLoad, BuildsCancelled, LoadView, PauseBuilds, UpdateGuard};
 use crate::routes::logs::{IngestEntry, IngestRequest, IngestResult, LogPage, UpdateRetention};
 use crate::routes::mcp::{
-    McpCatalog, McpClientView, McpConsentRequest, McpConsentResponse, McpGrantView, McpInfo,
-    McpScopeView, McpTemplateView,
+    McpCatalog, McpClientView, McpConsentRequest, McpConsentResponse, McpGrantUpdate, McpGrantView,
+    McpInfo, McpScopeView, McpTemplateView, McpToolView,
 };
 use crate::routes::monitoring::{
     AlertKindView, AlertView, ChannelView, MetricPoint, MetricSeries, MetricsOverview, MetricsView,
@@ -377,6 +377,8 @@ use rudder_core::{
         PauseBuilds,
         BuildsCancelled,
         McpCatalog,
+        McpToolView,
+        McpGrantUpdate,
         McpScopeView,
         McpTemplateView,
         McpInfo,
@@ -2279,6 +2281,15 @@ pub(crate) const ROUTES: &[Route] = &[
         request: None,
         response: Some("[McpGrantView]"),
         status: 200,
+    },
+    Route {
+        path: "/api/v1/mcp/grants/{id}",
+        method: HttpMethod::Put,
+        tag: "auth",
+        summary: "Edit an MCP grant's scopes and individual tools (admin, write)",
+        request: Some("McpGrantUpdate"),
+        response: None,
+        status: 204,
     },
     Route {
         path: "/api/v1/mcp/grants/{id}",
