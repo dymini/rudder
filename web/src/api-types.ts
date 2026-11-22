@@ -3322,6 +3322,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/stats/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Global traffic, resource, deployment, backup, alert and MCP statistics; range=1h|24h|7d|30d (default 1h) */
+        get: operations["get_v1_stats_overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system": {
         parameters: {
             query?: never;
@@ -5023,6 +5040,17 @@ export interface components {
             };
             version?: string | null;
         };
+        JobStats: {
+            /** Format: int64 */
+            failures: number;
+            /** Format: uuid */
+            job_id: string;
+            /** Format: date-time */
+            last_success?: string | null;
+            name: string;
+            /** Format: int64 */
+            runs: number;
+        };
         JoinToken: {
             /** Format: date-time */
             expires_at: string;
@@ -5795,6 +5823,17 @@ export interface components {
             started_at: string;
             status: string;
         };
+        ServerDisk: {
+            /** Format: double */
+            disk_percent?: number | null;
+            /** Format: double */
+            disk_used_bytes?: number | null;
+            name: string;
+            /** Format: date-time */
+            sampled_at?: string | null;
+            /** Format: uuid */
+            server_id: string;
+        };
         ServerUsage: {
             /** Format: double */
             cpu_percent?: number | null;
@@ -6081,6 +6120,85 @@ export interface components {
             /** @description Create the app under this organization instead of your own account. */
             organization?: string | null;
         };
+        StatsCounts: {
+            /** Format: int64 */
+            domains: number;
+            /** Format: int64 */
+            plugins: number;
+            /** Format: int64 */
+            servers: number;
+            /** Format: int64 */
+            services: number;
+        };
+        StatsMetrics: {
+            /**
+             * Format: double
+             * @description Observed positive changes in sampled service restart counters, not an exact event count.
+             */
+            container_restarts: number;
+            disks: components["schemas"]["ServerDisk"][];
+            series: components["schemas"]["StatsPoint"][];
+            top_5xx: components["schemas"]["TopService"][];
+            top_cpu: components["schemas"]["TopService"][];
+            top_memory: components["schemas"]["TopService"][];
+            top_network: components["schemas"]["TopService"][];
+            top_requests: components["schemas"]["TopService"][];
+            totals: components["schemas"]["TrafficStats"];
+        };
+        StatsOperations: {
+            /** Format: int64 */
+            alerts_fired: number;
+            /** Format: int64 */
+            backup_failures: number;
+            backup_jobs: components["schemas"]["JobStats"][];
+            /** Format: int64 */
+            backup_runs: number;
+            counts: components["schemas"]["StatsCounts"];
+            /** Format: double */
+            deploy_avg_duration_seconds?: number | null;
+            /** Format: double */
+            deploy_success_rate?: number | null;
+            /** Format: int64 */
+            deploys: number;
+            /** Format: int64 */
+            mcp_calls: number;
+            /** Format: int64 */
+            mcp_denied: number;
+            /** Format: double */
+            mcp_error_rate: number;
+        };
+        StatsOverview: {
+            metrics: components["schemas"]["StatsMetrics"];
+            operations: components["schemas"]["StatsOperations"];
+            resolution: string;
+            retention: components["schemas"]["MetricsRetention"];
+            /** Format: date-time */
+            since: string;
+            /** Format: date-time */
+            until: string;
+        };
+        StatsPoint: {
+            /** Format: date-time */
+            at: string;
+            /** Format: double */
+            cpu_avg?: number | null;
+            /** Format: double */
+            cpu_peak?: number | null;
+            /** Format: double */
+            http_5xx: number;
+            /** Format: double */
+            http_5xx_rate: number;
+            /** Format: double */
+            memory_avg?: number | null;
+            /** Format: double */
+            memory_peak?: number | null;
+            /** Format: double */
+            requests: number;
+            /** Format: double */
+            rx_bytes?: number | null;
+            /** Format: double */
+            tx_bytes?: number | null;
+        };
         SyncReport: {
             dns: components["schemas"]["DnsOutcome"][];
             hostnames: string[];
@@ -6163,6 +6281,23 @@ export interface components {
             name: string;
             scopes: string[];
         };
+        TopService: {
+            /** Format: double */
+            cpu_percent?: number | null;
+            /** Format: double */
+            http_5xx?: number | null;
+            /** Format: double */
+            memory_bytes?: number | null;
+            name: string;
+            /** Format: double */
+            network_bytes?: number | null;
+            /** Format: double */
+            requests?: number | null;
+            /** Format: uuid */
+            server_id: string;
+            /** Format: uuid */
+            service_id: string;
+        };
         TotpDisable: {
             code: string;
             password: string;
@@ -6173,6 +6308,26 @@ export interface components {
         TotpSetupResponse: {
             otpauth_url: string;
             secret: string;
+        };
+        TrafficStats: {
+            /** Format: double */
+            cpu_avg?: number | null;
+            /** Format: double */
+            cpu_peak?: number | null;
+            /** Format: double */
+            http_5xx: number;
+            /** Format: double */
+            http_5xx_rate: number;
+            /** Format: double */
+            memory_avg?: number | null;
+            /** Format: double */
+            memory_peak?: number | null;
+            /** Format: double */
+            requests: number;
+            /** Format: double */
+            rx_bytes?: number | null;
+            /** Format: double */
+            tx_bytes?: number | null;
         };
         TunnelConnection: {
             colo?: string | null;
@@ -11660,6 +11815,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SetupStatus"];
+                };
+            };
+        };
+    };
+    get_v1_stats_overview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Global traffic, resource, deployment, backup, alert and MCP statistics; range=1h|24h|7d|30d (default 1h) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatsOverview"];
                 };
             };
         };

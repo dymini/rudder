@@ -22,5 +22,6 @@ pub mod panel_ssl;
 pub mod plugins;
 pub mod security;
 pub mod stacks;
+pub mod stats;
 pub mod system;
 pub mod updates;

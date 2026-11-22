@@ -52,6 +52,9 @@ const LogsPage = lazy(() => import("./pages/LogsPage").then((m) => ({ default: m
 const MonitoringPage = lazy(() =>
   import("./pages/MonitoringPage").then((m) => ({ default: m.MonitoringPage })),
 );
+const StatisticsPage = lazy(() =>
+  import("./pages/StatisticsPage").then((m) => ({ default: m.StatisticsPage })),
+);
 const ProjectsPage = lazy(() =>
   import("./pages/ProjectsPage").then((m) => ({ default: m.ProjectsPage })),
 );
@@ -133,6 +136,7 @@ function AppRoutes() {
         <Route path="templates" element={<TemplatesPage />} />
         <Route path="plugins" element={<PluginsPage />} />
         <Route path="monitoring" element={<MonitoringPage />} />
+        <Route path="statistics" element={<StatisticsPage />} />
         <Route path="load" element={<LoadPage />} />
         <Route path="alerts" element={<AlertsPage />} />
         <Route path="logs" element={<LogsPage />} />
