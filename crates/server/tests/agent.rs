@@ -64,6 +64,7 @@ impl Panel {
         let vars = HashMap::from([
             ("DATABASE_URL".into(), url),
             ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
+            ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
             ("RUDDER_COOKIE_SECURE".into(), "false".into()),
             ("RUDDER_DATA_DIR".into(), dir.path().display().to_string()),
             (
@@ -95,6 +96,7 @@ impl Panel {
                     .header("content-type", "application/json")
                     .body(Body::from(
                         json!({
+                            "setup_token": "test-setup-token",
                             "email": "owner@example.com",
                             "password": "correct-horse-battery",
                             "display_name": "Owner"
@@ -287,6 +289,13 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
         "{command}"
     );
     assert!(command.ends_with(&format!("--token {token}")), "{command}");
+    let ca_sha256 = command
+        .split_whitespace()
+        .skip_while(|word| *word != "--ca-sha256")
+        .nth(1)
+        .expect("the join command pins the agent CA")
+        .to_owned();
+    assert_eq!(ca_sha256.len(), 64, "{command}");
     assert_eq!(created["status"], "pending");
 
     let agent_dir = TempDir::new();
@@ -294,12 +303,12 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
     let node_dir = agent_dir.path().join("node");
     std::fs::create_dir_all(&node_dir).unwrap();
 
-    let error = rudder_agent::enroll(&panel.http, "join_not-a-real-token", &data_dir)
+    let error = rudder_agent::enroll(&panel.http, "join_not-a-real-token", None, &data_dir)
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("join token"), "{error:#}");
 
-    let identity = rudder_agent::enroll(&panel.http, &token, &data_dir)
+    let identity = rudder_agent::enroll(&panel.http, &token, Some(&ca_sha256), &data_dir)
         .await
         .unwrap();
     assert_eq!(identity.meta.server_id, server_id);
@@ -315,7 +324,8 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
     }
     let reloaded = Identity::load(&data_dir).unwrap();
     assert_eq!(reloaded.cert_pem, identity.cert_pem);
-    let reused = rudder_agent::enroll(&panel.http, &token, &agent_dir.path().join("again")).await;
+    let reused =
+        rudder_agent::enroll(&panel.http, &token, None, &agent_dir.path().join("again")).await;
     assert!(reused.is_err(), "a join token works once");
     assert!(
         !panel.server(&server_id).await.to_string().contains(&token),
@@ -427,7 +437,7 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
         .unwrap()
         .contains(new_token));
     let new_dir = agent_dir.path().join("agent2");
-    let new_identity = rudder_agent::enroll(&panel.http, new_token, &new_dir)
+    let new_identity = rudder_agent::enroll(&panel.http, new_token, None, &new_dir)
         .await
         .unwrap();
     let old = dial(&identity, &identity.cert_pem, &identity.key_pem)
@@ -505,6 +515,29 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
             .await
             .unwrap();
     assert_eq!(audited, 2);
+
+    // A CA that does not match the pinned fingerprint is refused and nothing is saved.
+    let pin = panel
+        .ok(
+            "POST",
+            "/api/v1/servers",
+            Some(json!({ "name": "edge-pinned", "kind": "remote" })),
+        )
+        .await;
+    let pinned_dir = agent_dir.path().join("pinned");
+    let wrong_ca = rudder_agent::enroll(
+        &panel.http,
+        pin["join_token"].as_str().unwrap(),
+        Some(&"0".repeat(64)),
+        &pinned_dir,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        format!("{wrong_ca:#}").contains("fingerprint"),
+        "{wrong_ca:#}"
+    );
+    assert!(!pinned_dir.join("agent.json").exists(), "nothing is saved");
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -609,6 +642,7 @@ async fn remote_streams_run_on_the_agent_docker(pool: PgPool) {
     let identity = rudder_agent::enroll(
         &panel.http,
         created["join_token"].as_str().unwrap(),
+        None,
         &data_dir,
     )
     .await

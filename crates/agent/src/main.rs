@@ -20,11 +20,13 @@ fn main() -> anyhow::Result<()> {
         "enroll" => {
             let mut server = None;
             let mut token = None;
+            let mut ca_sha256 = None;
             let mut data_dir = PathBuf::from(DEFAULT_DATA_DIR);
             while let Some(arg) = args.next() {
                 match arg.as_str() {
                     "--server" => server = Some(value(&mut args, "--server")?),
                     "--token" => token = Some(value(&mut args, "--token")?),
+                    "--ca-sha256" => ca_sha256 = Some(value(&mut args, "--ca-sha256")?),
                     "--data-dir" => data_dir = PathBuf::from(value(&mut args, "--data-dir")?),
                     other => anyhow::bail!("unknown argument {other}"),
                 }
@@ -34,7 +36,12 @@ fn main() -> anyhow::Result<()> {
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?;
-            let identity = runtime.block_on(rudder_agent::enroll(&server, &token, &data_dir))?;
+            let identity = runtime.block_on(rudder_agent::enroll(
+                &server,
+                &token,
+                ca_sha256.as_deref(),
+                &data_dir,
+            ))?;
             println!(
                 "enrolled as server {} (identity in {})",
                 identity.meta.server_id,
@@ -108,13 +115,17 @@ fn print_help() {
         "rudder-agent {version}
 
 Usage:
-  rudder-agent enroll --server <panel URL> --token <join token> [--data-dir {data}]
+  rudder-agent enroll --server <panel URL> --token <join token> [--ca-sha256 <hex>]
+                      [--data-dir {data}]
   rudder-agent run [--data-dir {data}] [--node-dir {node}] [--docker-socket <path>]
                    [--cache-admin-url <url>]
   rudder-agent --version
 
 `enroll` creates a private key, exchanges the one-time join token for a client
-certificate, and saves both in the data directory. `run` connects to the panel
+certificate, and saves both in the data directory. The panel URL must use
+https:// (http:// only for localhost). --ca-sha256 refuses to enroll unless the
+panel's agent CA has that SHA-256 fingerprint; the panel's join command sets it.
+`run` connects to the panel
 and keeps reconnecting until stopped.
 
 When the panel sends a new agent binary, `run` replaces its own executable

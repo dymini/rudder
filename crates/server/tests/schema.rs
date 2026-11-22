@@ -72,6 +72,7 @@ fn test_config(database_url: &str) -> rudder_server::Config {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), database_url.to_owned()),
         ("RUDDER_MASTER_KEY".into(), "aa".repeat(32)),
+        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
         ("RUDDER_COOKIE_SECURE".into(), "false".into()),
         ("RUDDER_LOG_FORMAT".into(), "pretty".into()),
     ]);

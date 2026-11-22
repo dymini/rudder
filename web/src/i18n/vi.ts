@@ -94,6 +94,9 @@ export const vi: Record<string, string> = {
   "Setup failed": "Thiết lập thất bại",
   "Create the owner": "Tạo chủ sở hữu",
   "This account administers the panel.": "Tài khoản này quản trị toàn bộ bảng điều khiển.",
+  "Setup token": "Mã thiết lập",
+  "The installer prints it. It is also in setup-token in the panel's data directory.":
+    "Trình cài đặt in mã này. Mã cũng nằm trong tệp setup-token ở thư mục dữ liệu của bảng điều khiển.",
   Email: "Email",
   "Display name": "Tên hiển thị",
   "Use at least 12 characters. A short phrase works well.":
@@ -672,8 +675,8 @@ export const vi: Record<string, string> = {
   "Disk budget (MiB, blank for memory only)": "Ngân sách đĩa (MiB, để trống = chỉ bộ nhớ)",
   "Largest object (MiB, blank for 16)": "Đối tượng lớn nhất (MiB, để trống = 16)",
   "Rules (JSON, first match wins)": "Quy tắc (JSON, quy tắc khớp đầu tiên được áp dụng)",
-  "Each rule has {match} (path_prefixes, extensions, path_glob) and {action} (mode cache|bypass, ttl_secs, respect_origin, stale_while_revalidate_secs, stale_if_error_secs, ignore_query, query_keys, bypass_cookies, statuses). Responses with Set-Cookie, private, or no-store are never stored.":
-    "Mỗi quy tắc có {match} (path_prefixes, extensions, path_glob) và {action} (mode cache|bypass, ttl_secs, respect_origin, stale_while_revalidate_secs, stale_if_error_secs, ignore_query, query_keys, bypass_cookies, statuses). Phản hồi có Set-Cookie, private hoặc no-store không bao giờ được lưu.",
+  "Each rule has {match} (path_prefixes, extensions, path_glob) and {action} (mode cache|bypass, ttl_secs, respect_origin, stale_while_revalidate_secs, stale_if_error_secs, ignore_query, query_keys, cache_cookies, bypass_cookies, statuses). Requests with cookies skip the cache unless cache_cookies is true. Responses with Set-Cookie, private, or no-store are never stored.":
+    "Mỗi quy tắc có {match} (path_prefixes, extensions, path_glob) và {action} (mode cache|bypass, ttl_secs, respect_origin, stale_while_revalidate_secs, stale_if_error_secs, ignore_query, query_keys, cache_cookies, bypass_cookies, statuses). Yêu cầu có cookie sẽ bỏ qua bộ nhớ đệm trừ khi cache_cookies là true. Phản hồi có Set-Cookie, private hoặc no-store không bao giờ được lưu.",
   "Delete {name}? Its domains use the default policy.":
     "Xóa {name}? Các tên miền của nó sẽ dùng chính sách mặc định.",
   "Cache servers": "Máy chủ bộ nhớ đệm",

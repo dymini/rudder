@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO users (email, display_name, password_hash, role, is_owner)\n        VALUES ($1, $2, $3, 'admin', TRUE)\n        RETURNING id, email, display_name, role, totp_enabled, is_owner\n        ",
+  "query": "\n        INSERT INTO users (email, display_name, password_hash, role, is_owner)\n        SELECT $1, $2, $3, 'admin', TRUE\n        WHERE NOT EXISTS (SELECT 1 FROM users)\n        RETURNING id, email, display_name, role, totp_enabled, is_owner\n        ",
   "describe": {
     "columns": [
       {
@@ -50,5 +50,5 @@
       false
     ]
   },
-  "hash": "f7f8de0c61ecde58e48e05af54d648a5711e630d6325ccda533dc13de7f2e90f"
+  "hash": "e01eb84692c8f2a96f95c14bd700a98c9ded658673d568a6a047c1fa77362f2b"
 }

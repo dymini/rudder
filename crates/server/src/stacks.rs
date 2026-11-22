@@ -1294,21 +1294,61 @@ async fn sync_compose(
     if let Some(logs) = logs {
         logs.push(&output);
     }
-    let file = dest.join(&git.compose_file);
-    let text = std::fs::read_to_string(&file)
-        .map_err(|_| format!("{} was not found in the repository", git.compose_file))?;
+    let (text, parent) = read_checkout_compose(&dest, &git.compose_file)?;
     check_compose_text(&text).map_err(|error| error.public_message())?;
     stack.spec.compose_yaml = text;
     let routed = routed_services(state, stack.id, &stack.spec)
         .await
         .map_err(|error| error.public_message())?;
     replan(&mut stack.spec, &routed).map_err(|error| error.public_message())?;
-    Ok(
-        match Path::new(&git.compose_file).parent().and_then(Path::to_str) {
-            Some(parent) if !parent.is_empty() => format!("{checkout}/{parent}"),
-            _ => checkout,
-        },
-    )
+    Ok(if parent.is_empty() {
+        checkout
+    } else {
+        format!("{checkout}/{parent}")
+    })
+}
+
+/// Read `compose_file` from the checkout at `dest` and return its text and its folder,
+/// relative to the checkout with symlinks resolved. Symlinks committed in the repository may
+/// not lead outside the checkout, and the files Rudder writes beside the compose file may not
+/// be symlinks, so neither the read nor the later writes leave the checkout.
+fn read_checkout_compose(dest: &Path, compose_file: &str) -> Result<(String, String), String> {
+    let missing = || format!("{compose_file} was not found in the repository");
+    let outside = || format!("{compose_file} points outside the repository");
+    let root = dest.canonicalize().map_err(|_| missing())?;
+    let joined = root.join(compose_file);
+    let file = joined.canonicalize().map_err(|_| missing())?;
+    if !file.starts_with(&root) {
+        return Err(outside());
+    }
+    if !file.is_file() {
+        return Err(format!("{compose_file} is not a file in the repository"));
+    }
+    let folder = joined
+        .parent()
+        .unwrap_or(&root)
+        .canonicalize()
+        .map_err(|_| missing())?;
+    if !folder.starts_with(&root) {
+        return Err(outside());
+    }
+    for name in [COMPOSE_FILE, ".env"] {
+        if let Ok(meta) = std::fs::symlink_metadata(folder.join(name)) {
+            if !meta.file_type().is_file() {
+                return Err(format!(
+                    "the repository has {name} beside {compose_file} that is not a regular file"
+                ));
+            }
+        }
+    }
+    let parent = folder
+        .strip_prefix(&root)
+        .map_err(|_| outside())?
+        .to_str()
+        .ok_or_else(|| format!("{compose_file} is in a folder that is not UTF-8"))?
+        .to_owned();
+    let text = std::fs::read_to_string(&file).map_err(|_| missing())?;
+    Ok((text, parent))
 }
 
 /// Copy the tracked files of a panel-side checkout to a remote node's data directory.
@@ -1670,6 +1710,61 @@ mod tests {
             ..git
         })
         .is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn checkout_compose_stays_inside_the_checkout() {
+        use std::os::unix::fs::symlink;
+        let base = std::env::temp_dir().join(format!("rudder-compose-{}", Uuid::new_v4()));
+        let repo = base.join("src");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(repo.join("deploy")).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let yaml = "services:\n  web:\n    image: nginx\n";
+        std::fs::write(outside.join("secret.yml"), yaml).unwrap();
+        std::fs::write(repo.join("deploy/compose.yml"), yaml).unwrap();
+
+        let (text, parent) = read_checkout_compose(&repo, "deploy/compose.yml").unwrap();
+        assert_eq!((text.as_str(), parent.as_str()), (yaml, "deploy"));
+        assert_eq!(
+            read_checkout_compose(&repo, "deploy/compose.yml")
+                .unwrap()
+                .0,
+            yaml
+        );
+
+        symlink("deploy/compose.yml", repo.join("docker-compose.yml")).unwrap();
+        assert_eq!(
+            read_checkout_compose(&repo, "docker-compose.yml")
+                .unwrap()
+                .1,
+            ""
+        );
+        symlink("deploy", repo.join("alias")).unwrap();
+        assert_eq!(
+            read_checkout_compose(&repo, "alias/compose.yml").unwrap().1,
+            "deploy"
+        );
+
+        symlink(outside.join("secret.yml"), repo.join("leak.yml")).unwrap();
+        assert!(read_checkout_compose(&repo, "leak.yml").is_err());
+        symlink(&outside, repo.join("out")).unwrap();
+        assert!(read_checkout_compose(&repo, "out/secret.yml").is_err());
+        std::fs::create_dir_all(repo.join("dir.yml")).unwrap();
+        assert!(read_checkout_compose(&repo, "dir.yml").is_err());
+        assert!(read_checkout_compose(&repo, "absent.yml").is_err());
+
+        symlink(outside.join("env"), repo.join("deploy/.env")).unwrap();
+        assert!(read_checkout_compose(&repo, "deploy/compose.yml").is_err());
+        std::fs::remove_file(repo.join("deploy/.env")).unwrap();
+        symlink(
+            outside.join("c.yml"),
+            repo.join("deploy").join(COMPOSE_FILE),
+        )
+        .unwrap();
+        assert!(read_checkout_compose(&repo, "deploy/compose.yml").is_err());
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

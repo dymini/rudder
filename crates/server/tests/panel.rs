@@ -39,6 +39,7 @@ fn app(pool: PgPool, data_dir: &Path) -> axum::Router {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), database_url_for(&pool)),
         ("RUDDER_MASTER_KEY".into(), MASTER_HEX.into()),
+        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
         ("RUDDER_COOKIE_SECURE".into(), "false".into()),
         ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
     ]);
@@ -142,6 +143,7 @@ async fn seed(app: &axum::Router) -> (Session, Session) {
         "/api/v1/setup",
         None,
         Some(json!({
+            "setup_token": "test-setup-token",
             "email": "owner@example.com",
             "password": "correct-horse-battery",
             "display_name": "Owner"

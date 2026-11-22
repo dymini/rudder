@@ -20,6 +20,7 @@ fn app(pool: PgPool, data_dir: &Path, cache_admin: &str) -> axum::Router {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
         ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
+        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
         ("RUDDER_COOKIE_SECURE".into(), "false".into()),
         ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
         ("RUDDER_CACHE_ADMIN_URL".into(), cache_admin.to_owned()),
@@ -43,6 +44,7 @@ impl Client {
             .header("content-type", "application/json")
             .body(Body::from(
                 json!({
+                    "setup_token": "test-setup-token",
                     "email": "owner@example.com",
                     "password": "correct-horse-battery",
                     "display_name": "Owner"

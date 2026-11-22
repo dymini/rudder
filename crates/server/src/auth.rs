@@ -20,6 +20,7 @@ use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 use uuid::Uuid;
 
+use crate::config::TrustedProxies;
 use crate::error::ApiError;
 use crate::state::AppState;
 
@@ -196,22 +197,31 @@ pub fn tunnel_client_ip(headers: &HeaderMap, hop: &str) -> Option<String> {
     Some(real.to_string())
 }
 
+/// The client address used for rate limits and audit. `X-Forwarded-For` is
+/// read only when the connection comes from a trusted proxy; the client is the
+/// nearest hop that is not itself a trusted proxy. Anyone else gets their socket
+/// address, so a direct connection cannot pick its own rate-limit bucket.
 pub fn client_ip(
     headers: &HeaderMap,
     peer: Option<std::net::SocketAddr>,
-    trust_proxy: bool,
+    trusted: &TrustedProxies,
 ) -> String {
-    let mut hop = peer.map(|addr| addr.ip().to_string());
-    if trust_proxy {
-        if let Some(forwarded) = headers
-            .get("x-forwarded-for")
-            .and_then(|value| value.to_str().ok())
-        {
-            if let Some(first) = forwarded.split(',').next() {
-                let ip = first.trim();
-                if !ip.is_empty() {
-                    hop = Some(ip.to_owned());
-                }
+    let peer = peer.map(|addr| addr.ip().to_canonical());
+    let mut hop = peer.map(|ip| ip.to_string());
+    if peer.is_some_and(|ip| trusted.contains(ip)) {
+        let forwarded = headers
+            .get_all("x-forwarded-for")
+            .iter()
+            .filter_map(|value| value.to_str().ok())
+            .flat_map(|value| value.split(','))
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .collect::<Vec<_>>();
+        for item in forwarded.iter().rev() {
+            hop = Some((*item).to_owned());
+            match item.parse::<std::net::IpAddr>() {
+                Ok(ip) if trusted.contains(ip) => continue,
+                _ => break,
             }
         }
     }
@@ -284,7 +294,7 @@ impl FromRequestParts<AppState> for AuthUser {
             .extensions
             .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
             .map(|info| info.0);
-        let _ip = client_ip(&parts.headers, peer, state.config.trust_proxy);
+        let _ip = client_ip(&parts.headers, peer, &state.config.trusted_proxies);
 
         if let Some(token) = bearer(&parts.headers) {
             return load_token(state, &token).await;
@@ -496,12 +506,76 @@ mod tests {
         assert!(!tokens_eq("abc", "abcd"));
     }
 
+    fn trusted() -> TrustedProxies {
+        TrustedProxies::parse("127.0.0.0/8,172.16.0.0/12,fc00::/7").unwrap()
+    }
+
+    fn peer(ip: &str) -> Option<std::net::SocketAddr> {
+        Some(std::net::SocketAddr::new(ip.parse().unwrap(), 40000))
+    }
+
     #[test]
-    fn forwarded_for_is_honored_only_when_trusted() {
+    fn forwarded_for_is_honored_only_from_a_trusted_peer() {
         let mut headers = HeaderMap::new();
-        headers.insert("x-forwarded-for", "203.0.113.5, 10.0.0.1".parse().unwrap());
-        assert_eq!(client_ip(&headers, None, true), "203.0.113.5");
-        assert_eq!(client_ip(&headers, None, false), "unknown");
+        headers.insert(
+            "x-forwarded-for",
+            "203.0.113.5, 172.18.0.1".parse().unwrap(),
+        );
+        assert_eq!(
+            client_ip(&headers, peer("172.18.0.2"), &trusted()),
+            "203.0.113.5"
+        );
+        assert_eq!(
+            client_ip(&headers, peer("::ffff:172.18.0.2"), &trusted()),
+            "203.0.113.5"
+        );
+        // A direct connection cannot choose its own address.
+        assert_eq!(
+            client_ip(&headers, peer("198.51.100.4"), &trusted()),
+            "198.51.100.4"
+        );
+        assert_eq!(
+            client_ip(&headers, peer("172.18.0.2"), &TrustedProxies::default()),
+            "172.18.0.2"
+        );
+        assert_eq!(client_ip(&headers, None, &trusted()), "unknown");
+    }
+
+    #[test]
+    fn spoofed_hops_left_of_the_client_are_ignored() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-forwarded-for",
+            "10.9.9.9, 192.0.2.1, 203.0.113.5".parse().unwrap(),
+        );
+        assert_eq!(
+            client_ip(&headers, peer("127.0.0.1"), &trusted()),
+            "203.0.113.5"
+        );
+        headers.insert("x-forwarded-for", "172.20.0.9, 172.18.0.1".parse().unwrap());
+        assert_eq!(
+            client_ip(&headers, peer("127.0.0.1"), &trusted()),
+            "172.20.0.9"
+        );
+    }
+
+    #[test]
+    fn trusted_proxy_networks_parse_and_match() {
+        let list = TrustedProxies::parse(" 10.0.0.0/8, 192.0.2.7 ,::1/128").unwrap();
+        assert!(list.contains("10.255.0.1".parse().unwrap()));
+        assert!(list.contains("192.0.2.7".parse().unwrap()));
+        assert!(!list.contains("192.0.2.8".parse().unwrap()));
+        assert!(list.contains("::1".parse().unwrap()));
+        assert!(!list.contains("11.0.0.1".parse().unwrap()));
+        assert!(TrustedProxies::parse("0.0.0.0/0")
+            .unwrap()
+            .contains("8.8.8.8".parse().unwrap()));
+        assert!(TrustedProxies::parse("10.0.0.0/33").is_err());
+        assert!(TrustedProxies::parse("traefik").is_err());
+        assert_eq!(
+            TrustedProxies::parse("").unwrap(),
+            TrustedProxies::default()
+        );
     }
 
     #[test]
@@ -509,17 +583,23 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("cf-connecting-ip", "198.51.100.7".parse().unwrap());
         headers.insert("x-forwarded-for", "172.18.0.5".parse().unwrap());
+        let traefik = peer("172.18.0.2");
         // Off by default: the header is ignored.
-        assert_eq!(client_ip(&headers, None, true), "172.18.0.5");
+        assert_eq!(client_ip(&headers, traefik, &trusted()), "172.18.0.5");
         set_tunnel_mode(true);
-        assert_eq!(client_ip(&headers, None, true), "198.51.100.7");
+        assert_eq!(client_ip(&headers, traefik, &trusted()), "198.51.100.7");
         // A public hop reached Traefik directly and could have forged the header.
         headers.insert("x-forwarded-for", "203.0.113.9".parse().unwrap());
-        assert_eq!(client_ip(&headers, None, true), "203.0.113.9");
-        // A malformed value is ignored.
+        assert_eq!(client_ip(&headers, traefik, &trusted()), "203.0.113.9");
+        // A public peer reached the panel port directly; neither header counts.
         headers.insert("x-forwarded-for", "172.18.0.5".parse().unwrap());
+        assert_eq!(
+            client_ip(&headers, peer("203.0.113.9"), &trusted()),
+            "203.0.113.9"
+        );
+        // A malformed value is ignored.
         headers.insert("cf-connecting-ip", "not-an-ip".parse().unwrap());
-        assert_eq!(client_ip(&headers, None, true), "172.18.0.5");
+        assert_eq!(client_ip(&headers, traefik, &trusted()), "172.18.0.5");
         set_tunnel_mode(false);
     }
 }

@@ -16,6 +16,7 @@ fn config(database_url: &str, siteverify: &str) -> rudder_server::Config {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), database_url.to_owned()),
         ("RUDDER_MASTER_KEY".into(), "bb".repeat(32)),
+        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
         ("RUDDER_COOKIE_SECURE".into(), "false".into()),
         ("RUDDER_LOG_FORMAT".into(), "pretty".into()),
         (
@@ -113,6 +114,7 @@ async fn access_blocks_unknown_people_and_limits_a_host(pool: PgPool) {
         None,
         None,
         Some(json!({
+            "setup_token": "test-setup-token",
             "email": "owner@example.com",
             "password": "correct-horse-battery"
         })),
@@ -340,4 +342,238 @@ async fn gate_secret(pool: &PgPool) -> String {
         .unwrap();
     let cipher = Cipher::new([0xbb; 32]);
     String::from_utf8(cipher.decrypt(&bytes).unwrap()).unwrap()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn parallel_code_guesses_share_five_attempts(pool: PgPool) {
+    let siteverify = turnstile().await;
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://rudder:rudder@127.0.0.1:5432/rudder".into());
+    let app = rudder_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
+    let setup = call(
+        &app,
+        "POST",
+        "/api/v1/setup",
+        None,
+        None,
+        Some(json!({ "setup_token": "test-setup-token", "email": "owner@example.com", "password": "correct-horse-battery" })),
+    )
+    .await;
+    let panel_cookie = setup.cookie.unwrap();
+    let csrf = setup.body["csrf_token"].as_str().unwrap();
+    let settings = call(
+        &app,
+        "PUT",
+        "/api/v1/access/settings",
+        Some(&panel_cookie),
+        Some(csrf),
+        Some(json!({
+            "turnstile_site_key": "0xSITE",
+            "turnstile_secret": "secret-value",
+            "turnstile_hostnames": ["access.example.com"],
+            "email_provider": "none"
+        })),
+    )
+    .await;
+    assert_eq!(settings.status, StatusCode::OK, "{}", settings.body);
+    let created = call(
+        &app,
+        "POST",
+        "/api/v1/access/identities",
+        Some(&panel_cookie),
+        Some(csrf),
+        Some(json!({ "email": "ada@example.com", "display_name": "Ada" })),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    sqlx::query(
+        "INSERT INTO access_codes (email, code_hash, purpose, expires_at)
+         VALUES ($1, encode(digest($2, 'sha256'), 'hex'), 'login', now() + interval '10 minutes')",
+    )
+    .bind("ada@example.com")
+    .bind("123456")
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Each guess comes through the local proxy with its own client address,
+    // so the per-IP limit does not stop any of them.
+    let verify = |code: &'static str, client: usize| {
+        let app = app.clone();
+        async move {
+            let mut request = Request::builder()
+                .method("POST")
+                .uri("/api/v1/access/login/email/verify")
+                .header("content-type", "application/json")
+                .header("x-forwarded-for", format!("203.0.113.{client}"))
+                .body(Body::from(
+                    json!({
+                        "email": "ada@example.com",
+                        "code": code,
+                        "turnstile_token": "token"
+                    })
+                    .to_string(),
+                ))
+                .unwrap();
+            request.extensions_mut().insert(axum::extract::ConnectInfo(
+                std::net::SocketAddr::from(([127, 0, 0, 1], 40000)),
+            ));
+            app.oneshot(request).await.unwrap().status()
+        }
+    };
+    let guesses = (1..=20).map(|client| tokio::spawn(verify("000000", client)));
+    for guess in guesses {
+        let status = guess.await.unwrap();
+        assert_ne!(status, StatusCode::OK);
+        assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
+    }
+    let (attempts, used): (i32, bool) = sqlx::query_as(
+        "SELECT attempts, used_at IS NOT NULL FROM access_codes WHERE email = 'ada@example.com'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(attempts, 5);
+    assert!(used);
+    assert_ne!(verify("123456", 99).await, StatusCode::OK);
+}
+
+async fn google_mock() -> String {
+    let app = axum::Router::new()
+        .route(
+            "/token",
+            axum::routing::post(|| async { axum::Json(json!({ "access_token": "google-token" })) }),
+        )
+        .route(
+            "/userinfo",
+            axum::routing::get(|| async {
+                axum::Json(json!({
+                    "sub": "google-sub-1",
+                    "email": "accountant@example.com",
+                    "email_verified": true
+                }))
+            }),
+        );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    format!("http://{address}")
+}
+
+async fn google_callback(
+    app: &axum::Router,
+    query: &str,
+    cookie: Option<&str>,
+) -> (StatusCode, Vec<String>) {
+    let mut builder = Request::builder()
+        .method("GET")
+        .uri(format!("/api/v1/access/login/google/callback?{query}"));
+    if let Some(cookie) = cookie {
+        builder = builder.header("cookie", cookie);
+    }
+    let response = app
+        .clone()
+        .oneshot(builder.body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let cookies = response
+        .headers()
+        .get_all("set-cookie")
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .map(str::to_owned)
+        .collect();
+    (response.status(), cookies)
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn google_callback_requires_the_browser_that_started_sign_in(pool: PgPool) {
+    let siteverify = turnstile().await;
+    let google = google_mock().await;
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://rudder:rudder@127.0.0.1:5432/rudder".into());
+    let mut config = config(&url, &siteverify);
+    config.google_token_url = format!("{google}/token");
+    config.google_userinfo_url = format!("{google}/userinfo");
+    let app = rudder_server::router(AppState::new(pool.clone(), config));
+
+    let setup = call(
+        &app,
+        "POST",
+        "/api/v1/setup",
+        None,
+        None,
+        Some(json!({
+            "setup_token": "test-setup-token",
+            "email": "owner@example.com",
+            "password": "correct-horse-battery"
+        })),
+    )
+    .await;
+    let panel_cookie = setup.cookie.unwrap();
+    let csrf = setup.body["csrf_token"].as_str().unwrap();
+    let settings = call(
+        &app,
+        "PUT",
+        "/api/v1/access/settings",
+        Some(&panel_cookie),
+        Some(csrf),
+        Some(json!({
+            "turnstile_site_key": "0xSITE",
+            "turnstile_secret": "secret-value",
+            "turnstile_hostnames": ["access.example.com"],
+            "google_client_id": "client-id",
+            "google_client_secret": "client-secret",
+            "email_provider": "none"
+        })),
+    )
+    .await;
+    assert_eq!(settings.status, StatusCode::OK, "{}", settings.body);
+    let created = call(
+        &app,
+        "POST",
+        "/api/v1/access/identities",
+        Some(&panel_cookie),
+        Some(csrf),
+        Some(json!({ "email": "accountant@example.com", "display_name": "Ada" })),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+
+    let start = call(
+        &app,
+        "POST",
+        "/api/v1/access/login/google",
+        None,
+        None,
+        Some(json!({ "turnstile_token": "token" })),
+    )
+    .await;
+    assert_eq!(start.status, StatusCode::OK, "{}", start.body);
+    let state_cookie = start.cookie.unwrap();
+    assert!(state_cookie.starts_with("rudder_access_google="));
+    let google_url = start.body["url"].as_str().unwrap();
+    let state = google_url
+        .split('&')
+        .find_map(|part| part.strip_prefix("state="))
+        .unwrap();
+    let query = format!("code=attacker-code&state={state}");
+
+    let (status, cookies) = google_callback(&app, &query, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert!(!cookies.iter().any(|c| c.starts_with("rudder_access=")));
+
+    let (status, cookies) =
+        google_callback(&app, &query, Some("rudder_access_google=0123456789abcdef")).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert!(!cookies.iter().any(|c| c.starts_with("rudder_access=")));
+
+    let (status, cookies) = google_callback(&app, &query, Some(&state_cookie)).await;
+    assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
+    assert!(cookies.iter().any(|c| c.starts_with("rudder_access=")));
+    assert!(cookies
+        .iter()
+        .any(|c| c.starts_with("rudder_access_google=;") && c.contains("Max-Age=0")));
 }

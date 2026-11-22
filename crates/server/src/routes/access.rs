@@ -35,6 +35,8 @@ use crate::routes::catalog::{bad, conflict, is_unique, not_found};
 use crate::state::AppState;
 
 const ACCESS_COOKIE: &str = "rudder_access";
+const GOOGLE_STATE_COOKIE: &str = "rudder_access_google";
+const GOOGLE_CALLBACK_PATH: &str = "/api/v1/access/login/google/callback";
 const SESSION_HOURS: i64 = 12;
 const CODE_MINUTES: i64 = 10;
 
@@ -1174,7 +1176,7 @@ async fn email_start(
     auth::OptionalPeer(peer): auth::OptionalPeer,
     Json(body): Json<AccessEmailStart>,
 ) -> Result<StatusCode, ApiError> {
-    let ip = auth::client_ip(&headers, peer, state.config.trust_proxy);
+    let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
     limit_ip(&state, &ip)?;
     let _pending_return = (body.return_host.as_deref(), body.return_path.as_deref());
     let settings = load_settings(&state).await?;
@@ -1236,7 +1238,7 @@ async fn email_verify(
     jar: CookieJar,
     Json(body): Json<AccessEmailVerify>,
 ) -> Result<(CookieJar, Json<AccessLoginResult>), ApiError> {
-    let ip = auth::client_ip(&headers, peer, state.config.trust_proxy);
+    let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
     limit_ip(&state, &ip)?;
     let settings = load_settings(&state).await?;
     verify_turnstile(&state, &settings, &body.turnstile_token, &ip).await?;
@@ -1271,9 +1273,10 @@ async fn google_start(
     State(state): State<AppState>,
     headers: HeaderMap,
     auth::OptionalPeer(peer): auth::OptionalPeer,
+    jar: CookieJar,
     Json(body): Json<AccessGoogleStart>,
-) -> Result<Json<AccessGoogleUrl>, ApiError> {
-    let ip = auth::client_ip(&headers, peer, state.config.trust_proxy);
+) -> Result<(CookieJar, Json<AccessGoogleUrl>), ApiError> {
+    let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
     limit_ip(&state, &ip)?;
     let settings = load_settings(&state).await?;
     verify_turnstile(&state, &settings, &body.turnstile_token, &ip).await?;
@@ -1283,11 +1286,12 @@ async fn google_start(
     let client_id = settings.google_client_id.clone();
     let origin = portal_origin(&state, &settings, &headers).await?;
     let (host, path) = clean_return(body.return_host.as_deref(), body.return_path.as_deref())?;
+    let nonce = hex::encode(rudder_core::random_bytes::<16>());
     let payload = json!({
         "exp": (Utc::now() + Duration::minutes(CODE_MINUTES)).timestamp(),
         "host": host,
         "path": path,
-        "nonce": hex::encode(rudder_core::random_bytes::<16>()),
+        "nonce": nonce,
     });
     let state_value = sign_state(state.config.master_key(), &payload.to_string())?;
     let url = format!(
@@ -1296,7 +1300,33 @@ async fn google_start(
         url_encode(&redirect_uri(&origin)),
         url_encode(&state_value),
     );
-    Ok(Json(AccessGoogleUrl { url }))
+    let cookie = Cookie::build((GOOGLE_STATE_COOKIE, nonce))
+        .path(GOOGLE_CALLBACK_PATH)
+        .http_only(true)
+        .secure(state.config.cookie_secure)
+        .same_site(cookie::SameSite::Lax)
+        .max_age(cookie::time::Duration::minutes(CODE_MINUTES))
+        .build();
+    Ok((jar.add(cookie), Json(AccessGoogleUrl { url })))
+}
+
+fn google_state_cookie_clear(state: &AppState) -> Option<HeaderValue> {
+    let cookie = Cookie::build((GOOGLE_STATE_COOKIE, ""))
+        .path(GOOGLE_CALLBACK_PATH)
+        .http_only(true)
+        .secure(state.config.cookie_secure)
+        .same_site(cookie::SameSite::Lax)
+        .max_age(cookie::time::Duration::ZERO)
+        .build();
+    HeaderValue::from_str(&cookie.to_string()).ok()
+}
+
+fn state_matches_browser(payload: &Value, cookie: Option<&str>) -> bool {
+    let nonce = payload.get("nonce").and_then(Value::as_str).unwrap_or("");
+    match cookie {
+        Some(cookie) if !nonce.is_empty() => auth::tokens_eq(nonce, cookie),
+        _ => false,
+    }
 }
 
 #[derive(Deserialize)]
@@ -1313,12 +1343,35 @@ async fn google_callback(
     jar: CookieJar,
     Query(query): Query<GoogleQuery>,
 ) -> Result<Response, ApiError> {
+    let browser_nonce = cookie_value(&headers, GOOGLE_STATE_COOKIE);
+    let mut response =
+        match google_finish(state.clone(), headers, peer, jar, query, browser_nonce).await {
+            Ok(response) => response,
+            Err(error) => error.into_response(),
+        };
+    if let Some(clear) = google_state_cookie_clear(&state) {
+        response.headers_mut().append(SET_COOKIE, clear);
+    }
+    Ok(response)
+}
+
+async fn google_finish(
+    state: AppState,
+    headers: HeaderMap,
+    peer: Option<std::net::SocketAddr>,
+    jar: CookieJar,
+    query: GoogleQuery,
+    browser_nonce: Option<String>,
+) -> Result<Response, ApiError> {
     if query.error.is_some() {
         return Ok(Redirect::temporary("/access?error=blocked").into_response());
     }
     let code = query.code.unwrap_or_default();
     let state_value = query.state.unwrap_or_default();
     let payload = open_state(state.config.master_key(), &state_value)?;
+    if !state_matches_browser(&payload, browser_nonce.as_deref()) {
+        return Err(blocked());
+    }
     let settings = load_settings(&state).await?;
     let origin = portal_origin(&state, &settings, &headers).await?;
     let secret = decrypt_opt(&state, settings.google_client_secret_enc.as_deref())?;
@@ -1370,7 +1423,7 @@ async fn google_callback(
         return Ok(Redirect::temporary("/access?error=blocked").into_response());
     };
     link_google(&state, identity, sub).await?;
-    let ip = auth::client_ip(&headers, peer, state.config.trust_proxy);
+    let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
     let host = request_host(&headers);
     let (jar, _csrf) = issue_session(&state, jar, identity, &host, &ip, &headers).await?;
     let return_host = payload.get("host").and_then(Value::as_str);
@@ -1494,7 +1547,7 @@ async fn handoff_callback(
     let Some(identity) = active_identity(&state, &row.email).await? else {
         return Err(blocked());
     };
-    let ip = auth::client_ip(&headers, peer, state.config.trust_proxy);
+    let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
     let (jar, _csrf) = issue_session(&state, jar, identity, &host, &ip, &headers).await?;
     let mut response = Redirect::temporary(&path).into_response();
     if let Some(cookie) = jar.get(ACCESS_COOKIE) {
@@ -2274,13 +2327,20 @@ fn merged_mail(
 }
 
 async fn consume_login_code(state: &AppState, email: &str, code: &str) -> Result<(), ApiError> {
+    // One statement counts the attempt, so parallel guesses cannot share a slot.
     let row = sqlx::query!(
         r#"
-        SELECT id, code_hash, attempts, expires_at
-        FROM access_codes
-        WHERE email = $1 AND purpose = 'login' AND used_at IS NULL
-        ORDER BY created_at DESC
-        LIMIT 1
+        UPDATE access_codes
+        SET attempts = attempts + 1
+        WHERE id = (
+            SELECT id
+            FROM access_codes
+            WHERE email = $1 AND purpose = 'login' AND used_at IS NULL
+            ORDER BY created_at DESC
+            LIMIT 1
+        )
+        AND used_at IS NULL AND attempts < 5
+        RETURNING id, code_hash, attempts, expires_at
         "#,
         email
     )
@@ -2291,21 +2351,19 @@ async fn consume_login_code(state: &AppState, email: &str, code: &str) -> Result
         return Err(invalid_code());
     };
     let matches = auth::tokens_eq(&auth::sha256_hex(code), &row.code_hash);
-    let attempts = row.attempts + 1;
-    sqlx::query!(
-        r#"
-        UPDATE access_codes
-        SET attempts = $2, used_at = CASE WHEN $3 OR $2 >= 5 THEN now() ELSE used_at END
-        WHERE id = $1
-        "#,
+    if !matches && row.attempts < 5 {
+        return Err(invalid_code());
+    }
+    // Spend the code: on a match only one request may claim it.
+    let spent = sqlx::query!(
+        r#"UPDATE access_codes SET used_at = now() WHERE id = $1 AND used_at IS NULL"#,
         row.id,
-        attempts,
-        matches,
     )
     .execute(&state.pool)
     .await
-    .map_err(ApiError::database)?;
-    if !matches || attempts > 5 || row.expires_at <= Utc::now() {
+    .map_err(ApiError::database)?
+    .rows_affected();
+    if !matches || spent != 1 || row.expires_at <= Utc::now() {
         return Err(invalid_code());
     }
     Ok(())

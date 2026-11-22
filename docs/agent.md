@@ -14,8 +14,10 @@ panel :7443 (gRPC, mTLS)  ◀── dial out ──  rudder-agent ── Docker 
 
    ```bash
    curl -fsSL https://panel.example.com/install-agent.sh | sudo sh -s -- \
-     --server https://panel.example.com --token join_...
+     --server https://panel.example.com --ca-sha256 3f6c... --token join_...
    ```
+
+   The panel URL must use `https://`; `http://` is refused unless it points at `localhost`, `127.0.0.1`, or `[::1]`, because enrollment receives the certificate authority the agent trusts from then on. `--ca-sha256` is the SHA-256 fingerprint of the panel's agent CA, and the panel puts it in the command it shows. If the CA the panel returns has a different fingerprint, enrollment stops and nothing is saved.
 
    The installer needs Docker, systemd, `curl`, and `sha256sum`. It:
    - downloads `rudder-agent` for the machine's architecture from the panel (`/downloads/...`), or from the GitHub release when the panel has no bundled copy, and checks its SHA-256;
@@ -36,6 +38,7 @@ Git-sourced compose stacks are cloned on the panel, then the tracked files are c
 
 ## Security
 
+- Enrollment only runs over `https://` (plain `http://` only to the same machine), and the agent checks the returned CA against the `--ca-sha256` fingerprint from the join command before saving it.
 - The join token is stored only as a SHA-256 hash, works once, and expires after an hour. Enrollment is rate limited and audited (`server.enroll`).
 - The agent's private key never leaves the server. The panel signs the request's public key with its own certificate authority, whose key is sealed with the master key.
 - Every gRPC call requires a client certificate from that CA, and the certificate's fingerprint must match the server row. Deleting a server, or enrolling it again, disconnects the old session and rejects its certificate.
@@ -66,7 +69,8 @@ The agent reconnects with backoff from 1 to 30 seconds. The panel marks the serv
 | `/etc/systemd/system/rudder-agent.service` | The unit |
 
 ```
-rudder-agent enroll --server <panel URL> --token <token> [--data-dir /var/lib/rudder-agent]
+rudder-agent enroll --server <panel URL> --token <token> [--ca-sha256 <hex>]
+                    [--data-dir /var/lib/rudder-agent]
 rudder-agent run [--data-dir /var/lib/rudder-agent] [--node-dir /var/lib/rudder]
                  [--docker-socket <path>] [--cache-admin-url <url>]
 rudder-agent --version
