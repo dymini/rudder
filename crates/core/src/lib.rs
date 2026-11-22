@@ -151,7 +151,7 @@ pub use traefik::{
     validate_path_prefix, EdgeGate, EdgeMode, ProxyRoute, TlsMaterial, TlsMode, PROXY_NETWORK,
     TRAEFIK_CERT_DIR, TRAEFIK_CONTAINER,
 };
-pub use validate::{validate_env_key, validate_image_ref, validate_name};
+pub use validate::{validate_env_key, validate_image_ref, validate_name, NAME_RULE};
 pub use webhook::{evaluate_hook, verify_github_signature, HookInput, HookKind, HookOutcome};
 
 /// Fill `N` bytes from the process CSPRNG.

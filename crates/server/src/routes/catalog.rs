@@ -1476,7 +1476,7 @@ fn check_kind(kind: &str) -> Result<(), ApiError> {
 
 pub(crate) fn core_error(error: CoreError) -> ApiError {
     match error {
-        CoreError::InvalidName(name) => bad("invalid_name", format!("invalid name '{name}'")),
+        CoreError::InvalidName(_) => bad("invalid_name", rudder_core::NAME_RULE),
         CoreError::Validation(message) => bad("invalid", message),
         CoreError::Node(message) => ApiError::new(StatusCode::BAD_GATEWAY, "node", message),
         CoreError::Crypto => ApiError::new(

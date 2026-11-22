@@ -65,7 +65,7 @@ pub fn validate_app_name(name: &str) -> Result<(), Error> {
         Ok(())
     } else {
         Err(Error::Validation(
-            "app name must be 1 to 34 letters, digits, spaces, dashes or underscores".into(),
+            "App name must be 1 to 34 ASCII letters, digits, spaces, hyphens, or underscores, with no leading or trailing space or hyphen.".into(),
         ))
     }
 }
@@ -82,7 +82,7 @@ pub fn validate_github_login(login: &str) -> Result<(), Error> {
     if ok {
         Ok(())
     } else {
-        Err(Error::Validation("invalid GitHub organization".into()))
+        Err(Error::Validation("GitHub organization must be 1 to 39 ASCII letters, digits, or hyphens, with no leading or trailing hyphen.".into()))
     }
 }
 

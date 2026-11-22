@@ -87,7 +87,7 @@ pub fn validate_branch(branch: &str) -> Result<(), Error> {
     if ok {
         Ok(())
     } else {
-        Err(Error::Validation("invalid git branch".into()))
+        Err(Error::Validation("Git branch must be 1 to 128 ASCII letters, digits, dots, underscores, slashes, or hyphens; it cannot start with a hyphen or contain '..' or '//'.".into()))
     }
 }
 

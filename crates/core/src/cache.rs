@@ -340,7 +340,7 @@ impl CacheRule {
         }
         for name in action.query_keys.iter().chain(&action.bypass_cookies) {
             if name.is_empty() || name.len() > 128 || name.contains([';', '=', ' ', '&']) {
-                return Err(Error::Validation(format!("invalid name {name}")));
+                return Err(Error::Validation(format!("Query key or bypass cookie name '{name}' must be 1 to 128 UTF-8 bytes and cannot contain ';', '=', spaces, or '&'.")));
             }
         }
         Ok(())

@@ -173,7 +173,9 @@ pub fn connection_string(
     password: &str,
 ) -> Result<String, Error> {
     if host.is_empty() || host.contains([' ', '\n', '/']) {
-        return Err(Error::Validation("invalid database host".into()));
+        return Err(Error::Validation(
+            "Database host must be non-empty and contain no spaces, newlines, or slashes.".into(),
+        ));
     }
     let password = url_encode(password);
     let username = url_encode(username);
@@ -201,7 +203,7 @@ fn validate_ident(value: &str, label: &str) -> Result<(), Error> {
     if ok {
         Ok(())
     } else {
-        Err(Error::Validation(format!("invalid {label}")))
+        Err(Error::Validation(format!("{label} must be 1 to 63 ASCII letters, digits, or underscores, starting with a letter.")))
     }
 }
 
@@ -276,6 +278,23 @@ mod tests {
             bad
         })
         .is_err());
+    }
+
+    #[test]
+    fn identifier_errors_include_length_characters_and_start_rule() {
+        for value in [
+            String::new(),
+            "1db".into(),
+            "has-dash".into(),
+            "a".repeat(64),
+        ] {
+            let error = validate_ident(&value, "database").unwrap_err().to_string();
+            assert!(
+                error.contains("database must be 1 to 63 ASCII letters, digits, or underscores")
+            );
+            assert!(error.contains("starting with a letter"));
+        }
+        assert!(validate_ident("App_1", "database").is_ok());
     }
 
     #[test]

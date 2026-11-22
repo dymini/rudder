@@ -279,7 +279,7 @@ fn provider_config(body: &CreateGitProvider) -> Result<Value, ApiError> {
             if !numeric_id(app_id) || !numeric_id(installation_id) {
                 return Err(bad(
                     "invalid",
-                    "github app id and installation id must be numeric",
+                    "GitHub app id and installation id must each be 1 to 20 ASCII digits.",
                 ));
             }
             let private_key_pem = body.private_key_pem.as_deref().unwrap_or("");
@@ -305,7 +305,7 @@ fn required_secret(value: Option<&str>, label: &str) -> Result<String, ApiError>
         return Err(bad("invalid", format!("{label} is required")));
     };
     if value.len() > 512 || value.bytes().any(|byte| byte.is_ascii_control()) {
-        return Err(bad("invalid", format!("{label} is invalid")));
+        return Err(bad("invalid", format!("{label} must be at most 512 UTF-8 bytes after trimming and contain no ASCII control characters.")));
     }
     Ok(value.to_owned())
 }

@@ -31,7 +31,7 @@ use crate::audit;
 use crate::auth::{self, AuthUser};
 use crate::error::ApiError;
 use crate::mailer::{send_login_code, MailConfig};
-use crate::routes::catalog::{bad, conflict, is_unique, not_found};
+use crate::routes::catalog::{bad, conflict, core_error, is_unique, not_found};
 use crate::state::AppState;
 
 const ACCESS_COOKIE: &str = "rudder_access";
@@ -400,7 +400,7 @@ async fn put_settings(
         if host.is_empty() {
             None
         } else {
-            validate_host(&host).map_err(|_| bad("invalid", "portal host is not a hostname"))?;
+            validate_host(&host).map_err(core_error)?;
             Some(host)
         }
     } else {
@@ -440,8 +440,7 @@ async fn put_settings(
         let mut clean = Vec::new();
         for host in hostnames {
             let host = host.trim().to_ascii_lowercase();
-            validate_host(&host)
-                .map_err(|_| bad("invalid", "a Turnstile hostname is not valid"))?;
+            validate_host(&host).map_err(core_error)?;
             if !clean.contains(&host) {
                 clean.push(host);
             }
@@ -2545,7 +2544,7 @@ fn clean_return(
     let host = match host.map(str::trim).filter(|host| !host.is_empty()) {
         Some(host) => {
             let host = strip_port(host);
-            validate_host(&host).map_err(|_| bad("invalid", "return host is not a hostname"))?;
+            validate_host(&host).map_err(core_error)?;
             Some(host)
         }
         None => None,
@@ -2626,7 +2625,7 @@ fn clean_label(value: &str, field: &str) -> Result<String, ApiError> {
     if value.is_empty() || value.len() > 80 || value.chars().any(|ch| ch.is_control()) {
         return Err(bad(
             "invalid",
-            format!("{field} must be 1 to 80 characters"),
+            format!("{field} must be non-blank, at most 80 UTF-8 bytes after trimming, and contain no control characters."),
         ));
     }
     Ok(value.to_owned())
@@ -2645,7 +2644,7 @@ fn clean_slug(value: &str) -> Result<String, ApiError> {
     } else {
         Err(bad(
             "invalid",
-            "slug must be lowercase letters, digits, and hyphens",
+            "Slug must be 1 to 48 lowercase ASCII letters, digits, or hyphens, with no leading or trailing hyphen (after trimming and lowercasing).",
         ))
     }
 }

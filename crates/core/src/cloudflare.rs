@@ -77,7 +77,7 @@ pub fn normalize_team_domain(input: &str) -> Result<String, Error> {
     if valid {
         Ok(host.to_owned())
     } else {
-        Err(Error::Validation("invalid team domain".into()))
+        Err(Error::Validation("Team domain must be <team>.cloudflareaccess.com, where <team> is 1 to 63 lowercase ASCII letters, digits, or hyphens, with no leading or trailing hyphen.".into()))
     }
 }
 
@@ -94,7 +94,9 @@ pub fn access_certs_url(team_domain: &str) -> String {
 /// Lowercase an email address and reject anything that is not plainly one.
 pub fn validate_access_email(input: &str) -> Result<String, Error> {
     let email = input.trim().to_ascii_lowercase();
-    let invalid = || Error::Validation(format!("'{input}' is not an email address"));
+    let invalid = || {
+        Error::Validation("Access email must have a 1 to 64 character local part using ASCII letters, digits, '.', '_', '+', or '-', followed by '@' and a domain of at most 190 ASCII letters, digits, dots, or hyphens. The domain must contain a dot, with no leading, trailing, or consecutive dots.".into())
+    };
     let (local, domain) = email.split_once('@').ok_or_else(invalid)?;
     let local_ok = !local.is_empty()
         && local.len() <= 64
@@ -129,7 +131,7 @@ pub fn validate_unix_user(user: &str) -> Result<(), Error> {
         Ok(())
     } else {
         Err(Error::Validation(format!(
-            "'{user}' is not a Unix user name"
+            "Unix user name '{user}' must be 1 to 32 lowercase ASCII letters, digits, underscores, or hyphens, starting with a letter or underscore."
         )))
     }
 }

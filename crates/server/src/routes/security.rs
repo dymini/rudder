@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthUser;
 use crate::error::ApiError;
-use crate::routes::catalog::{bad, not_found};
+use crate::routes::catalog::{bad, core_error, not_found};
 use crate::state::AppState;
 
 pub fn router() -> axum::Router<AppState> {
@@ -565,7 +565,7 @@ struct CleanRule {
 fn clean_rule(body: &SaveRateLimit) -> Result<CleanRule, ApiError> {
     let name = body.name.trim();
     if name.is_empty() || name.len() > 80 || name.chars().any(|ch| ch.is_control()) {
-        return Err(bad("invalid", "name must be 1 to 80 characters"));
+        return Err(bad("invalid", "Name must be non-blank, at most 80 UTF-8 bytes after trimming, and contain no control characters."));
     }
     let host = body
         .host
@@ -575,7 +575,7 @@ fn clean_rule(body: &SaveRateLimit) -> Result<CleanRule, ApiError> {
         .map(|host| host.to_ascii_lowercase())
         .transpose_ok()?;
     if let Some(host) = &host {
-        validate_host(host).map_err(|_| bad("invalid", "host is not a hostname"))?;
+        validate_host(host).map_err(core_error)?;
     }
     let path_prefix = body.path_prefix.clone().unwrap_or_else(|| "/".into());
     validate_path_prefix(&path_prefix).map_err(|_| bad("invalid", "path prefix is not valid"))?;

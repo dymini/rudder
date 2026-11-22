@@ -70,7 +70,7 @@ pub fn validate_registry_url(value: &str) -> Result<String, Error> {
     if ok {
         Ok(host)
     } else {
-        Err(Error::Validation("invalid registry url".into()))
+        Err(Error::Validation("Registry host must be 1 to 253 ASCII letters, digits, dots, hyphens, or colons after removing an optional http:// or https:// prefix and trailing slash; paths and credentials are not allowed.".into()))
     }
 }
 

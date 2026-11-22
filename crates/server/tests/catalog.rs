@@ -147,6 +147,119 @@ async fn a_service(app: &axum::Router, cookie: &str, csrf: &str) -> String {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn rejected_names_and_domains_explain_the_rule(pool: PgPool) {
+    let app = app(pool);
+    let (cookie, csrf) = owner(&app).await;
+    for name in [
+        String::new(),
+        "Bad_Name".into(),
+        "-start".into(),
+        "a".repeat(64),
+    ] {
+        let response = call(
+            &app,
+            "POST",
+            "/api/v1/projects",
+            Some(&cookie),
+            Some(&csrf),
+            Some(json!({"name":name})),
+        )
+        .await;
+        assert_eq!(response.status, StatusCode::BAD_REQUEST);
+        assert_eq!(response.body["error"]["message"], rudder_core::NAME_RULE);
+    }
+    let service = a_service(&app, &cookie, &csrf).await;
+    let duplicate = call(
+        &app,
+        "POST",
+        "/api/v1/projects",
+        Some(&cookie),
+        Some(&csrf),
+        Some(json!({"name":"blog"})),
+    )
+    .await;
+    assert_eq!(duplicate.status, StatusCode::CONFLICT);
+    assert_eq!(duplicate.body["error"]["code"], "name_taken");
+    assert!(duplicate.body["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("exists"));
+    for host in [
+        "",
+        "localhost",
+        "https://app.example.com",
+        "-bad.example.com",
+        "*.example.com",
+    ] {
+        let response = call(
+            &app,
+            "POST",
+            &format!("/api/v1/services/{service}/domains"),
+            Some(&cookie),
+            Some(&csrf),
+            Some(json!({"host":host,"target_port":80,"ssl_mode":"letsencrypt"})),
+        )
+        .await;
+        assert_eq!(
+            response.status,
+            StatusCode::BAD_REQUEST,
+            "{}",
+            response.body
+        );
+        let message = response.body["error"]["message"].as_str().unwrap();
+        assert!(message.contains("1 to 253"), "{message}");
+        assert!(
+            message.contains("scheme, port, path, or wildcard"),
+            "{message}"
+        );
+    }
+    let token = call(
+        &app,
+        "POST",
+        "/api/v1/tokens",
+        Some(&cookie),
+        Some(&csrf),
+        Some(json!({"name":"bad\nname","scopes":["read"]})),
+    )
+    .await;
+    assert_eq!(token.status, StatusCode::BAD_REQUEST, "{}", token.body);
+    assert!(token.body["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("no control characters"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn destination_rename_explains_a_duplicate_name(pool: PgPool) {
+    let app = app(pool);
+    let (cookie, csrf) = owner(&app).await;
+    let mut destinations = Vec::new();
+    for name in ["first", "second"] {
+        let response = call(&app, "POST", "/api/v1/s3-destinations", Some(&cookie), Some(&csrf), Some(json!({"name":name,"bucket":"test","access_key_id":"test","secret_access_key":"test"}))).await;
+        assert_eq!(response.status, StatusCode::CREATED, "{}", response.body);
+        destinations.push(response.body);
+    }
+    let response = call(
+        &app,
+        "PUT",
+        &format!(
+            "/api/v1/s3-destinations/{}",
+            destinations[1]["id"].as_str().unwrap()
+        ),
+        Some(&cookie),
+        Some(&csrf),
+        Some(json!({"name":"first","bucket":"test"})),
+    )
+    .await;
+    assert_eq!(response.status, StatusCode::CONFLICT, "{}", response.body);
+    assert_eq!(response.body["error"]["code"], "name_taken");
+    assert!(response.body["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("that name exists"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn servers_projects_and_services_round_trip(pool: PgPool) {
     let app = app(pool);
     let (cookie, csrf) = owner(&app).await;
@@ -207,6 +320,8 @@ async fn servers_projects_and_services_round_trip(pool: PgPool) {
     )
     .await;
     assert_eq!(bad_name.status, StatusCode::BAD_REQUEST);
+    assert_eq!(bad_name.body["error"]["code"], "invalid_name");
+    assert_eq!(bad_name.body["error"]["message"], rudder_core::NAME_RULE);
 
     let project = call(
         &app,
