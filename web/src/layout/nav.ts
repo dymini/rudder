@@ -16,6 +16,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       ["/", msg("Overview"), "overview"],
       ["/projects", msg("Projects"), "folder"],
       ["/templates", msg("Templates"), "layers"],
+      ["/plugins", msg("Plugins"), "box"],
       ["/servers", msg("Servers"), "server"],
     ],
   },

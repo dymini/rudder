@@ -76,6 +76,9 @@ const SystemPage = lazy(() =>
 const TemplatesPage = lazy(() =>
   import("./pages/TemplatesPage").then((m) => ({ default: m.TemplatesPage })),
 );
+const PluginsPage = lazy(() =>
+  import("./pages/PluginsPage").then((m) => ({ default: m.PluginsPage })),
+);
 const TokensPage = lazy(() =>
   import("./pages/TokensPage").then((m) => ({ default: m.TokensPage })),
 );
@@ -125,6 +128,7 @@ function AppRoutes() {
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="services/:id" element={<ServicePage />} />
         <Route path="templates" element={<TemplatesPage />} />
+        <Route path="plugins" element={<PluginsPage />} />
         <Route path="monitoring" element={<MonitoringPage />} />
         <Route path="load" element={<LoadPage />} />
         <Route path="alerts" element={<AlertsPage />} />
