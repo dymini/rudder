@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { api, ApiError } from "../api";
-import { Badge, Button, Card, Field, PickField, QuickPick, TextInput } from "../components/ui";
+import { Badge, Button, Card, Field, NameInput, PickField, QuickPick, TextInput } from "../components/ui";
 import { formatBytes, formatTime } from "../format";
 import { useT, type Translate } from "../i18n";
 import { SERVER_KINDS, SERVER_NAMES } from "../presets";
@@ -177,7 +177,7 @@ export function ServersPage() {
               />
             }
           >
-            <TextInput required value={name} onChange={(event) => setName(event.target.value)} />
+            <NameInput required value={name} onChange={(event) => setName(event.target.value)} />
           </Field>
           <PickField label={t("Kind")} options={SERVER_KINDS} value={kind} onPick={setKind} />
           <Field label={t("Public IP")}>

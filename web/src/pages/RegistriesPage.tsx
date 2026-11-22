@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { api, ApiError } from "../api";
-import { Alert, Button, Card, Field, PickField, TextInput } from "../components/ui";
+import { Alert, Button, Card, Field, NameInput, PickField, TextInput } from "../components/ui";
 import { useT } from "../i18n";
 import { REGISTRIES } from "../presets";
 import type { Schemas } from "../types";
@@ -68,12 +68,12 @@ export function RegistriesPage() {
               value={url}
               onPick={(next) => {
                 setUrl(next);
-                if (!name) setName(REGISTRIES.find((item) => item.url === next)?.label ?? "");
+                if (!name) setName(next.replaceAll(".", "-"));
               }}
             />
           </div>
           <Field label={t("Name")}>
-            <TextInput required value={name} onChange={(event) => setName(event.target.value)} />
+            <NameInput required value={name} onChange={(event) => setName(event.target.value)} />
           </Field>
           <Field label={t("Host")}>
             <TextInput required value={url} onChange={(event) => setUrl(event.target.value)} />

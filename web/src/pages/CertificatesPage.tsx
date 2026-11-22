@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { api, ApiError } from "../api";
-import { Alert, Button, Card, Field, PickField, TextArea, TextInput } from "../components/ui";
+import { Alert, Button, Card, Field, NameInput, PickField, TextArea, TextInput } from "../components/ui";
 import { isInsecurePanel } from "../insecure";
 import { SSL_MODES } from "../presets";
 import type { Schemas } from "../types";
@@ -92,7 +92,7 @@ export function CertificatesPage() {
       <Card title={t("Upload")}>
         <form className="space-y-3" onSubmit={onUpload}>
           <Field label={t("Name")}>
-            <TextInput required value={name} onChange={(event) => setName(event.target.value)} />
+            <NameInput required value={name} onChange={(event) => setName(event.target.value)} />
           </Field>
           <Field label={t("Certificate PEM")}>
             <TextArea

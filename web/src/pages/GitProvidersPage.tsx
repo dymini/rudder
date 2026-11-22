@@ -12,6 +12,7 @@ import {
   Disclosure,
   Empty,
   Field,
+  NameInput,
   PageHeader,
   PickField,
   TextArea,
@@ -302,8 +303,8 @@ function ManualProviderForm() {
   return (
     <form className="grid gap-3" onSubmit={onSubmit}>
       <div className="grid gap-3 md:grid-cols-2">
-        <Field label={t("Name")} hint={t("Lowercase letters, digits and dashes.")}>
-          <TextInput required value={name} onChange={(event) => setName(event.target.value)} />
+        <Field label={t("Name")}>
+          <NameInput required value={name} onChange={(event) => setName(event.target.value)} />
         </Field>
         <PickField
           label={t("Kind")}

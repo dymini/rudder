@@ -16,6 +16,7 @@ import {
   Dialog,
   Empty,
   Field,
+  NameInput,
   KindTile,
   PageHeader,
   PickField,
@@ -687,7 +688,7 @@ function NewProjectDialog({
         }}
       >
         <Field label={t("Name")}>
-          <TextInput
+          <NameInput
             required
             autoFocus
             value={name}
@@ -760,7 +761,7 @@ function NewEnvironmentDialog({
             />
           }
         >
-          <TextInput
+          <NameInput
             required
             autoFocus
             value={name}
@@ -891,7 +892,7 @@ function NewServiceDialog({
         <PickField label={t("Kind")} options={SERVICE_KINDS} value={kind} onPick={setKind} />
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label={t("Name")}>
-            <TextInput
+            <NameInput
               required
               autoFocus
               value={serviceName}
@@ -943,7 +944,8 @@ function NewServiceDialog({
                 />
               }
             >
-              <TextInput
+              <NameInput
+                kind="compose"
                 value={mainService}
                 placeholder="web"
                 onChange={(event) => setMainService(event.target.value)}
@@ -955,10 +957,9 @@ function NewServiceDialog({
                 "Optional. Use the name of a project already running on the server to take over its containers and volumes; otherwise one is generated.",
               )}
             >
-              <TextInput
+              <NameInput
                 value={stackProject}
                 placeholder="my-app"
-                pattern="[a-z0-9][a-z0-9\-]*"
                 onChange={(event) => setStackProject(event.target.value)}
               />
             </Field>
