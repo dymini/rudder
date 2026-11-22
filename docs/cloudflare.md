@@ -4,6 +4,50 @@ An optional, advanced mode in **Security → Cloudflare**. It puts the panel and
 
 The decision record is [0025](decisions/0025-cloudflare-zero-trust.md).
 
+## Connector management and rolling updates
+
+The tunnel card shows Cloudflare's connectors (connector ID, cloudflared version,
+origin IP, colo and connection time) alongside local containers (name, image,
+digest, executable version, state, uptime and restarts). Failed Cloudflare,
+Docker, or GitHub checks are shown separately rather than hiding the other data.
+
+**Check for updates** reads stable releases from `cloudflare/cloudflared` on
+GitHub. Results, errors and the last successful release survive panel restarts;
+automatic checks are cached for six hours. New managed replicas use a saved,
+version-pinned `cloudflare/cloudflared:<version>` image, not a floating tag.
+Existing containers are not restarted just by opening the page or checking.
+An explicit `RUDDER_CLOUDFLARED_IMAGE` still wins; managed rolling updates are
+disabled until that override is removed.
+
+**Update connectors** runs in the background, one replica at a time, including
+when there is only one replica:
+
+1. Pull the pinned target image and start `<replica>-next` on the proxy network.
+2. Wait up to three minutes for that container's registered-connection log and
+   a successful `/ready` probe. Merely counting unrelated tunnel connections is
+   not enough to retire the original.
+3. Rename the still-running original to `<replica>-previous`, give the connected
+   replacement its normal name, then gracefully stop the original (up to 60
+   seconds to drain) and remove it.
+
+A startup/readiness/cutover failure removes the surge and keeps the original.
+If retiring the original fails, Rudder restores it to a healthy state before
+removing the replacement. If Docker cannot restore the original, the registered
+replacement is deliberately kept to avoid downtime; the update stops and shows
+the error. Retrying recovers
+interrupted `-next`/`-previous` containers only after proving the survivor is
+healthy. Already completed replicas stay updated on a later failure; the saved
+target version changes only after the whole rollout succeeds. Interrupted jobs
+are visible after restarting the panel. Updates, scaling, credential changes
+and removal share a database lock; overlapping mutations return 409.
+
+The same controls are available through API/MCP in the existing Cloudflare
+scope: `GET /api/v1/cloudflare/tunnel/status`,
+`POST /api/v1/cloudflare/tunnel/check`, and
+`POST /api/v1/cloudflare/tunnel/update` with `{}` for the latest cached stable
+release or `{"version":"2026.11.0"}` for an explicit version (including a
+downgrade or retry).
+
 ## What you need
 
 - A domain whose DNS is on Cloudflare (the zone).
@@ -62,6 +106,9 @@ Everything above is available through the HTTP API and the MCP server under the 
 | PUT | `/api/v1/cloudflare/credentials` | Check and save the account id, zone id, and token |
 | POST, DELETE | `/api/v1/cloudflare/tunnel` | Create the tunnel, or remove it and everything it made |
 | PUT | `/api/v1/cloudflare/tunnel/replicas` | Set the number of replicas (1 to 5) |
+| GET | `/api/v1/cloudflare/tunnel/status` | Connections, local containers, versions and update progress |
+| POST | `/api/v1/cloudflare/tunnel/check` | Refresh the cached stable cloudflared release |
+| POST | `/api/v1/cloudflare/tunnel/update` | Rolling update to the latest release or an explicit `version` |
 | POST | `/api/v1/cloudflare/tunnel/publish` | Publish the domains; `overwrite_dns` replaces existing records |
 | PUT | `/api/v1/cloudflare/access` | Create or update the Access application |
 | PUT | `/api/v1/cloudflare/access/enforcement` | Require or stop requiring the Access token |
@@ -75,4 +122,4 @@ Everything above is available through the HTTP API and the MCP server under the 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `RUDDER_CLOUDFLARE_API_URL` | `https://api.cloudflare.com/client/v4` | Cloudflare API address; only honored by development builds, official releases always use Cloudflare |
-| `RUDDER_CLOUDFLARED_IMAGE` | `cloudflare/cloudflared:latest` | Image the replicas run |
+| `RUDDER_CLOUDFLARED_IMAGE` | No override; stable release pinned in settings | Custom image for replicas; overrides managed versions and disables managed rolling updates |

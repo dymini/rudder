@@ -5,6 +5,7 @@
 //! API token and the tunnel token are stored encrypted and never returned.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::http::{Method, StatusCode};
@@ -283,6 +284,23 @@ impl Cf {
         .await
         .map(|_| ())
         .map_err(|e| e.into_api("publishing the tunnel hostnames"))
+    }
+
+    /// Number of live connections the tunnel's replicas hold.
+    pub async fn connection_details(
+        &self,
+        account_id: &str,
+        tunnel_id: &str,
+    ) -> Result<Vec<crate::tunnel::TunnelConnection>, ApiError> {
+        let result = self
+            .call(
+                Method::GET,
+                &format!("/accounts/{account_id}/cfd_tunnel/{tunnel_id}/connections"),
+                None,
+            )
+            .await
+            .map_err(|e| e.into_api("reading the tunnel connections"))?;
+        Ok(crate::tunnel::parse_connections(&result))
     }
 
     /// Number of live connections the tunnel's replicas hold.
@@ -816,10 +834,9 @@ pub async fn scale_replicas(
     restart_all: bool,
 ) -> Result<(), ApiError> {
     let driver = &state.local_driver;
-    driver
-        .pull_image(&state.config.cloudflared_image, None)
-        .await
-        .map_err(core_error)?;
+    let image = crate::tunnel::effective_image(state).await?;
+    driver.pull_image(&image, None).await.map_err(core_error)?;
+    crate::tunnel_update::recover_replicas(state, token).await?;
     for index in 1..=MAX_TUNNEL_REPLICAS {
         let name = replica_container_name(index);
         let running = driver.container_running(&name).await.unwrap_or(false);
@@ -831,8 +848,7 @@ pub async fn scale_replicas(
             continue;
         }
         let _ = driver.remove_container(&name, true).await;
-        let spec =
-            cloudflared_spec(token, &state.config.cloudflared_image, index).map_err(core_error)?;
+        let spec = cloudflared_spec(token, &image, index).map_err(core_error)?;
         let id = driver.create_container(&spec).await.map_err(core_error)?;
         driver.start_container(&id).await.map_err(core_error)?;
     }
@@ -840,6 +856,14 @@ pub async fn scale_replicas(
 }
 
 pub async fn remove_replicas(state: &AppState) {
+    if let Ok(containers) = state.local_driver.tunnel_containers().await {
+        for container in containers {
+            let _ = state
+                .local_driver
+                .remove_container(&container.id, true)
+                .await;
+        }
+    }
     for index in 1..=MAX_TUNNEL_REPLICAS {
         let _ = state
             .local_driver
@@ -1092,6 +1116,7 @@ struct Guard {
 /// Panel-side state for the optional mode: the enforcement settings and the
 /// team's signing keys, both cached briefly.
 pub struct Runtime {
+    pub(crate) tunnel_lock: Arc<Mutex<()>>,
     guard: RwLock<Option<(Instant, Option<Guard>)>>,
     jwks: Mutex<Option<(String, Instant, String)>>,
     http: reqwest::Client,
@@ -1100,6 +1125,7 @@ pub struct Runtime {
 impl Default for Runtime {
     fn default() -> Self {
         Self {
+            tunnel_lock: Arc::default(),
             guard: RwLock::new(None),
             jwks: Mutex::new(None),
             http: reqwest::Client::builder()

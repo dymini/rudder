@@ -1930,6 +1930,27 @@
         }
       }
     },
+    "/api/v1/cloudflare/tunnel/check": {
+      "post": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Refresh the cached stable cloudflared release from GitHub (admin, write)",
+        "operationId": "post_v1_cloudflare_tunnel_check",
+        "responses": {
+          "200": {
+            "description": "Refresh the cached stable cloudflared release from GitHub (admin, write)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TunnelStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/cloudflare/tunnel/publish": {
       "post": {
         "tags": [
@@ -1983,6 +2004,57 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CloudflareStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/tunnel/status": {
+      "get": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Inspect Cloudflare connections, local replicas, versions and rolling update progress (admin)",
+        "operationId": "get_v1_cloudflare_tunnel_status",
+        "responses": {
+          "200": {
+            "description": "Inspect Cloudflare connections, local replicas, versions and rolling update progress (admin)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TunnelStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/tunnel/update": {
+      "post": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Roll tunnel connectors one at a time using a registered surge (admin, write)",
+        "operationId": "post_v1_cloudflare_tunnel_update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTunnel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Roll tunnel connectors one at a time using a registered surge (admin, write)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TunnelUpdateProgress"
                 }
               }
             }
@@ -7886,6 +7958,29 @@
             "type": "string"
           },
           "zone_name": {
+            "type": "string"
+          }
+        }
+      },
+      "CloudflaredRelease": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "html_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "published_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
             "type": "string"
           }
         }
@@ -13999,6 +14094,241 @@
           }
         }
       },
+      "TunnelConnection": {
+        "type": "object",
+        "required": [
+          "connector_id",
+          "healthy"
+        ],
+        "properties": {
+          "colo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "connection_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "connector_id": {
+            "type": "string"
+          },
+          "healthy": {
+            "type": "boolean"
+          },
+          "opened_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin_ip": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "TunnelReplica": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "image",
+          "state",
+          "restarts"
+        ],
+        "properties": {
+          "digest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "restarts": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "state": {
+            "type": "string"
+          },
+          "uptime_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "TunnelStatus": {
+        "type": "object",
+        "required": [
+          "connections",
+          "replicas",
+          "image_overridden",
+          "update_available"
+        ],
+        "properties": {
+          "check_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "checked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "connection_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TunnelConnection"
+            }
+          },
+          "image_overridden": {
+            "type": "boolean"
+          },
+          "latest_release": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CloudflaredRelease"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pinned_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "replica_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "replicas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TunnelReplica"
+            }
+          },
+          "tunnel_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "update": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TunnelUpdateProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "update_available": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TunnelUpdateProgress": {
+        "type": "object",
+        "required": [
+          "status",
+          "version",
+          "image",
+          "completed",
+          "total",
+          "started_at"
+        ],
+        "properties": {
+          "completed": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "image": {
+            "type": "string"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "replica": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
       "UpdateAccessSettings": {
         "type": "object",
         "properties": {
@@ -14806,6 +15136,17 @@
           "history_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "UpdateTunnel": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

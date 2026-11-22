@@ -9,6 +9,8 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Added
+- **Inspect tunnel connectors.** The API and MCP show Cloudflare connections, local container versions and digests, and cached upstream releases, with separate errors when one source is unavailable.
+- **Update tunnels one connector at a time.** Rolling updates start a connected replacement before retiring each old replica, including on single-replica tunnels; progress and failures remain visible. Managed images are version-pinned, while `RUDDER_CLOUDFLARED_IMAGE` keeps precedence.
 - **Choose how each domain is reached.** Service domains can opt in to Cloudflare tunnels or proxied DNS to their server's public IP. New domains default to direct routing; an upgrade preserves existing tunnel domains. Switching back to direct or deleting a domain cleans up only Rudder-managed records, and direct domains warn when closed public ports would make them unreachable.
 - **All your domains in one place.** The new Domains page lists service, stack, panel, and Access hostnames with their servers, routing, TLS and DNS checks. Re-check DNS, change routing, or remove a service domain without opening each service.
 

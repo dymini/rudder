@@ -100,6 +100,10 @@ use crate::routes::stacks::{
 use crate::routes::system::{PanelBackupRequest, SystemInfo};
 use crate::routes::updates::{ComponentsStarted, UpdateOverview, UpdateSettings, UpdateStarted};
 use crate::stacks::StackGit;
+use crate::tunnel::{
+    CloudflaredRelease, TunnelConnection, TunnelReplica, TunnelStatus, TunnelUpdateProgress,
+};
+use crate::tunnel_update::UpdateTunnel;
 use crate::update::{ComponentStatus, ReleaseInfo, UpdateCheck, UpdateHistoryEntry};
 use rudder_core::{
     CacheHostStats, CachePurgeResult, CacheRule, CacheStats, GuardLevel, GuardReason, HostPressure,
@@ -276,6 +280,12 @@ use rudder_core::{
         AccessDepartmentGrant,
         AccessIntrospect,
         CloudflareStatus,
+        CloudflaredRelease,
+        TunnelConnection,
+        TunnelReplica,
+        TunnelStatus,
+        TunnelUpdateProgress,
+        UpdateTunnel,
         SaveCredentials,
         CreateTunnel,
         SetReplicas,
@@ -2364,6 +2374,9 @@ pub(crate) const ROUTES: &[Route] = &[
     Route { path: "/api/v1/cloudflare/tunnel", method: HttpMethod::Post, tag: "cloudflare", summary: "Create the tunnel and start its replicas (admin, write)", request: Some("CreateTunnel"), response: Some("CloudflareStatus"), status: 201 },
     Route { path: "/api/v1/cloudflare/tunnel", method: HttpMethod::Delete, tag: "cloudflare", summary: "Remove the tunnel, its DNS records, Access applications, and replicas (admin, write)", request: None, response: Some("TeardownReport"), status: 200 },
     Route { path: "/api/v1/cloudflare/tunnel/replicas", method: HttpMethod::Put, tag: "cloudflare", summary: "Set the number of tunnel replicas, 1 to 5 (admin, write)", request: Some("SetReplicas"), response: Some("CloudflareStatus"), status: 200 },
+    Route { path: "/api/v1/cloudflare/tunnel/status", method: HttpMethod::Get, tag: "cloudflare", summary: "Inspect Cloudflare connections, local replicas, versions and rolling update progress (admin)", request: None, response: Some("TunnelStatus"), status: 200 },
+    Route { path: "/api/v1/cloudflare/tunnel/check", method: HttpMethod::Post, tag: "cloudflare", summary: "Refresh the cached stable cloudflared release from GitHub (admin, write)", request: None, response: Some("TunnelStatus"), status: 200 },
+    Route { path: "/api/v1/cloudflare/tunnel/update", method: HttpMethod::Post, tag: "cloudflare", summary: "Roll tunnel connectors one at a time using a registered surge (admin, write)", request: Some("UpdateTunnel"), response: Some("TunnelUpdateProgress"), status: 202 },
     Route { path: "/api/v1/cloudflare/tunnel/publish", method: HttpMethod::Post, tag: "cloudflare", summary: "Publish every domain through the tunnel and point DNS at it (admin, write)", request: Some("PublishRequest"), response: Some("SyncReport"), status: 200 },
     Route { path: "/api/v1/cloudflare/access", method: HttpMethod::Put, tag: "cloudflare", summary: "Protect the panel domain with Cloudflare Access (admin, write)", request: Some("SetupAccess"), response: Some("CloudflareStatus"), status: 200 },
     Route { path: "/api/v1/cloudflare/access/enforcement", method: HttpMethod::Put, tag: "cloudflare", summary: "Require a valid Cloudflare Access token for the panel domain (admin, write)", request: Some("SetEnforcement"), response: Some("CloudflareStatus"), status: 200 },
