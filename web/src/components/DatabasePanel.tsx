@@ -228,20 +228,22 @@ export function ServiceLogs({ serviceId }: { serviceId: string }) {
       title={t("Container logs")}
       description={t("Live output of the container. Refreshes every 5 seconds.")}
       actions={
-        <Segmented
-          label={t("Lines")}
-          value={tail}
-          onChange={setTail}
-          options={[
-            ["100", "100"],
-            ["200", "200"],
-            ["1000", "1000"],
-          ]}
-        />
+        <div className="[&_button]:min-h-11 [&_button]:min-w-11 sm:[&_button]:min-h-0 sm:[&_button]:min-w-0">
+          <Segmented
+            label={t("Lines")}
+            value={tail}
+            onChange={setTail}
+            options={[
+              ["100", "100"],
+              ["200", "200"],
+              ["1000", "1000"],
+            ]}
+          />
+        </div>
       }
     >
       {logs.error ? (
-        <p className="text-sm text-muted">{errorMessage(logs.error, t("No logs available"))}</p>
+        <p className="text-sm [overflow-wrap:anywhere] text-muted">{errorMessage(logs.error, t("No logs available"))}</p>
       ) : (
         <LogPre empty={t("No output yet.")}>{logs.data?.logs}</LogPre>
       )}

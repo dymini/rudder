@@ -864,7 +864,7 @@ function DeploymentLog({
       onToggle={(event) => setOpen(event.currentTarget.open)}
       className="group rounded-alert border border-line bg-surface [&_summary::-webkit-details-marker]:hidden"
     >
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-alert px-3.5 py-2.5 text-sm font-medium text-ink-soft select-none hover:bg-paper">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-alert px-3.5 py-2.5 text-sm font-medium text-ink-soft select-none hover:bg-paper">
         <Icon
           name="chevronRight"
           size={14}
@@ -883,7 +883,7 @@ function DeploymentLog({
           <p className="mb-2 text-xs text-muted">
             {t("Showing the end of a long log.")}{" "}
             <a
-              className="underline"
+              className="inline-flex min-h-11 items-center underline"
               href={`/api/v1/services/${serviceId}/deployments/${deployment.id}/logs`}
               target="_blank"
               rel="noreferrer"
@@ -892,7 +892,7 @@ function DeploymentLog({
             </a>
           </p>
         ) : null}
-        <LogPre className="max-h-96" empty={t("No log output yet.")} follow={running}>
+        <LogPre className="max-h-[min(24rem,60dvh)]" empty={t("No log output yet.")} follow={running}>
           {deployment.logs}
         </LogPre>
       </div>
@@ -962,12 +962,12 @@ export function DeploymentsPanel({ serviceId, isStack }: { serviceId: string; is
             return (
               <li key={deployment.id} className="flex gap-3.5 px-5 py-4 sm:px-6">
                 <span
-                  className={`mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full border ${cls}`}
+                  className={`mt-0.5 hidden size-8 shrink-0 items-center justify-center rounded-full border sm:inline-flex ${cls}`}
                 >
                   <Icon name={icon} size={15} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 [&_button]:min-h-11 sm:[&_button]:min-h-0">
                     <Badge value={deployment.status} />
                     <Badge value={deployment.trigger} tone="outline" />
                     {deployment.id === currentId ? <Badge value="current" tone="success" /> : null}
@@ -1016,7 +1016,7 @@ export function DeploymentsPanel({ serviceId, isStack }: { serviceId: string; is
                     {duration ? ` · ${t("took {time}", { time: duration })}` : ""}
                   </p>
                   {deployment.error ? (
-                    <p className="mt-2 flex items-start gap-1.5 text-sm text-danger">
+                    <p className="mt-2 flex min-w-0 items-start gap-1.5 text-sm [overflow-wrap:anywhere] text-danger">
                       <Icon name="alert" size={15} className="mt-0.5 shrink-0" />
                       {deployment.error}
                     </p>

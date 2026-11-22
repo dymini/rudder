@@ -670,7 +670,7 @@ export function StackLogs({ serviceId }: { serviceId: string }) {
       description={t("Live output of one container in the stack. Refreshes every 5 seconds.")}
       actions={
         <>
-          <div className="w-44">
+          <div className="min-w-0 w-full sm:w-44 [&_select]:h-11 sm:[&_select]:h-10">
             <Select
               aria-label={t("Compose service")}
               value={service}
@@ -683,23 +683,25 @@ export function StackLogs({ serviceId }: { serviceId: string }) {
               ))}
             </Select>
           </div>
-          <Segmented
-            label={t("Lines")}
-            value={tail}
-            onChange={setTail}
-            options={[
-              ["100", "100"],
-              ["200", "200"],
-              ["1000", "1000"],
-            ]}
-          />
+          <div className="[&_button]:min-h-11 [&_button]:min-w-11 sm:[&_button]:min-h-0 sm:[&_button]:min-w-0">
+            <Segmented
+              label={t("Lines")}
+              value={tail}
+              onChange={setTail}
+              options={[
+                ["100", "100"],
+                ["200", "200"],
+                ["1000", "1000"],
+              ]}
+            />
+          </div>
         </>
       }
     >
       {!service ? (
         <Empty>{t("Deploy the stack to see logs.")}</Empty>
       ) : logs.error ? (
-        <Empty>{errorMessage(logs.error, t("No logs available"))}</Empty>
+        <p className="text-sm [overflow-wrap:anywhere] text-muted">{errorMessage(logs.error, t("No logs available"))}</p>
       ) : (
         <LogPre empty={t("No output yet.")}>{logs.data?.logs}</LogPre>
       )}
