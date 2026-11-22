@@ -267,7 +267,7 @@ export function Card({
   const hasHeader = title || description || actions;
   return (
     <section
-      className={`overflow-hidden rounded-card border border-line bg-surface shadow-card ${className}`}
+      className={`min-w-0 overflow-hidden rounded-card border border-line bg-surface shadow-card ${className}`}
     >
       {hasHeader ? (
         <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 px-5 pt-5 sm:px-6">
@@ -279,7 +279,7 @@ export function Card({
             ) : null}
             {description ? <p className="mt-1 text-sm text-muted">{description}</p> : null}
           </div>
-          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+          {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{actions}</div> : null}
         </header>
       ) : null}
       {children ? (
@@ -1006,7 +1006,7 @@ export function SectionNav<T extends string>({
 export function LogPre({
   children,
   empty,
-  className = "max-h-[32rem]",
+  className = "max-h-[min(32rem,60dvh)]",
   follow = false,
 }: {
   children?: string | null;
@@ -1032,7 +1032,8 @@ export function LogPre({
           atEnd.current = element.scrollHeight - element.scrollTop - element.clientHeight < 48;
         }
       }}
-      className={`overflow-auto rounded-alert border border-[#2c2a26] bg-[#12110f] p-3.5 font-mono text-xs leading-relaxed whitespace-pre-wrap text-[#d8d2c8] ${className}`}
+      tabIndex={0}
+      className={`min-w-0 max-w-full overflow-auto rounded-alert border border-[#2c2a26] bg-[#12110f] p-3.5 font-mono text-xs leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] text-[#d8d2c8] ${className}`}
     >
       {children ? <AnsiText console>{children}</AnsiText> : <span className="text-[#766f67]">{empty}</span>}
     </pre>

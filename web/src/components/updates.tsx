@@ -266,18 +266,18 @@ export function UpdatesCard() {
           {data.history.map((entry) => (
             <li key={entry.id} className="py-2">
               <details>
-                <summary className="flex cursor-pointer flex-wrap items-center gap-2">
+                <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-2 [overflow-wrap:anywhere]">
                   <Badge value={entry.status.replace("_", " ")} tone={entry.status} />
-                  <span className="font-medium">
+                  <span className="min-w-0 max-w-full font-medium">
                     {entry.component}
                     {entry.server_name ? ` ${t("on {name}", { name: entry.server_name })}` : ""}
                   </span>
-                  <span className="text-muted">
+                  <span className="min-w-0 max-w-full text-muted">
                     {entry.from_version ?? "?"} → {entry.to_version}
                   </span>
                   <span className="ml-auto text-xs text-muted">{formatTime(entry.started_at)}</span>
                 </summary>
-                <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-sunken p-3 text-xs">
+                <pre tabIndex={0} className="mt-2 min-w-0 max-w-full max-h-[min(18rem,60dvh)] overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-md bg-sunken p-3 text-xs">
                   <AnsiText>{entry.logs || t("No output yet.")}</AnsiText>
                 </pre>
               </details>
