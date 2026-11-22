@@ -5,6 +5,7 @@ import { api, download } from "../api";
 import { BackupJobForm, PanelRestoreHint } from "../components/backups";
 import { Button, Card, Field, TextInput } from "../components/ui";
 import { UpdatesCard } from "../components/updates";
+import { PanelBackups } from "../components/panel-backups";
 import { errorMessage } from "../format";
 import type { Schemas } from "../types";
 import { useT } from "../i18n";
@@ -62,6 +63,7 @@ export function SystemPage() {
         )}
       </Card>
       <UpdatesCard />
+      <PanelBackups />
       <Card title={t("Panel backup")}>
         <p className="mb-3 text-sm text-muted">
           {t(

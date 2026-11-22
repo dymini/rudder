@@ -705,6 +705,147 @@ async fn wait_run(app: &axum::Router, owner: &Session, run_id: &str) -> Value {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn manage_and_verify_panel_destination_copies_without_docker(pool: PgPool) {
+    assert!(
+        tools_available(),
+        "PostgreSQL client tools are required for panel verification tests"
+    );
+    let dir =
+        std::env::temp_dir().join(format!("rudder-panel-management-{}", uuid::Uuid::new_v4()));
+    let app = app(pool.clone(), &dir);
+    let (owner, viewer) = seed(&app).await;
+    let endpoint = "/api/v1/system/panel-backups";
+    assert_eq!(
+        send(&app, "GET", endpoint, viewer.pair(), None)
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    let empty = send(&app, "GET", endpoint, owner.pair(), None).await;
+    assert_eq!(empty.status, StatusCode::OK, "{}", empty.body);
+    assert_eq!(empty.body["objects"], json!([]));
+    assert_eq!(empty.body["health"]["configured"], false);
+    assert_eq!(
+        send(
+            &app,
+            "GET",
+            &format!("{endpoint}?limit=0"),
+            owner.pair(),
+            None
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    let destination=send(&app,"POST","/api/v1/s3-destinations",owner.pair(),Some(json!({"name":"panel-managed","endpoint":"http://local.r2.internal","bucket":"panel","region":"us-east-1","access_key_id":"test","secret_access_key":"test-secret"}))).await;
+    assert_eq!(
+        destination.status,
+        StatusCode::CREATED,
+        "{}",
+        destination.body
+    );
+    let destination = destination.body["id"].as_str().unwrap();
+    let job=send(&app,"POST","/api/v1/backup-jobs",owner.pair(),Some(json!({"name":"full-panel","target_kind":"panel_db","destination_ids":[destination],"schedule_cron":"@daily","encryption_passphrase":PASSPHRASE}))).await;
+    assert_eq!(job.status, StatusCode::CREATED, "{}", job.body);
+    let run = send(
+        &app,
+        "POST",
+        &format!(
+            "/api/v1/backup-jobs/{}/run",
+            job.body["id"].as_str().unwrap()
+        ),
+        owner.pair(),
+        None,
+    )
+    .await;
+    assert_eq!(run.status, StatusCode::ACCEPTED, "{}", run.body);
+    let run = run.body["run_id"].as_str().unwrap();
+    let completed = wait_run(&app, &owner, run).await;
+    assert_eq!(completed["status"], "succeeded", "{completed}");
+    let inventory = send(&app, "GET", endpoint, owner.pair(), None).await;
+    assert_eq!(inventory.status, StatusCode::OK, "{}", inventory.body);
+    assert_eq!(inventory.body["objects"][0]["presence"], "present");
+    assert_eq!(inventory.body["objects"][0]["encrypted"], true);
+    assert_eq!(
+        inventory.body["objects"][0]["version"],
+        rudder_core::VERSION
+    );
+    assert_eq!(inventory.body["jobs"][0]["encrypted"], true);
+    assert_eq!(inventory.body["health"]["configured"], true);
+    let copy = format!("{endpoint}/{run}/copies/{destination}");
+    let downloaded = send(&app, "GET", &format!("{copy}/download"), owner.pair(), None).await;
+    assert_eq!(downloaded.status, StatusCode::OK);
+    assert!(downloaded.raw.starts_with(rudder_core::ENVELOPE_MAGIC));
+    for corrupt in [false, true] {
+        if corrupt {
+            sqlx::query("UPDATE backup_runs SET checksum=$2 WHERE id=$1")
+                .bind(uuid::Uuid::parse_str(run).unwrap())
+                .bind("0".repeat(64))
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        let verified = send(
+            &app,
+            "POST",
+            &format!("{endpoint}/{run}/verify"),
+            owner.pair(),
+            Some(json!({"destination_id":destination})),
+        )
+        .await;
+        assert_eq!(verified.status, StatusCode::ACCEPTED, "{}", verified.body);
+        let mut result = Value::Null;
+        for _ in 0..200 {
+            result = send(&app, "GET", endpoint, owner.pair(), None).await.body["objects"][0]
+                ["verification"]
+                .clone();
+            if result["status"] != "running" {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert_eq!(
+            result["status"],
+            if corrupt { "failed" } else { "succeeded" },
+            "{result}"
+        );
+        if !corrupt {
+            assert_eq!(result["manifest"]["format"], "rudder-panel-backup");
+        } else {
+            assert!(result["error"].as_str().unwrap().contains("SHA-256"));
+        }
+    }
+    assert_eq!(
+        send(&app, "DELETE", &copy, viewer.pair(), None)
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    let mut removed = StatusCode::CONFLICT;
+    for _ in 0..50 {
+        removed = send(&app, "DELETE", &copy, owner.pair(), None).await.status;
+        if removed != StatusCode::CONFLICT {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(removed, StatusCode::NO_CONTENT);
+    assert!(
+        send(&app, "GET", endpoint, owner.pair(), None).await.body["objects"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        send(&app, "GET", &format!("{copy}/download"), owner.pair(), None)
+            .await
+            .status,
+        StatusCode::BAD_REQUEST
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn docker_panel_jobs_upload_to_s3(pool: PgPool) {
     if std::env::var("RUDDER_DOCKER_TESTS").as_deref() != Ok("1") || !tools_available() {
         eprintln!("skipping: set RUDDER_DOCKER_TESTS=1 to run the S3 panel job test");

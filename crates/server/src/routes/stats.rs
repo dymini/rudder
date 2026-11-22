@@ -107,6 +107,7 @@ pub struct StatsOperations {
 }
 #[derive(Serialize, ToSchema)]
 pub struct StatsOverview {
+    pub panel_backup: super::panel_backups::PanelBackupHealth,
     pub since: DateTime<Utc>,
     pub until: DateTime<Utc>,
     pub resolution: String,
@@ -163,6 +164,7 @@ pub async fn overview(
         .map_err(ApiError::database)?;
     tx.commit().await.map_err(ApiError::database)?;
     Ok(Json(StatsOverview {
+        panel_backup: super::panel_backups::health(&state).await?,
         since,
         until,
         resolution: resolution.into(),

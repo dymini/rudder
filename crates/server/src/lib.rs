@@ -342,6 +342,7 @@ pub fn router(state: AppState) -> axum::Router {
         .merge(routes::monitoring::router())
         .merge(routes::agents::router())
         .merge(routes::system::router())
+        .merge(routes::panel_backups::router())
         .merge(routes::load::router())
         .merge(routes::updates::router())
         .merge(routes::docs::router())
