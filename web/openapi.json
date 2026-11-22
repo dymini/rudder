@@ -6147,6 +6147,106 @@
         }
       }
     },
+    "/api/v1/system/panel-backups": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "List managed panel backup jobs and remote copies (limit 1-200 runs)",
+        "operationId": "get_v1_system_panel-backups",
+        "responses": {
+          "200": {
+            "description": "List managed panel backup jobs and remote copies (limit 1-200 runs)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PanelBackupInventory"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/panel-backups/health": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Check scheduled full-panel backup freshness and failing streak",
+        "operationId": "get_v1_system_panel-backups_health",
+        "responses": {
+          "200": {
+            "description": "Check scheduled full-panel backup freshness and failing streak",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PanelBackupHealth"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/panel-backups/{id}/copies/{destination}": {
+      "delete": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Delete only the selected panel backup destination copy",
+        "operationId": "delete_v1_system_panel-backups__id__copies__destination_",
+        "responses": {
+          "204": {
+            "description": "Delete only the selected panel backup destination copy"
+          }
+        }
+      }
+    },
+    "/api/v1/system/panel-backups/{id}/copies/{destination}/download": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Download the selected panel backup copy (encrypted archive)",
+        "operationId": "get_v1_system_panel-backups__id__copies__destination__download",
+        "responses": {
+          "200": {
+            "description": "Download the selected panel backup copy (encrypted archive)"
+          }
+        }
+      }
+    },
+    "/api/v1/system/panel-backups/{id}/verify": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Verify a destination copy without executing SQL or changing live data",
+        "operationId": "post_v1_system_panel-backups__id__verify",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyPanelBackup"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Verify a destination copy without executing SQL or changing live data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PanelBackupVerification"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/system/settings-export": {
       "get": {
         "tags": [
@@ -12009,6 +12109,186 @@
           }
         }
       },
+      "PanelBackupConfig": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "target_kind",
+          "timezone",
+          "enabled",
+          "destination_ids",
+          "retention",
+          "encrypted",
+          "includes_history"
+        ],
+        "properties": {
+          "destination_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "encrypted": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "includes_history": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "retention": {},
+          "schedule_cron": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "target_kind": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        }
+      },
+      "PanelBackupHealth": {
+        "type": "object",
+        "required": [
+          "configured",
+          "failing_streak",
+          "stale"
+        ],
+        "properties": {
+          "age_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "failing_streak": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last_success": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "warning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PanelBackupInventory": {
+        "type": "object",
+        "required": [
+          "health",
+          "jobs",
+          "objects"
+        ],
+        "properties": {
+          "health": {
+            "$ref": "#/components/schemas/PanelBackupHealth"
+          },
+          "jobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PanelBackupConfig"
+            }
+          },
+          "objects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PanelBackupObject"
+            }
+          }
+        }
+      },
+      "PanelBackupObject": {
+        "type": "object",
+        "required": [
+          "run_id",
+          "job_id",
+          "destination_id",
+          "key",
+          "created_at",
+          "encrypted",
+          "presence"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "destination_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "encrypted": {
+            "type": "boolean"
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string"
+          },
+          "manifest": {},
+          "presence": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "size_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "verification": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PanelBackupVerification"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "PanelBackupRequest": {
         "type": "object",
         "required": [
@@ -12022,6 +12302,36 @@
           "passphrase": {
             "type": "string",
             "description": "At least 12 characters. Needed to restore; it is not stored."
+          }
+        }
+      },
+      "PanelBackupVerification": {
+        "type": "object",
+        "required": [
+          "status",
+          "started_at"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "manifest": {},
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
           }
         }
       },
@@ -15107,6 +15417,7 @@
       "StatsOverview": {
         "type": "object",
         "required": [
+          "panel_backup",
           "since",
           "until",
           "resolution",
@@ -15120,6 +15431,9 @@
           },
           "operations": {
             "$ref": "#/components/schemas/StatsOperations"
+          },
+          "panel_backup": {
+            "$ref": "#/components/schemas/PanelBackupHealth"
           },
           "resolution": {
             "type": "string"
@@ -16854,6 +17168,18 @@
           },
           "value": {
             "type": "string"
+          }
+        }
+      },
+      "VerifyPanelBackup": {
+        "type": "object",
+        "required": [
+          "destination_id"
+        ],
+        "properties": {
+          "destination_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       }

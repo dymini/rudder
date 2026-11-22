@@ -3629,6 +3629,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system/panel-backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List managed panel backup jobs and remote copies (limit 1-200 runs) */
+        get: operations["get_v1_system_panel-backups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/panel-backups/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Check scheduled full-panel backup freshness and failing streak */
+        get: operations["get_v1_system_panel-backups_health"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/panel-backups/{id}/copies/{destination}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete only the selected panel backup destination copy */
+        delete: operations["delete_v1_system_panel-backups__id__copies__destination_"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/panel-backups/{id}/copies/{destination}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download the selected panel backup copy (encrypted archive) */
+        get: operations["get_v1_system_panel-backups__id__copies__destination__download"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/panel-backups/{id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify a destination copy without executing SQL or changing live data */
+        post: operations["post_v1_system_panel-backups__id__verify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system/settings-export": {
         parameters: {
             query?: never;
@@ -5583,11 +5668,67 @@ export interface components {
             internal_ip?: string | null;
             isolation: boolean;
         };
+        PanelBackupConfig: {
+            destination_ids: string[];
+            enabled: boolean;
+            encrypted: boolean;
+            /** Format: uuid */
+            id: string;
+            includes_history: boolean;
+            name: string;
+            retention: unknown;
+            schedule_cron?: string | null;
+            target_kind: string;
+            timezone: string;
+        };
+        PanelBackupHealth: {
+            /** Format: int64 */
+            age_seconds?: number | null;
+            configured: boolean;
+            /** Format: int64 */
+            failing_streak: number;
+            /** Format: date-time */
+            last_success?: string | null;
+            stale: boolean;
+            warning?: string | null;
+        };
+        PanelBackupInventory: {
+            health: components["schemas"]["PanelBackupHealth"];
+            jobs: components["schemas"]["PanelBackupConfig"][];
+            objects: components["schemas"]["PanelBackupObject"][];
+        };
+        PanelBackupObject: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            destination_id: string;
+            encrypted: boolean;
+            /** Format: uuid */
+            job_id: string;
+            key: string;
+            manifest?: unknown;
+            presence: string;
+            /** Format: uuid */
+            run_id: string;
+            /** Format: int64 */
+            size_bytes?: number | null;
+            verification?: components["schemas"]["PanelBackupVerification"] | null;
+            version?: string | null;
+        };
         PanelBackupRequest: {
             /** @description Also include log lines, metric samples, and sessions. */
             include_history?: boolean;
             /** @description At least 12 characters. Needed to restore; it is not stored. */
             passphrase: string;
+        };
+        PanelBackupVerification: {
+            error?: string | null;
+            /** Format: date-time */
+            finished_at?: string | null;
+            manifest?: unknown;
+            /** Format: date-time */
+            started_at: string;
+            status: string;
         };
         PanelSslCheck: {
             common_name?: string | null;
@@ -6497,6 +6638,7 @@ export interface components {
         StatsOverview: {
             metrics: components["schemas"]["StatsMetrics"];
             operations: components["schemas"]["StatsOperations"];
+            panel_backup: components["schemas"]["PanelBackupHealth"];
             resolution: string;
             retention: components["schemas"]["MetricsRetention"];
             /** Format: date-time */
@@ -6954,6 +7096,10 @@ export interface components {
         VerifyEnvVar: {
             is_build_secret?: boolean;
             value: string;
+        };
+        VerifyPanelBackup: {
+            /** Format: uuid */
+            destination_id: string;
         };
     };
     responses: never;
@@ -12569,6 +12715,106 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    "get_v1_system_panel-backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List managed panel backup jobs and remote copies (limit 1-200 runs) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PanelBackupInventory"];
+                };
+            };
+        };
+    };
+    "get_v1_system_panel-backups_health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Check scheduled full-panel backup freshness and failing streak */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PanelBackupHealth"];
+                };
+            };
+        };
+    };
+    "delete_v1_system_panel-backups__id__copies__destination_": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Delete only the selected panel backup destination copy */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "get_v1_system_panel-backups__id__copies__destination__download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Download the selected panel backup copy (encrypted archive) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "post_v1_system_panel-backups__id__verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["VerifyPanelBackup"];
+            };
+        };
+        responses: {
+            /** @description Verify a destination copy without executing SQL or changing live data */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PanelBackupVerification"];
+                };
             };
         };
     };

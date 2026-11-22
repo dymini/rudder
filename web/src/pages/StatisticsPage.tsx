@@ -14,6 +14,7 @@ import {
 import { api } from "../api";
 import { AXIS_LINE, COLORS, TICK, TOOLTIP_STYLES } from "../components/metrics";
 import { Button, Card, Empty } from "../components/ui";
+import { PanelBackupStatus } from "../components/panel-backups";
 import { formatBytes, formatDuration, formatTime } from "../format";
 import { useT } from "../i18n";
 import type { Schemas } from "../types";
@@ -179,6 +180,14 @@ export function StatisticsPage() {
   );
   return (
     <div className="min-w-0 space-y-5">
+      {data ? (
+        <Card title={t("Panel backups")}>
+          <PanelBackupStatus health={data.panel_backup} />
+          <Link className="inline-flex min-h-10 items-center text-accent" to="/system#panel-backups">
+            {t("Manage panel backups")}
+          </Link>
+        </Card>
+      ) : null}
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold">{t("Statistics")}</h1>
