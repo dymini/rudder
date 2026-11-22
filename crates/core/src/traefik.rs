@@ -161,7 +161,21 @@ pub fn render_dynamic_config_for(
     gate: Option<&EdgeGate>,
     mode: EdgeMode,
 ) -> Result<String, Error> {
-    let tunnel = mode == EdgeMode::Tunnel;
+    let hosts: Vec<String> = if mode == EdgeMode::Tunnel {
+        routes.iter().map(|route| route.host.clone()).collect()
+    } else {
+        Vec::new()
+    };
+    render_dynamic_config_mixed(routes, certs, gate, &hosts)
+}
+
+/// Render direct and tunnel hostnames on the same proxy without disabling ACME for direct hosts.
+pub fn render_dynamic_config_mixed(
+    routes: &[ProxyRoute],
+    certs: &[TlsMaterial],
+    gate: Option<&EdgeGate>,
+    tunnel_hosts: &[String],
+) -> Result<String, Error> {
     // Traefik's file provider rejects empty sections such as `middlewares: {}`,
     // so only sections with entries are written.
     let needs_gate = routes
@@ -181,6 +195,7 @@ pub fn render_dynamic_config_for(
     let mut handoff_hosts = std::collections::BTreeSet::new();
     let mut needs_panel = false;
     for route in routes {
+        let tunnel = tunnel_hosts.contains(&route.host);
         validate_route(route)?;
         let rule = format!(
             "Host(`{}`) && PathPrefix(`{}`)",
@@ -429,6 +444,28 @@ mod tests {
         assert_eq!(tunneled.matches("- websecure").count(), 4);
         assert_eq!(tunneled.matches("tls: {}").count(), 4);
         assert!(tunneled.contains("PathPrefix(`/_rudder`)"));
+    }
+
+    #[test]
+    fn mixed_routes_keep_direct_acme_and_tunnel_tls_separate() {
+        let direct = route(TlsMode::LetsEncrypt);
+        let mut tunneled = route(TlsMode::LetsEncrypt);
+        tunneled.name = "rtunnel".into();
+        tunneled.host = "tunnel.example.com".into();
+        let config = render_dynamic_config_mixed(
+            &[direct, tunneled],
+            &[],
+            None,
+            &["tunnel.example.com".into()],
+        )
+        .unwrap();
+        assert_eq!(config.matches("certResolver: letsencrypt").count(), 1);
+        assert_eq!(config.matches("redirectScheme").count(), 1);
+        assert_eq!(config.matches("tls: {}").count(), 1);
+        assert!(render_dynamic_config_mixed(&[], &[], None, &[]).is_ok());
+        let mut invalid = route(TlsMode::None);
+        invalid.host = "bad`host".into();
+        assert!(render_dynamic_config_mixed(&[invalid], &[], None, &[]).is_err());
     }
 
     #[test]

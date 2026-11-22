@@ -147,9 +147,9 @@ pub use template::{ResolvedTemplate, Template, TemplateVariable, VariableKind};
 pub mod plugin;
 pub use plugin::{Plugin, PluginDescriptor};
 pub use traefik::{
-    preview_hostname, render_dynamic_config, render_dynamic_config_for, validate_host,
-    validate_path_prefix, EdgeGate, EdgeMode, ProxyRoute, TlsMaterial, TlsMode, PROXY_NETWORK,
-    TRAEFIK_CERT_DIR, TRAEFIK_CONTAINER,
+    preview_hostname, render_dynamic_config, render_dynamic_config_for,
+    render_dynamic_config_mixed, validate_host, validate_path_prefix, EdgeGate, EdgeMode,
+    ProxyRoute, TlsMaterial, TlsMode, PROXY_NETWORK, TRAEFIK_CERT_DIR, TRAEFIK_CONTAINER,
 };
 pub use validate::{validate_env_key, validate_image_ref, validate_name};
 pub use webhook::{evaluate_hook, verify_github_signature, HookInput, HookKind, HookOutcome};
