@@ -1166,6 +1166,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all domain routes and recheck public DNS */
+        get: operations["get_v1_domains"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/domains/routing-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Check routing availability. Query: service_id (UUID, required), host (hostname, required) */
+        get: operations["get_v1_domains_routing-options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/domains/{id}": {
         parameters: {
             query?: never;
@@ -4200,7 +4234,9 @@ export interface components {
             compose_service?: string | null;
             host: string;
             https_redirect?: boolean | null;
+            overwrite_dns?: boolean | null;
             path_prefix?: string | null;
+            routing_mode?: string | null;
             ssl_mode: string;
             /** Format: int32 */
             target_port: number;
@@ -4367,6 +4403,12 @@ export interface components {
             path_style: boolean;
             region: string;
         };
+        DnsCheck: {
+            addresses: string[];
+            expected?: string | null;
+            matches_expected?: boolean | null;
+            message: string;
+        };
         DnsOutcome: {
             /** @description `created`, `kept`, `replaced`, or `conflict`. */
             action: string;
@@ -4413,6 +4455,13 @@ export interface components {
             policy_id?: string | null;
             policy_name?: string | null;
         };
+        DomainRoutingOptions: {
+            cloudflare_available: boolean;
+            cloudflare_reason?: string | null;
+            cloudflare_reason_code?: string | null;
+            direct_warning?: string | null;
+            zone_name: string;
+        };
         DomainView: {
             basic_auth_user?: string | null;
             cache_enabled: boolean;
@@ -4430,6 +4479,8 @@ export interface components {
             matched_certificate_name?: string | null;
             path_prefix: string;
             published: boolean;
+            routing_mode: string;
+            routing_options: components["schemas"]["DomainRoutingOptions"];
             /** Format: uuid */
             service_id: string;
             ssl_mode: string;
@@ -4549,6 +4600,26 @@ export interface components {
             private: boolean;
             /** @description HTTPS clone address to use as the repository. */
             url: string;
+        };
+        GlobalDomainView: {
+            certificate_status?: string | null;
+            dns: components["schemas"]["DnsCheck"];
+            host: string;
+            /** Format: uuid */
+            id?: string | null;
+            kind: string;
+            path_prefix: string;
+            routing: string;
+            routing_mode: string;
+            routing_options?: components["schemas"]["DomainRoutingOptions"] | null;
+            /** Format: uuid */
+            server_id?: string | null;
+            server_name?: string | null;
+            /** Format: uuid */
+            service_id?: string | null;
+            service_kind?: string | null;
+            service_name?: string | null;
+            ssl_mode?: string | null;
         };
         /**
          * @description How loaded the host is.
@@ -5987,7 +6058,9 @@ export interface components {
             compose_service?: string | null;
             host?: string | null;
             https_redirect?: boolean | null;
+            overwrite_dns?: boolean | null;
             path_prefix?: string | null;
+            routing_mode?: string | null;
             ssl_mode?: string | null;
             /** Format: int32 */
             target_port?: number | null;
@@ -8069,6 +8142,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocPage"];
+                };
+            };
+        };
+    };
+    get_v1_domains: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List all domain routes and recheck public DNS */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalDomainView"][];
+                };
+            };
+        };
+    };
+    "get_v1_domains_routing-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Check routing availability. Query: service_id (UUID, required), host (hostname, required) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainRoutingOptions"];
                 };
             };
         };

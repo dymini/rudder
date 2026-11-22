@@ -8,6 +8,7 @@ use utoipa::{Modify, OpenApi as OpenApiDerive};
 use crate::backup::RestoreRequest;
 use crate::cloudflare::{DnsOutcome, SkippedHost, SyncReport};
 use crate::deploy::DeploymentView;
+use crate::domain_routing::{DnsCheck, DomainRoutingOptions, GlobalDomainView};
 use crate::guard::{GuardSettings, GuardView, ProtectionView};
 use crate::logs::retention::{MetricsRetention, RetentionSettings};
 use crate::logs::LogView;
@@ -165,6 +166,9 @@ use rudder_core::{
         CertificateView,
         UploadCertificate,
         DomainView,
+        DomainRoutingOptions,
+        GlobalDomainView,
+        DnsCheck,
         CreateDomain,
         UpdateDomain,
         PreviewDomain,
@@ -1958,6 +1962,24 @@ pub(crate) const ROUTES: &[Route] = &[
         summary: "Update a domain",
         request: Some("UpdateDomain"),
         response: Some("DomainView"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/domains",
+        method: HttpMethod::Get,
+        tag: "edge",
+        summary: "List all domain routes and recheck public DNS",
+        request: None,
+        response: Some("[GlobalDomainView]"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/domains/routing-options",
+        method: HttpMethod::Get,
+        tag: "edge",
+        summary: "Check routing availability. Query: service_id (UUID, required), host (hostname, required)",
+        request: None,
+        response: Some("DomainRoutingOptions"),
         status: 200,
     },
     Route {

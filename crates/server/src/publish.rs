@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 
 use chrono::{DateTime, Utc};
 use rudder_core::{
-    render_dynamic_config_for, EdgeGate, EdgeMode, NodeDriver, ProxyRoute, TlsMaterial, TlsMode,
+    render_dynamic_config_mixed, EdgeGate, NodeDriver, ProxyRoute, TlsMaterial, TlsMode,
     TRAEFIK_CERT_DIR,
 };
 use sqlx::PgPool;
@@ -49,6 +49,15 @@ struct CertBlob {
 /// Write a server's Traefik routes, certificates, and cache rules. Changes for a
 /// remote server whose agent is offline are applied when it reconnects.
 pub async fn publish_server(state: &AppState, server_id: Uuid) -> Result<bool, ApiError> {
+    publish_server_with_dns(state, server_id, false, None).await
+}
+
+pub async fn publish_server_with_dns(
+    state: &AppState,
+    server_id: Uuid,
+    overwrite_dns: bool,
+    overwrite_host: Option<&str>,
+) -> Result<bool, ApiError> {
     let kind = sqlx::query_scalar!(r#"SELECT kind FROM servers WHERE id = $1"#, server_id)
         .fetch_optional(&state.pool)
         .await
@@ -56,8 +65,9 @@ pub async fn publish_server(state: &AppState, server_id: Uuid) -> Result<bool, A
     let Some(kind) = kind else {
         return Err(crate::routes::catalog::not_found("server not found"));
     };
+    crate::domain_routing::reconcile(state, overwrite_dns, overwrite_host).await?;
     if kind == "local" && crate::cloudflare::tunnel_published(&state.pool).await {
-        crate::cloudflare::sync_hostnames(state, false).await?;
+        crate::cloudflare::sync_hostnames(state, overwrite_dns, overwrite_host).await?;
     }
     publish_server_routes(state, server_id, &kind).await
 }
@@ -96,13 +106,19 @@ async fn publish_server_routes(
         .await
         .map_err(core_error)?;
     let materials = write_certificates(state, driver.as_ref()).await?;
-    let mode = if kind == "local" && crate::cloudflare::tunnel_published(&state.pool).await {
-        EdgeMode::Tunnel
+    let tunnel_hosts = if kind == "local" && crate::cloudflare::tunnel_published(&state.pool).await
+    {
+        crate::cloudflare::wanted_hosts(
+            &state.pool,
+            &crate::cloudflare::load(&state.pool).await?.zone_name,
+        )
+        .await?
+        .0
     } else {
-        EdgeMode::Direct
+        Vec::new()
     };
-    let document =
-        render_dynamic_config_for(&yaml.0, &materials, gate.as_ref(), mode).map_err(core_error)?;
+    let document = render_dynamic_config_mixed(&yaml.0, &materials, gate.as_ref(), &tunnel_hosts)
+        .map_err(core_error)?;
     let mut body = document;
     if !yaml.1.is_empty() {
         let _ = write!(body, "\n# panel certificate {}\n", yaml.1);

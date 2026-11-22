@@ -8,6 +8,10 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Added
+- **Choose how each domain is reached.** Service domains can opt in to Cloudflare tunnels or proxied DNS to their server's public IP. New domains default to direct routing; an upgrade preserves existing tunnel domains. Switching back to direct or deleting a domain cleans up only Rudder-managed records, and direct domains warn when closed public ports would make them unreachable.
+- **All your domains in one place.** The new Domains page lists service, stack, panel, and Access hostnames with their servers, routing, TLS and DNS checks. Re-check DNS, change routing, or remove a service domain without opening each service.
+
 ### Fixed
 - **Naming errors explain how to fix them.** Invalid resource names, domains, database identifiers, and other labels now describe their naming rules instead of a generic rejection. Resource-name forms show the same guidance in English and Vietnamese, and duplicate names remain clearly identified.
 

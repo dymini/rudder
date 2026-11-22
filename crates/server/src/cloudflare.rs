@@ -67,6 +67,44 @@ pub struct Cf {
 }
 
 impl Cf {
+    pub async fn proxy_networks(&self) -> Result<Vec<String>, ApiError> {
+        let data = self
+            .call(Method::GET, "/ips", None)
+            .await
+            .map_err(|e| e.into_api("checking Cloudflare IP ranges"))?;
+        Ok(["ipv4_cidrs", "ipv6_cidrs"]
+            .iter()
+            .flat_map(|key| {
+                data.get(key)
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+            })
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect())
+    }
+
+    pub async fn proxied_target(
+        &self,
+        zone: &str,
+        host: &str,
+        expected: &str,
+    ) -> Result<bool, ApiError> {
+        let data = self
+            .call(
+                Method::GET,
+                &format!("/zones/{zone}/dns_records?name={host}&per_page=100"),
+                None,
+            )
+            .await
+            .map_err(|e| e.into_api("checking Cloudflare DNS target"))?;
+        Ok(items(&data).iter().any(|r| {
+            r.get("proxied") == Some(&Value::Bool(true))
+                && r.get("content")
+                    .and_then(Value::as_str)
+                    .is_some_and(|v| v.eq_ignore_ascii_case(expected))
+        }))
+    }
     pub fn new(base: &str, token: &str) -> Result<Self, ApiError> {
         let http = reqwest::Client::builder()
             .timeout(API_TIMEOUT)
@@ -314,22 +352,62 @@ impl Cf {
         zone_id: &str,
         host: &str,
         tunnel_id: &str,
-    ) -> Result<(), ApiError> {
-        self.call(
-            Method::POST,
-            &format!("/zones/{zone_id}/dns_records"),
-            Some(&json!({
-                "type": "CNAME",
-                "name": host,
-                "content": tunnel_cname(tunnel_id),
-                "proxied": true,
-                "ttl": 1,
-                "comment": "Managed by Rudder (Cloudflare tunnel)",
-            })),
-        )
-        .await
-        .map(|_| ())
-        .map_err(|e| e.into_api("creating a DNS record"))
+    ) -> Result<String, ApiError> {
+        let record = self
+            .call(
+                Method::POST,
+                &format!("/zones/{zone_id}/dns_records"),
+                Some(&json!({
+                    "type": "CNAME",
+                    "name": host,
+                    "content": tunnel_cname(tunnel_id),
+                    "proxied": true,
+                    "ttl": 1,
+                    "comment": "Managed by Rudder (Cloudflare tunnel)",
+                })),
+            )
+            .await
+            .map_err(|e| e.into_api("creating a DNS record"))?;
+        record
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .ok_or_else(|| {
+                bad(
+                    "cloudflare_error",
+                    "Cloudflare did not return the DNS record ID",
+                )
+            })
+    }
+
+    pub async fn create_address(
+        &self,
+        zone: &str,
+        host: &str,
+        ip: std::net::IpAddr,
+    ) -> Result<String, ApiError> {
+        let record = self
+            .call(
+                Method::POST,
+                &format!("/zones/{zone}/dns_records"),
+                Some(&json!({
+                    "type": if ip.is_ipv4() { "A" } else { "AAAA" }, "name": host,
+                    "content": ip.to_string(), "proxied": true, "ttl": 1,
+                    "comment": "Managed by Rudder (service domain)"
+                })),
+            )
+            .await
+            .map_err(|e| e.into_api("creating a proxied DNS record"))?;
+        record
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .ok_or_else(|| {
+                bad(
+                    "cloudflare_error",
+                    "Cloudflare did not return the DNS record ID",
+                )
+            })
     }
 
     pub async fn delete_dns(&self, zone_id: &str, record_id: &str) -> Result<(), ApiError> {
@@ -341,6 +419,19 @@ impl Cf {
         .await
         .map(|_| ())
         .map_err(|e| e.into_api("deleting a DNS record"))
+    }
+
+    pub async fn rudder_record(&self, zone: &str, id: &str) -> Result<bool, ApiError> {
+        let record = self
+            .call(
+                Method::GET,
+                &format!("/zones/{zone}/dns_records/{id}"),
+                None,
+            )
+            .await
+            .map_err(|e| e.into_api("checking DNS ownership"))?;
+        Ok(record.get("comment").and_then(Value::as_str)
+            == Some("Managed by Rudder (Cloudflare tunnel)"))
     }
 
     /// Create or update a self-hosted or infrastructure Access application.
@@ -666,6 +757,26 @@ pub fn client(state: &AppState, settings: &Settings) -> Result<Cf, ApiError> {
     Cf::new(&state.config.cloudflare_api_url, &token)
 }
 
+pub async fn owned_record_or_legacy(
+    state: &AppState,
+    client: &Cf,
+    zone: &str,
+    record: &DnsRecord,
+) -> Result<bool, ApiError> {
+    let tracked: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM domain_dns_records WHERE zone_id=$1 AND record_id=$2)",
+    )
+    .bind(zone)
+    .bind(&record.id)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(ApiError::database)?;
+    if tracked {
+        return crate::domain_routing::owned(state, zone, record).await;
+    }
+    client.rudder_record(zone, &record.id).await
+}
+
 pub fn tunnel_token(state: &AppState, settings: &Settings) -> Result<String, ApiError> {
     decrypt(state, &settings.tunnel_token_enc, "tunnel token")
 }
@@ -756,7 +867,7 @@ pub async fn wanted_hosts(
         SELECT lower(d.host) FROM domains d
         JOIN services s ON s.id = d.service_id
         JOIN servers sv ON sv.id = s.server_id
-        WHERE sv.kind = 'local'
+        WHERE sv.kind = 'local' AND d.routing_mode = 'cloudflare'
         UNION
         SELECT lower(panel_domain) FROM panel_settings
         WHERE id = TRUE AND panel_domain IS NOT NULL AND panel_domain <> ''
@@ -814,7 +925,7 @@ pub struct SyncReport {
 /// Push the hostnames to the tunnel, point their DNS at it, and switch Traefik
 /// to the tunnel variant.
 pub async fn sync(state: &AppState, overwrite_dns: bool) -> Result<SyncReport, ApiError> {
-    let report = sync_hostnames(state, overwrite_dns).await?;
+    let report = sync_hostnames(state, overwrite_dns, None).await?;
     crate::publish::publish_local_routes(state).await?;
     Ok(report)
 }
@@ -822,6 +933,7 @@ pub async fn sync(state: &AppState, overwrite_dns: bool) -> Result<SyncReport, A
 pub(crate) async fn sync_hostnames(
     state: &AppState,
     overwrite_dns: bool,
+    overwrite_host: Option<&str>,
 ) -> Result<SyncReport, ApiError> {
     let settings = load(&state.pool).await?;
     let tunnel_id = require_tunnel(&settings)?.to_owned();
@@ -833,19 +945,40 @@ pub(crate) async fn sync_hostnames(
     let config = tunnel_config(&hosts).map_err(core_error)?;
     cf.put_tunnel_config(&settings.account_id, &tunnel_id, &config)
         .await?;
+    crate::domain_routing::reconcile_tunnel(state, overwrite_dns, overwrite_host).await?;
 
     let mut existing = Vec::new();
     for host in &hosts {
         existing.extend(cf.dns_records(&settings.zone_id, host).await?);
     }
-    let plan = plan_dns(&hosts, &tunnel_id, &existing, overwrite_dns);
+    let plan: Vec<_> = hosts
+        .iter()
+        .flat_map(|host| {
+            plan_dns(
+                std::slice::from_ref(host),
+                &tunnel_id,
+                &existing,
+                overwrite_dns && overwrite_host.is_none_or(|allowed| allowed == host),
+            )
+        })
+        .collect();
     let mut dns = Vec::new();
     let mut published = Vec::new();
     for action in plan {
         match action {
             DnsAction::Create { host } => {
-                cf.create_cname(&settings.zone_id, &host, &tunnel_id)
+                let id = cf
+                    .create_cname(&settings.zone_id, &host, &tunnel_id)
                     .await?;
+                crate::domain_routing::remember(
+                    state,
+                    &settings.zone_id,
+                    &host,
+                    &id,
+                    "CNAME",
+                    &tunnel_cname(&tunnel_id),
+                )
+                .await?;
                 published.push(host.clone());
                 dns.push(DnsOutcome {
                     host,
@@ -854,6 +987,24 @@ pub(crate) async fn sync_hostnames(
                 });
             }
             DnsAction::Keep { host } => {
+                for record in cf.dns_records(&settings.zone_id, &host).await? {
+                    if record.kind == "CNAME"
+                        && record
+                            .content
+                            .eq_ignore_ascii_case(&tunnel_cname(&tunnel_id))
+                        && cf.rudder_record(&settings.zone_id, &record.id).await?
+                    {
+                        crate::domain_routing::remember(
+                            state,
+                            &settings.zone_id,
+                            &host,
+                            &record.id,
+                            &record.kind,
+                            &record.content,
+                        )
+                        .await?;
+                    }
+                }
                 published.push(host.clone());
                 dns.push(DnsOutcome {
                     host,
@@ -867,8 +1018,18 @@ pub(crate) async fn sync_hostnames(
                 was,
             } => {
                 cf.delete_dns(&settings.zone_id, &record_id).await?;
-                cf.create_cname(&settings.zone_id, &host, &tunnel_id)
+                let id = cf
+                    .create_cname(&settings.zone_id, &host, &tunnel_id)
                     .await?;
+                crate::domain_routing::remember(
+                    state,
+                    &settings.zone_id,
+                    &host,
+                    &id,
+                    "CNAME",
+                    &tunnel_cname(&tunnel_id),
+                )
+                .await?;
                 published.push(host.clone());
                 dns.push(DnsOutcome {
                     host,
@@ -890,7 +1051,8 @@ pub(crate) async fn sync_hostnames(
         .filter(|host| !hosts.contains(host))
     {
         for record in cf.dns_records(&settings.zone_id, stale).await? {
-            if record.kind == "CNAME"
+            if owned_record_or_legacy(state, &cf, &settings.zone_id, &record).await?
+                && record.kind == "CNAME"
                 && record
                     .content
                     .eq_ignore_ascii_case(&tunnel_cname(&tunnel_id))

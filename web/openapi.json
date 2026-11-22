@@ -2080,6 +2080,51 @@
         }
       }
     },
+    "/api/v1/domains": {
+      "get": {
+        "tags": [
+          "edge"
+        ],
+        "summary": "List all domain routes and recheck public DNS",
+        "operationId": "get_v1_domains",
+        "responses": {
+          "200": {
+            "description": "List all domain routes and recheck public DNS",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GlobalDomainView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/domains/routing-options": {
+      "get": {
+        "tags": [
+          "edge"
+        ],
+        "summary": "Check routing availability. Query: service_id (UUID, required), host (hostname, required)",
+        "operationId": "get_v1_domains_routing-options",
+        "responses": {
+          "200": {
+            "description": "Check routing availability. Query: service_id (UUID, required), host (hostname, required)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainRoutingOptions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/domains/{id}": {
       "delete": {
         "tags": [
@@ -8083,7 +8128,19 @@
               "null"
             ]
           },
+          "overwrite_dns": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "path_prefix": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "routing_mode": {
             "type": [
               "string",
               "null"
@@ -8686,6 +8743,36 @@
           }
         }
       },
+      "DnsCheck": {
+        "type": "object",
+        "required": [
+          "addresses",
+          "message"
+        ],
+        "properties": {
+          "addresses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expected": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "matches_expected": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
       "DnsOutcome": {
         "type": "object",
         "required": [
@@ -8839,9 +8926,44 @@
           }
         }
       },
+      "DomainRoutingOptions": {
+        "type": "object",
+        "required": [
+          "cloudflare_available",
+          "zone_name"
+        ],
+        "properties": {
+          "cloudflare_available": {
+            "type": "boolean"
+          },
+          "cloudflare_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cloudflare_reason_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "direct_warning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zone_name": {
+            "type": "string"
+          }
+        }
+      },
       "DomainView": {
         "type": "object",
         "required": [
+          "routing_mode",
+          "routing_options",
           "id",
           "service_id",
           "host",
@@ -8908,6 +9030,12 @@
           },
           "published": {
             "type": "boolean"
+          },
+          "routing_mode": {
+            "type": "string"
+          },
+          "routing_options": {
+            "$ref": "#/components/schemas/DomainRoutingOptions"
           },
           "service_id": {
             "type": "string",
@@ -9273,6 +9401,98 @@
           "url": {
             "type": "string",
             "description": "HTTPS clone address to use as the repository."
+          }
+        }
+      },
+      "GlobalDomainView": {
+        "type": "object",
+        "required": [
+          "host",
+          "path_prefix",
+          "kind",
+          "routing_mode",
+          "routing",
+          "dns"
+        ],
+        "properties": {
+          "certificate_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dns": {
+            "$ref": "#/components/schemas/DnsCheck"
+          },
+          "host": {
+            "type": "string"
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "path_prefix": {
+            "type": "string"
+          },
+          "routing": {
+            "type": "string"
+          },
+          "routing_mode": {
+            "type": "string"
+          },
+          "routing_options": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DomainRoutingOptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "server_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "server_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "service_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "service_kind": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "service_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ssl_mode": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -14040,7 +14260,19 @@
               "null"
             ]
           },
+          "overwrite_dns": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "path_prefix": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "routing_mode": {
             "type": [
               "string",
               "null"
