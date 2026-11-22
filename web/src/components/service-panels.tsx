@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { api, ApiError } from "../api";
+import { parseAnsi } from "../ansi";
 import { errorMessage, formatDuration, formatRelative, formatTime } from "../format";
 import { providerLabel, providerReady } from "../git";
 import { useT } from "../i18n";
@@ -842,7 +843,7 @@ const statusIcons: Record<string, [IconName, string]> = {
 
 /** The last non-empty line of a log: what a running action is doing right now. */
 function currentStep(logs: string): string {
-  const lines = logs.trimEnd().split("\n");
+  const lines = parseAnsi(logs).map((run) => run.text).join("").trimEnd().split("\n");
   return (lines[lines.length - 1] ?? "").trim().slice(0, 160);
 }
 

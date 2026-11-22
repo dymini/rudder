@@ -7,6 +7,7 @@ import { useT } from "../i18n";
 import { MAINTENANCE_WINDOWS, UPDATE_CHANNELS } from "../presets";
 import type { Schemas } from "../types";
 import { ReleaseNotes } from "./release-notes";
+import { AnsiText } from "./AnsiText";
 import { Badge, Button, Card, Empty, Field, PickField, QuickPick, TextInput } from "./ui";
 
 type Overview = Schemas["UpdateOverview"];
@@ -277,7 +278,7 @@ export function UpdatesCard() {
                   <span className="ml-auto text-xs text-muted">{formatTime(entry.started_at)}</span>
                 </summary>
                 <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-sunken p-3 text-xs">
-                  {entry.logs || t("No output yet.")}
+                  <AnsiText>{entry.logs || t("No output yet.")}</AnsiText>
                 </pre>
               </details>
             </li>

@@ -6,6 +6,7 @@ import type { Schemas } from "../types";
 import { Icon } from "./icons";
 import { Button, buttonClass, Empty, Select, TextInput } from "./ui";
 import { msg, useT } from "../i18n";
+import { AnsiText } from "./AnsiText";
 
 type LogView = Schemas["LogView"];
 type LogPage = Schemas["LogPage"];
@@ -285,7 +286,7 @@ function LogRow({ row, open, onToggle }: { row: LogView; open: boolean; onToggle
         </td>
         <td className="px-2 py-1.5 whitespace-nowrap text-ink-soft">{row.http_status ?? ""}</td>
         <td className="w-full px-2 py-1.5 pr-3 break-all whitespace-pre-wrap text-ink">
-          {row.message}
+          <AnsiText>{row.message}</AnsiText>
         </td>
       </tr>
       {open && hasFields ? (

@@ -13,6 +13,7 @@ import type {
 import { toast } from "sonner";
 import { useT } from "../i18n";
 import { Icon, type IconName } from "./icons";
+import { AnsiText } from "./AnsiText";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "danger-solid";
 type ButtonSize = "sm" | "md" | "lg";
@@ -990,7 +991,7 @@ export function LogPre({
       }}
       className={`overflow-auto rounded-alert border border-[#2c2a26] bg-[#12110f] p-3.5 font-mono text-xs leading-relaxed whitespace-pre-wrap text-[#d8d2c8] ${className}`}
     >
-      {children || <span className="text-[#766f67]">{empty}</span>}
+      {children ? <AnsiText console>{children}</AnsiText> : <span className="text-[#766f67]">{empty}</span>}
     </pre>
   );
 }
