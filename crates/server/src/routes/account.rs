@@ -665,11 +665,7 @@ async fn totp_disable(
         &state,
         auth.id,
         &super::mfa::FactorInput {
-            totp_code: if body.code.is_empty() {
-                None
-            } else {
-                Some(body.code)
-            },
+            totp_code: Some(body.code),
             email_code: body.email_code,
             mfa_proof: body.mfa_proof,
         },

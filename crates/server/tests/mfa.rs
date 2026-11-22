@@ -205,6 +205,13 @@ async fn proof(f: &Fixture, client: &mut WebauthnAuthenticator<SoftPasskey>) -> 
 #[sqlx::test(migrations = "./migrations")]
 async fn registration_second_factor_management_and_replay(pool: PgPool) {
     let f = fixture(&pool).await;
+    let missing = format!("/api/v1/me/passkeys/{}", Uuid::new_v4());
+    assert_eq!(
+        f.call("DELETE", &missing, Some(json!({"password":PASSWORD})))
+            .await
+            .status,
+        StatusCode::UNAUTHORIZED
+    );
     assert_eq!(
         f.call("GET", "/api/v1/me/passkeys", None).await.body,
         json!([])
@@ -480,6 +487,16 @@ async fn login_email(f: &Fixture, code: &str) -> StatusCode {
 #[sqlx::test(migrations = "./migrations")]
 async fn email_delivery_enrollment_expiry_reuse_attempts_and_disable(pool: PgPool) {
     let f = fixture(&pool).await;
+    assert_eq!(
+        f.call(
+            "POST",
+            "/api/v1/me/mfa/email/disable",
+            Some(json!({"password":PASSWORD}))
+        )
+        .await
+        .status,
+        StatusCode::UNAUTHORIZED
+    );
     assert_eq!(
         f.call("GET", "/api/v1/me/mfa", None).await.body["email_available"],
         false

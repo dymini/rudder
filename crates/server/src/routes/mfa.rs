@@ -337,6 +337,15 @@ pub(super) async fn reauth(state: &AppState, id: Uuid, body: &MfaReauth) -> Resu
     }
     require_factor(state, id, &body.factor, "reauth").await
 }
+fn require_current_factor(body: &MfaReauth) -> Result<(), ApiError> {
+    if body.factor.mfa_proof.is_none()
+        && body.factor.email_code.is_none()
+        && body.factor.totp_code.is_none()
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
 async fn methods(
     State(state): State<AppState>,
     auth: AuthUser,
@@ -396,6 +405,7 @@ async fn remove(
 ) -> Result<StatusCode, ApiError> {
     auth.require_write()?;
     limit(&state, &headers, peer)?;
+    require_current_factor(&body)?;
     reauth(&state, auth.id, &body).await?;
     let affected = sqlx::query("DELETE FROM user_passkeys WHERE id=$1 AND user_id=$2")
         .bind(id)
@@ -760,6 +770,7 @@ async fn email_disable(
 ) -> Result<StatusCode, ApiError> {
     auth.require_write()?;
     limit(&state, &headers, peer)?;
+    require_current_factor(&body)?;
     reauth(&state, auth.id, &body).await?;
     sqlx::query("UPDATE users SET email_mfa_enabled=FALSE WHERE id=$1")
         .bind(auth.id)
