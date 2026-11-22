@@ -56,6 +56,17 @@ pub async fn publish_server(state: &AppState, server_id: Uuid) -> Result<bool, A
     let Some(kind) = kind else {
         return Err(crate::routes::catalog::not_found("server not found"));
     };
+    if kind == "local" && crate::cloudflare::tunnel_published(&state.pool).await {
+        crate::cloudflare::sync_hostnames(state, false).await?;
+    }
+    publish_server_routes(state, server_id, &kind).await
+}
+
+async fn publish_server_routes(
+    state: &AppState,
+    server_id: Uuid,
+    kind: &str,
+) -> Result<bool, ApiError> {
     let driver: std::sync::Arc<dyn NodeDriver> = if kind == "local" {
         state.local_driver.clone()
     } else if let Some(driver) = state.agents.driver(server_id) {
@@ -104,14 +115,25 @@ pub async fn publish_server(state: &AppState, server_id: Uuid) -> Result<bool, A
 }
 
 pub async fn publish_local(state: &AppState) -> Result<(), ApiError> {
-    let id = sqlx::query_scalar!(r#"SELECT id FROM servers WHERE kind = 'local' LIMIT 1"#)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(ApiError::database)?;
-    if let Some(id) = id {
+    if let Some(id) = local_server_id(&state.pool).await? {
         publish_server(state, id).await?;
     }
     Ok(())
+}
+
+pub(crate) async fn publish_local_routes(state: &AppState) -> Result<(), ApiError> {
+    if let Some(id) = local_server_id(&state.pool).await? {
+        publish_server_routes(state, id, "local").await?;
+    }
+    Ok(())
+}
+
+async fn local_server_id(pool: &PgPool) -> Result<Option<Uuid>, ApiError> {
+    let id = sqlx::query_scalar!(r#"SELECT id FROM servers WHERE kind = 'local' LIMIT 1"#)
+        .fetch_optional(pool)
+        .await
+        .map_err(ApiError::database)?;
+    Ok(id)
 }
 
 pub async fn publish_for_service(state: &AppState, service_id: Uuid) -> Result<(), ApiError> {

@@ -11,6 +11,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [0.11.1] - 2026-11-22
 
 ### Fixed
+- **Tunnel domains publish automatically.** Connecting a Cloudflare tunnel now publishes existing local service, panel, and Access portal domains, and domain changes keep tunnel ingress and DNS in sync. Existing conflicting DNS records still require explicit permission to replace.
 - **Readable colored logs.** Container, stack, deployment, build, backup, and update logs now show ANSI colors and emphasis instead of escape-code garbage, with readable colors in both themes. Cursor commands and other terminal controls are hidden; raw log downloads are unchanged.
 
 ## [0.11.0] - 2026-11-22
