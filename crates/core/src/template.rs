@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 use crate::{compose_variables, transform_compose, validate_env_key, validate_name, Error};
@@ -17,6 +18,8 @@ pub enum VariableKind {
     Secret,
     Number,
     Boolean,
+    /// Multi-line text, stored as base64 when requested by the manifest.
+    Text,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,6 +38,10 @@ pub struct TemplateVariable {
     /// Length of generated secrets. Defaults to 32.
     #[serde(default)]
     pub length: Option<usize>,
+    #[serde(default)]
+    pub encoding: Option<String>,
+    #[serde(default)]
+    pub env_name: Option<String>,
 }
 
 impl TemplateVariable {
@@ -98,6 +105,32 @@ impl Template {
         }
         for variable in &self.variables {
             validate_env_key(&variable.name)?;
+            let env_name = variable.env_name.as_ref().unwrap_or(&variable.name);
+            if self
+                .variables
+                .iter()
+                .filter(|other| other.env_name.as_ref().unwrap_or(&other.name) == env_name)
+                .count()
+                > 1
+            {
+                return Err(Error::Validation(format!(
+                    "duplicate environment key {env_name}"
+                )));
+            }
+            if let Some(name) = &variable.env_name {
+                validate_env_key(name)?;
+            }
+            if variable
+                .encoding
+                .as_deref()
+                .is_some_and(|encoding| encoding != "base64")
+                || (variable.encoding.is_some() && variable.kind != VariableKind::Text)
+                || (variable.kind == VariableKind::Text && variable.encoding.is_none())
+            {
+                return Err(Error::Validation(
+                    "text variables require base64 encoding".into(),
+                ));
+            }
             if self
                 .variables
                 .iter()
@@ -112,7 +145,11 @@ impl Template {
             }
         }
         for used in compose_variables(&self.compose) {
-            if !self.variables.iter().any(|variable| variable.name == used) {
+            if !self
+                .variables
+                .iter()
+                .any(|variable| variable.env_name.as_ref().unwrap_or(&variable.name) == &used)
+            {
                 return Err(Error::Validation(format!(
                     "template {} uses ${{{used}}} without declaring it",
                     self.slug
@@ -140,7 +177,13 @@ impl Template {
         for variable in &self.variables {
             let given = values
                 .get(&variable.name)
-                .map(|value| value.trim().to_owned())
+                .map(|value| {
+                    if variable.kind == VariableKind::Text {
+                        value.clone()
+                    } else {
+                        value.trim().to_owned()
+                    }
+                })
                 .filter(|value| !value.is_empty());
             let value = match (given, &variable.default) {
                 (Some(value), _) => value,
@@ -164,7 +207,18 @@ impl Template {
             if variable.kind == VariableKind::Domain && domain.is_none() && !value.is_empty() {
                 domain = Some(value.clone());
             }
-            env.push((variable.name.clone(), value));
+            let value = if variable.encoding.as_deref() == Some("base64") {
+                base64::engine::general_purpose::STANDARD.encode(value.as_bytes())
+            } else {
+                value
+            };
+            env.push((
+                variable
+                    .env_name
+                    .clone()
+                    .unwrap_or_else(|| variable.name.clone()),
+                value,
+            ));
         }
         for name in values.keys() {
             if !self.variables.iter().any(|variable| &variable.name == name) {
@@ -176,7 +230,7 @@ impl Template {
 }
 
 fn check_value(variable: &TemplateVariable, value: &str) -> Result<(), Error> {
-    if value.contains('\n') || value.contains('\r') {
+    if variable.kind != VariableKind::Text && (value.contains('\n') || value.contains('\r')) {
         return Err(Error::Validation(format!(
             "{} cannot contain newlines",
             variable.name
@@ -193,7 +247,7 @@ fn check_value(variable: &TemplateVariable, value: &str) -> Result<(), Error> {
         }
         VariableKind::Number => value.parse::<i64>().is_ok(),
         VariableKind::Boolean => matches!(value, "true" | "false"),
-        VariableKind::String | VariableKind::Secret => true,
+        VariableKind::String | VariableKind::Secret | VariableKind::Text => true,
     };
     if ok {
         Ok(())
