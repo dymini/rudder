@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { PluginBackupManagement } from "../components/plugin-backups";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "../api";
@@ -29,6 +30,7 @@ export function PluginsPage() {
     onError: (error) => toast.error(errorMessage(error, t("Could not load"))),
   });
   const plugin = plugins.data?.find((p) => p.manifest.slug === chosen);
+  const backupInstall = plugins.data?.flatMap((p) => p.installs).find((i) => i.id === backup?.id) ?? backup;
   return <>
     <h1 className="text-2xl font-semibold">{t("Plugins")}</h1>
     <p className="text-sm text-muted">{t("Install managed stacks from verified GitHub release descriptors. Back up data before updating.")}</p>
@@ -50,15 +52,15 @@ export function PluginsPage() {
           <span>{i.environment_name} · {i.server_name} · {i.installed_version}</span><Badge value={i.status} />
           <Link className="text-accent" to={`/services/${i.service_id}?tab=environment`}>{t("Environment")}</Link>
           {i.backup_job_id ? <Link className="text-accent" to={`/services/${i.service_id}?tab=backups`}>{t("Backup job")} · {i.backup_job_id.slice(0, 8)}</Link> : null}
-          <Button quiet disabled={["updating", "installing"].includes(i.status)} onClick={() => setBackup(i)}>{t(i.backup_job_id ? "Change backup" : "Set up backup")}</Button>
-          {i.update_available ? <Button disabled={["updating", "installing"].includes(i.status)} onClick={() => setTarget({ plugin: p, install: i })}>{t("Update to {version}", { version: i.latest_version ?? "" })}</Button> : null}
+          <Button quiet onClick={() => setBackup(i)}>{t("Plugin settings")}</Button>
+          {i.update_available ? <Button disabled={["updating", "installing", "restoring"].includes(i.status)} onClick={() => setTarget({ plugin: p, install: i })}>{t("Update to {version}", { version: i.latest_version ?? "" })}</Button> : null}
           {i.last_error ? <p role="alert" className="w-full whitespace-pre-wrap text-danger">{i.last_error}</p> : null}
         </div>)}
       </div>
     </Card>)}
     {plugin ? <InstallDialog plugin={plugin} onClose={() => setChosen(null)} /> : null}
     {target ? <UpdateDialog install={target.install} onClose={() => setTarget(null)} /> : null}
-    {backup ? <BackupDialog install={backup} onClose={() => setBackup(null)} /> : null}
+    {backupInstall ? <BackupDialog install={backupInstall} onClose={() => setBackup(null)} /> : null}
   </>;
 }
 
@@ -154,5 +156,5 @@ function BackupDialog({ install, onClose }: { install: Install; onClose: () => v
     onSuccess: () => { void client.invalidateQueries({ queryKey: ["plugins"] }); onClose(); },
     onError: (error) => toast.error(errorMessage(error, t("Save failed"))),
   });
-  return <Dialog open onClose={onClose} title={t("Set up backup")}><form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}><BackupFields value={backup} onChange={setBackup} /><Button type="submit" disabled={save.isPending || backup.destination_ids.length === 0}>{t("Save")}</Button></form></Dialog>;
+  return <Dialog open onClose={onClose} title={t("Plugin settings")} variant="drawer"><h3 className="mb-3 font-semibold">{t("Set up backup")}</h3><form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}><BackupFields value={backup} onChange={setBackup} /><Button type="submit" disabled={save.isPending || backup.destination_ids.length === 0 || ["updating", "installing", "restoring"].includes(install.status)}>{t("Save")}</Button></form><PluginBackupManagement install={install} /></Dialog>;
 }
