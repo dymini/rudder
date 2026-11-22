@@ -8,6 +8,8 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-22
+
 ### Added
 - **Release-backed plugins.** Install Dockside as a managed compose stack, check GitHub Releases for digest-pinned updates, review release notes, and protect updates with volume backups and automatic rollback. Multi-line plugin configuration is stored as base64; secrets remain encrypted.
 - **Plugins dashboard.** Find Plugins after Templates to install verified versions, copy generated secrets once, review pending release notes, and attach or replace S3 backup jobs.
