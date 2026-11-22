@@ -144,6 +144,8 @@ pub use stack::{
     validate_compose_service, StackPlan, StackService, VariableRef, MAX_COMPOSE_BYTES,
 };
 pub use template::{ResolvedTemplate, Template, TemplateVariable, VariableKind};
+pub mod plugin;
+pub use plugin::{Plugin, PluginDescriptor};
 pub use traefik::{
     preview_hostname, render_dynamic_config, render_dynamic_config_for, validate_host,
     validate_path_prefix, EdgeGate, EdgeMode, ProxyRoute, TlsMaterial, TlsMode, PROXY_NETWORK,

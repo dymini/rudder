@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT checked_at, latest_version, releases, error FROM plugin_release_checks WHERE plugin = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "checked_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "latest_version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "releases",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 3,
+        "name": "error",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "0e4316ac630760daef4bfb75d754639fa7543ea6962127149646df74865a29fc"
+}

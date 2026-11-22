@@ -394,7 +394,15 @@ async fn service_container(
     .await
     .map_err(ApiError::database)?
     .ok_or_else(|| not_found("service not found"))?;
-    Ok((row.name, row.current_container_id, row.spec))
+    let container = row.current_container_id.or_else(|| {
+        let main = row.spec.get("main_service")?.as_str()?;
+        row.spec
+            .get("containers")?
+            .get(main)?
+            .as_str()
+            .map(str::to_owned)
+    });
+    Ok((row.name, container, row.spec))
 }
 
 /// Value of `target_spec[key]` as a string.
@@ -593,7 +601,10 @@ async fn prepare(
                 after.post_hook = Some((container.clone(), job.consistency.post_hook.clone()));
             }
             if job.consistency.stop_service
-                && driver.container_running(&container).await.unwrap_or(false)
+                && driver
+                    .container_running(&container)
+                    .await
+                    .map_err(core_error)?
             {
                 driver
                     .stop_container(&container, 30)

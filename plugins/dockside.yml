@@ -1,0 +1,102 @@
+slug: dockside
+name: Dockside
+description: Server-centric version control for AI coding agents, with automated verification and releases.
+category: Developer tools
+website: https://github.com/vantanminh/dockside
+repo: vantanminh/dockside
+main_service: dockside
+port: 7420
+image_variable: PLUGIN_IMAGE
+data_volume: data
+health_path: /v1/health
+notes: Back up /data before updates. Edit configuration later in the stack Environment tab; DOCKSIDE_CONFIG_B64 must contain base64-encoded dockside.toml.
+variables:
+  - name: PLUGIN_IMAGE
+    kind: string
+    required: true
+  - name: DOMAIN
+    label: Domain
+    kind: domain
+  - name: DOCKSIDE_AUTH_TOKEN
+    label: Authentication token
+    kind: secret
+    length: 48
+  - name: DOCKSIDE_CONFIG
+    label: dockside.toml
+    description: Leave empty to use the example configuration shipped in the image.
+    kind: text
+    encoding: base64
+    env_name: DOCKSIDE_CONFIG_B64
+    default: ''
+  - name: DOCKSIDE_RUN_VERIFY
+    label: Run verification
+    kind: boolean
+    default: 'true'
+  - name: DOCKSIDE_R2_ENDPOINT
+    label: R2 endpoint
+    kind: string
+  - name: DOCKSIDE_R2_BUCKET
+    label: R2 bucket
+    kind: string
+  - name: DOCKSIDE_R2_ACCESS_KEY_ID
+    label: R2 access key ID
+    kind: string
+  - name: DOCKSIDE_R2_SECRET_ACCESS_KEY
+    label: R2 secret access key
+    kind: secret
+    default: ''
+  - name: DOCKSIDE_R2_REGION
+    label: R2 region
+    kind: string
+    default: auto
+  - name: DOCKSIDE_R2_PREFIX
+    label: R2 prefix
+    kind: string
+    default: cas/v1
+  - name: RUDDER_URL
+    label: Rudder URL
+    kind: string
+  - name: RUDDER_TOKEN
+    label: Rudder token
+    kind: secret
+    default: ''
+  - name: CLOUDFLARE_API_TOKEN
+    label: Cloudflare API token
+    kind: secret
+    default: ''
+  - name: CLOUDFLARE_ACCOUNT_ID
+    label: Cloudflare account ID
+    kind: string
+compose: |
+  services:
+    dockside:
+      image: ${PLUGIN_IMAGE:?required}
+      restart: unless-stopped
+      environment:
+        DOCKSIDE_AUTH_TOKEN: ${DOCKSIDE_AUTH_TOKEN:?required}
+        DOCKSIDE_CONFIG_B64: ${DOCKSIDE_CONFIG_B64:-}
+        DOCKSIDE_RUN_VERIFY: ${DOCKSIDE_RUN_VERIFY:-true}
+        DOCKSIDE_R2_ENDPOINT: ${DOCKSIDE_R2_ENDPOINT:-}
+        DOCKSIDE_R2_BUCKET: ${DOCKSIDE_R2_BUCKET:-}
+        DOCKSIDE_R2_ACCESS_KEY_ID: ${DOCKSIDE_R2_ACCESS_KEY_ID:-}
+        DOCKSIDE_R2_SECRET_ACCESS_KEY: ${DOCKSIDE_R2_SECRET_ACCESS_KEY:-}
+        DOCKSIDE_R2_REGION: ${DOCKSIDE_R2_REGION:-auto}
+        DOCKSIDE_R2_PREFIX: ${DOCKSIDE_R2_PREFIX:-cas/v1}
+        RUDDER_URL: ${RUDDER_URL:-}
+        RUDDER_TOKEN: ${RUDDER_TOKEN:-}
+        CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+        CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+      volumes: [data:/data]
+      healthcheck:
+        test: [CMD-SHELL, 'curl -fsS http://127.0.0.1:7420/v1/health || exit 1']
+        interval: 30s
+        timeout: 5s
+        retries: 3
+        start_period: 20s
+      mem_limit: 4g
+      cpus: 3
+      pids_limit: 2048
+      cap_drop: [ALL]
+      security_opt: [no-new-privileges:true]
+  volumes:
+    data:

@@ -589,10 +589,11 @@ fn kind_name(kind: VariableKind) -> &'static str {
         VariableKind::Secret => "secret",
         VariableKind::Number => "number",
         VariableKind::Boolean => "boolean",
+        VariableKind::Text => "text",
     }
 }
 
-fn template_view(template: &Template) -> TemplateView {
+pub(super) fn template_view(template: &Template) -> TemplateView {
     let plan = rudder_core::transform_compose(&template.slug, &template.compose, &[], true).ok();
     let services = plan
         .as_ref()
@@ -669,8 +670,27 @@ async fn deploy_template(
     Json(body): Json<DeployTemplate>,
 ) -> Result<(StatusCode, Json<TemplateDeployed>), ApiError> {
     auth.require_write()?;
-    validate_name(&body.name).map_err(core_error)?;
     let template = crate::templates::get(&slug).ok_or_else(|| not_found("template not found"))?;
+    deploy_from_template(
+        &state,
+        &auth,
+        environment_id,
+        template,
+        body,
+        "template.deploy",
+    )
+    .await
+}
+
+pub(super) async fn deploy_from_template(
+    state: &AppState,
+    auth: &AuthUser,
+    environment_id: Uuid,
+    template: &Template,
+    body: DeployTemplate,
+    audit_action: &str,
+) -> Result<(StatusCode, Json<TemplateDeployed>), ApiError> {
+    validate_name(&body.name).map_err(core_error)?;
     let resolved = template
         .resolve(&body.values, generate_secret)
         .map_err(core_error)?;
@@ -755,7 +775,7 @@ async fn deploy_template(
     audit::record(
         &state.pool,
         Some(auth.id),
-        "template.deploy",
+        audit_action,
         "service",
         Some(&id.to_string()),
         json!({ "template": template.slug, "domain": domain }),
@@ -763,20 +783,20 @@ async fn deploy_template(
     )
     .await;
     if domain.is_some() {
-        if let Err(error) = crate::publish::publish_server(&state, body.server_id).await {
+        if let Err(error) = crate::publish::publish_server(state, body.server_id).await {
             tracing::warn!(message = %error.public_message(), "template route was not published");
         }
     }
     let deployment = if body.start.unwrap_or(true) {
-        driver_for(&state, body.server_id).await?;
-        Some(stacks::start_action(&state, id, StackAction::Up, "template").await?)
+        driver_for(state, body.server_id).await?;
+        Some(stacks::start_action(state, id, StackAction::Up, "template").await?)
     } else {
         None
     };
     Ok((
         StatusCode::CREATED,
         Json(TemplateDeployed {
-            service: load_service_view(&state, id).await?,
+            service: load_service_view(state, id).await?,
             domain,
             deployment,
             generated,

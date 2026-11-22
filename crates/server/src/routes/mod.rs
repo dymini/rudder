@@ -19,6 +19,7 @@ pub mod logs;
 pub mod mcp;
 pub mod monitoring;
 pub mod panel_ssl;
+pub mod plugins;
 pub mod security;
 pub mod stacks;
 pub mod system;
