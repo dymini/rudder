@@ -3066,6 +3066,30 @@
         }
       }
     },
+    "/api/v1/mcp/calls": {
+      "get": {
+        "tags": [
+          "monitoring"
+        ],
+        "summary": "Recent MCP tool calls without arguments or secrets; filter by client_id, tool, status, days, limit, offset (admin)",
+        "operationId": "get_v1_mcp_calls",
+        "responses": {
+          "200": {
+            "description": "Recent MCP tool calls without arguments or secrets; filter by client_id, tool, status, days, limit, offset (admin)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/McpCall"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/mcp/catalog": {
       "get": {
         "tags": [
@@ -3211,6 +3235,27 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/McpInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/stats": {
+      "get": {
+        "tags": [
+          "monitoring"
+        ],
+        "summary": "MCP call counts, UTC hour/day buckets, tools, clients, grants, failure rates and p50/p95 latency; filter by client_id, tool, status, days, bucket (admin)",
+        "operationId": "get_v1_mcp_stats",
+        "responses": {
+          "200": {
+            "description": "MCP call counts, UTC hour/day buckets, tools, clients, grants, failure rates and p50/p95 latency; filter by client_id, tool, status, days, bucket (admin)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpUsageStats"
                 }
               }
             }
@@ -10676,6 +10721,64 @@
           }
         }
       },
+      "McpCall": {
+        "type": "object",
+        "required": [
+          "id",
+          "tool",
+          "scope",
+          "status",
+          "http_status",
+          "duration_ms",
+          "created_at"
+        ],
+        "properties": {
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "grant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "http_status": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        }
+      },
       "McpCatalog": {
         "type": "object",
         "required": [
@@ -10701,6 +10804,24 @@
             "items": {
               "$ref": "#/components/schemas/McpToolView"
             }
+          }
+        }
+      },
+      "McpClientUsage": {
+        "type": "object",
+        "required": [
+          "count"
+        ],
+        "properties": {
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -10811,6 +10932,28 @@
           },
           "template": {
             "type": "string"
+          }
+        }
+      },
+      "McpGrantUsage": {
+        "type": "object",
+        "required": [
+          "grant_id",
+          "count",
+          "last_used_at"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "grant_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_used_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -10931,6 +11074,22 @@
           }
         }
       },
+      "McpToolUsage": {
+        "type": "object",
+        "required": [
+          "tool",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tool": {
+            "type": "string"
+          }
+        }
+      },
       "McpToolView": {
         "type": "object",
         "required": [
@@ -10947,6 +11106,113 @@
           },
           "scope": {
             "type": "string"
+          }
+        }
+      },
+      "McpUsageBucket": {
+        "type": "object",
+        "required": [
+          "at",
+          "count",
+          "ok",
+          "denied",
+          "error"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "denied": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ok": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "McpUsageStats": {
+        "type": "object",
+        "required": [
+          "summary",
+          "buckets",
+          "tools",
+          "clients",
+          "grants"
+        ],
+        "properties": {
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/McpUsageBucket"
+            }
+          },
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/McpClientUsage"
+            }
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/McpGrantUsage"
+            }
+          },
+          "summary": {
+            "$ref": "#/components/schemas/McpUsageSummary"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/McpToolUsage"
+            }
+          }
+        }
+      },
+      "McpUsageSummary": {
+        "type": "object",
+        "required": [
+          "total",
+          "error_rate",
+          "denied_rate"
+        ],
+        "properties": {
+          "denied_rate": {
+            "type": "number",
+            "format": "double"
+          },
+          "error_rate": {
+            "type": "number",
+            "format": "double"
+          },
+          "p50_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "p95_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },

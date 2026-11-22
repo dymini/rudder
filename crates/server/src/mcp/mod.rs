@@ -8,6 +8,7 @@ mod gate;
 pub(crate) mod http;
 pub(crate) mod permissions;
 pub(crate) mod tokens;
+pub(crate) mod usage;
 
 use utoipa::openapi::path::HttpMethod;
 
@@ -164,7 +165,8 @@ fn path_matches(pattern: &str, path: &str) -> bool {
 }
 
 pub(crate) async fn maintain(state: &crate::state::AppState) -> Result<(), crate::error::ApiError> {
-    tokens::maintain(state).await
+    tokens::maintain(state).await?;
+    usage::maintain(&state.pool).await
 }
 
 #[cfg(test)]

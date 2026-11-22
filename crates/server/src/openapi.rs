@@ -12,6 +12,10 @@ use crate::domain_routing::{DnsCheck, DomainRoutingOptions, GlobalDomainView};
 use crate::guard::{GuardSettings, GuardView, ProtectionView};
 use crate::logs::retention::{MetricsRetention, RetentionSettings};
 use crate::logs::LogView;
+use crate::mcp::usage::{
+    McpCall, McpClientUsage, McpGrantUsage, McpToolUsage, McpUsageBucket, McpUsageStats,
+    McpUsageSummary,
+};
 use crate::plugins::{PluginCheck, PluginRelease};
 use crate::routes::access::{
     AccessApp, AccessDepartment, AccessDepartmentGrant, AccessEmailStart, AccessEmailVerify,
@@ -377,6 +381,13 @@ use rudder_core::{
         PauseBuilds,
         BuildsCancelled,
         McpCatalog,
+        McpCall,
+        McpUsageStats,
+        McpUsageSummary,
+        McpUsageBucket,
+        McpToolUsage,
+        McpClientUsage,
+        McpGrantUsage,
         McpToolView,
         McpGrantUpdate,
         McpScopeView,
@@ -2253,6 +2264,24 @@ pub(crate) const ROUTES: &[Route] = &[
         summary: "MCP path to append to the panel address (admin)",
         request: None,
         response: Some("McpInfo"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/mcp/calls",
+        method: HttpMethod::Get,
+        tag: "monitoring",
+        summary: "Recent MCP tool calls without arguments or secrets; filter by client_id, tool, status, days, limit, offset (admin)",
+        request: None,
+        response: Some("[McpCall]"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/mcp/stats",
+        method: HttpMethod::Get,
+        tag: "monitoring",
+        summary: "MCP call counts, UTC hour/day buckets, tools, clients, grants, failure rates and p50/p95 latency; filter by client_id, tool, status, days, bucket (admin)",
+        request: None,
+        response: Some("McpUsageStats"),
         status: 200,
     },
     Route {

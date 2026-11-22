@@ -1816,6 +1816,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/mcp/calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent MCP tool calls without arguments or secrets; filter by client_id, tool, status, days, limit, offset (admin) */
+        get: operations["get_v1_mcp_calls"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/mcp/catalog": {
         parameters: {
             query?: never;
@@ -1911,6 +1928,23 @@ export interface paths {
         };
         /** MCP path to append to the panel address (admin) */
         get: operations["get_v1_mcp_info"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mcp/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** MCP call counts, UTC hour/day buckets, tools, clients, grants, failure rates and p50/p95 latency; filter by client_id, tool, status, days, bucket (admin) */
+        get: operations["get_v1_mcp_stats"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5043,10 +5077,32 @@ export interface components {
         LogsView: {
             logs: string;
         };
+        McpCall: {
+            client_id?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            duration_ms: number;
+            error_message?: string | null;
+            /** Format: uuid */
+            grant_id?: string | null;
+            /** Format: int32 */
+            http_status: number;
+            /** Format: int64 */
+            id: number;
+            scope: string;
+            status: string;
+            tool: string;
+        };
         McpCatalog: {
             scopes: components["schemas"]["McpScopeView"][];
             templates: components["schemas"]["McpTemplateView"][];
             tools: components["schemas"]["McpToolView"][];
+        };
+        McpClientUsage: {
+            client_id?: string | null;
+            /** Format: int64 */
+            count: number;
         };
         McpClientView: {
             client_id: string;
@@ -5074,6 +5130,14 @@ export interface components {
             allowed_tools?: string[];
             scopes?: string[];
             template: string;
+        };
+        McpGrantUsage: {
+            /** Format: int64 */
+            count: number;
+            /** Format: uuid */
+            grant_id: string;
+            /** Format: date-time */
+            last_used_at: string;
         };
         McpGrantView: {
             allowed_tools?: string[] | null;
@@ -5105,10 +5169,46 @@ export interface components {
             scopes: string[];
             summary: string;
         };
+        McpToolUsage: {
+            /** Format: int64 */
+            count: number;
+            tool: string;
+        };
         McpToolView: {
             description: string;
             name: string;
             scope: string;
+        };
+        McpUsageBucket: {
+            /** Format: date-time */
+            at: string;
+            /** Format: int64 */
+            count: number;
+            /** Format: int64 */
+            denied: number;
+            /** Format: int64 */
+            error: number;
+            /** Format: int64 */
+            ok: number;
+        };
+        McpUsageStats: {
+            buckets: components["schemas"]["McpUsageBucket"][];
+            clients: components["schemas"]["McpClientUsage"][];
+            grants: components["schemas"]["McpGrantUsage"][];
+            summary: components["schemas"]["McpUsageSummary"];
+            tools: components["schemas"]["McpToolUsage"][];
+        };
+        McpUsageSummary: {
+            /** Format: double */
+            denied_rate: number;
+            /** Format: double */
+            error_rate: number;
+            /** Format: double */
+            p50_ms?: number | null;
+            /** Format: double */
+            p95_ms?: number | null;
+            /** Format: int64 */
+            total: number;
         };
         MembershipInput: {
             /** Format: uuid */
@@ -9172,6 +9272,26 @@ export interface operations {
             };
         };
     };
+    get_v1_mcp_calls: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent MCP tool calls without arguments or secrets; filter by client_id, tool, status, days, limit, offset (admin) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpCall"][];
+                };
+            };
+        };
+    };
     get_v1_mcp_catalog: {
         parameters: {
             query?: never;
@@ -9312,6 +9432,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["McpInfo"];
+                };
+            };
+        };
+    };
+    get_v1_mcp_stats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description MCP call counts, UTC hour/day buckets, tools, clients, grants, failure rates and p50/p95 latency; filter by client_id, tool, status, days, bucket (admin) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpUsageStats"];
                 };
             };
         };

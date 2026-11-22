@@ -178,6 +178,8 @@ async fn update_grant(
 pub fn router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/api/v1/mcp/info", get(info))
+        .route("/api/v1/mcp/calls", get(mcp::usage::calls))
+        .route("/api/v1/mcp/stats", get(mcp::usage::stats))
         .route("/api/v1/mcp/catalog", get(catalog))
         .route("/api/v1/mcp/clients/{client_id}", get(client))
         .route("/api/v1/mcp/grants", get(grants))

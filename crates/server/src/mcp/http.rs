@@ -704,21 +704,38 @@ async fn rpc(
         return no_store(StatusCode::ACCEPTED.into_response());
     }
     let token = bearer(&headers);
+    let call_started = std::time::Instant::now();
+    let params = message.get("params").cloned().unwrap_or_else(|| json!({}));
     let Some(token) = token else {
+        if method == "tools/call" {
+            record_unauthorized(&state, None, &params, call_started).await;
+        }
         return unauthorized_mcp(&origin, id);
     };
     let user = match tokens::load_access(&state, &token).await {
         Ok(user) => user,
-        Err(_) => return unauthorized_mcp(&origin, id),
+        Err(_) => {
+            if method == "tools/call" {
+                record_unauthorized(&state, Some(&token), &params, call_started).await;
+            }
+            return unauthorized_mcp(&origin, id);
+        }
     };
-    let params = message.get("params").cloned().unwrap_or_else(|| json!({}));
     let result = match method {
         "initialize" => initialize(&params),
         "ping" => Ok(json!({})),
         "tools/list" => Ok(tools_list(&user)),
-        "tools/call" => match tools_call(&state, &token, &user, &params).await {
+        "tools/call" => match tools_call(&state, &token, &user, &params, call_started).await {
             Ok(result) => Ok(result),
-            Err(message) => Err(rpc_error(id.clone(), -32602, message)),
+            Err(message) => Err(rpc_error(
+                id.clone(),
+                if tool_error_status(message).is_server_error() {
+                    -32603
+                } else {
+                    -32602
+                },
+                message,
+            )),
         },
         "resources/list" => Ok(json!({"resources": []})),
         "prompts/list" => Ok(json!({"prompts": []})),
@@ -819,7 +836,79 @@ async fn tools_call(
     token: &str,
     user: &AuthUser,
     params: &Value,
+    started: std::time::Instant,
 ) -> Result<Value, &'static str> {
+    let name = params
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let id = super::usage::begin(state, Some(user), name)
+        .await
+        .map_err(|_| "could not record the tool call; no action was performed")?;
+    let result = execute_tool(state, token, user, params).await;
+    let (status, failed) = match &result {
+        Ok((status, body)) => (*status, body["isError"].as_bool().unwrap_or(false)),
+        Err(message) => (tool_error_status(message), true),
+    };
+    if let Err(error) = super::usage::finish(
+        state,
+        id,
+        status,
+        failed,
+        started.elapsed().as_millis().min(i64::MAX as u128) as i64,
+    )
+    .await
+    {
+        tracing::warn!(message=%error.public_message(),"MCP call finalization failed");
+    }
+    result.map(|(_, body)| body)
+}
+
+fn tool_error_status(message: &str) -> StatusCode {
+    match message {
+        "unknown tool"
+        | "unknown path parameter"
+        | "path parameters must be strings"
+        | "invalid path parameter"
+        | "missing path parameter"
+        | "query values must be strings, numbers, or booleans" => StatusCode::BAD_REQUEST,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+async fn record_unauthorized(
+    state: &AppState,
+    token: Option<&str>,
+    params: &Value,
+    started: std::time::Instant,
+) {
+    let name = params
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let recorded = async {
+        let id = super::usage::begin_unauthorized(state, token, name).await?;
+        super::usage::finish(
+            state,
+            id,
+            StatusCode::UNAUTHORIZED,
+            true,
+            started.elapsed().as_millis().min(i64::MAX as u128) as i64,
+        )
+        .await
+    }
+    .await;
+    if let Err(error) = recorded {
+        tracing::warn!(message=%error.public_message(),"MCP denial recording failed");
+    }
+}
+
+async fn execute_tool(
+    state: &AppState,
+    token: &str,
+    user: &AuthUser,
+    params: &Value,
+) -> Result<(StatusCode, Value), &'static str> {
     let name = params
         .get("name")
         .and_then(Value::as_str)
@@ -828,16 +917,22 @@ async fn tools_call(
         let described = tokens::describe(state, token)
             .await
             .map_err(|_| "could not read this approval")?;
-        return Ok(tool_text(StatusCode::OK, &described.to_string(), false));
+        return Ok((
+            StatusCode::OK,
+            tool_text(StatusCode::OK, &described.to_string(), false),
+        ));
     }
     let Some(tool) = super::tools().into_iter().find(|tool| tool.name == name) else {
         return Err("unknown tool");
     };
     if !super::permissions::allows(user, &tool.name, &tool.scope) {
-        return Ok(tool_text(
+        return Ok((
             StatusCode::FORBIDDEN,
-            &format!("this approval does not include {}", tool.scope),
-            false,
+            tool_text(
+                StatusCode::FORBIDDEN,
+                &format!("this approval does not include {}", tool.scope),
+                false,
+            ),
         ));
     }
     let arguments = params
@@ -869,10 +964,13 @@ async fn tools_call(
         Err(_) => (b"response truncated; narrow the query".to_vec(), true),
     };
     let text = String::from_utf8_lossy(&bytes.0);
-    Ok(tool_text(
+    Ok((
         status,
-        &format!("HTTP {}\n{text}", status.as_u16()),
-        bytes.1,
+        tool_text(
+            status,
+            &format!("HTTP {}\n{text}", status.as_u16()),
+            bytes.1,
+        ),
     ))
 }
 

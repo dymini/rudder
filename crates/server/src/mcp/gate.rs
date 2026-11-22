@@ -21,12 +21,15 @@ pub async fn middleware(State(state): State<AppState>, request: Request, next: N
     if !token.starts_with("rdr_") {
         return next.run(request).await;
     }
+    let path = request.uri().path().to_owned();
+    let method = request.method().as_str().to_owned();
+    if matches!(agent_access(&method, &path), AgentAccess::Pass) {
+        return next.run(request).await;
+    }
     let user = match crate::auth::load_token(&state, &token).await {
         Ok(user) if user.via_mcp => user,
         _ => return next.run(request).await,
     };
-    let path = request.uri().path().to_owned();
-    let method = request.method().as_str().to_owned();
     match agent_access(&method, &path) {
         AgentAccess::Pass => next.run(request).await,
         AgentAccess::Allow { scope, tool } => {

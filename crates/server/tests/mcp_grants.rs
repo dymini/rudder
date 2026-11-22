@@ -242,3 +242,178 @@ async fn tool_grants_filter_enforce_and_edit_without_escalation(pool: PgPool) {
         StatusCode::FORBIDDEN
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn calls_record_success_denial_error_and_never_arguments(pool: PgPool) {
+    let (app, token, grant) = fixture(&pool, vec!["catalog:read", "monitoring:read"], vec![]).await;
+    rpc(&app, &token, "get_v1_projects", json!({})).await;
+    rpc(
+        &app,
+        &token,
+        "post_v1_projects",
+        json!({"body":{"name":"private-argument-marker"}}),
+    )
+    .await;
+    rpc(
+        &app,
+        &token,
+        "get_v1_projects__id_",
+        json!({"path":{"id":"private-argument-marker"}}),
+    )
+    .await;
+    rpc(
+        &app,
+        &token,
+        "private-argument-marker",
+        json!({"secret":"private-argument-marker"}),
+    )
+    .await;
+    rpc(&app, "rdr_mca_invalid", "get_v1_projects", json!({})).await;
+    let recent = request(&app, "GET", "/api/v1/mcp/calls", &token, None).await;
+    assert_eq!(recent.0, StatusCode::OK, "{}", recent.1);
+    let rows = recent.1.as_array().unwrap();
+    assert_eq!(rows.len(), 5);
+    assert!(!recent.1.to_string().contains("private-argument-marker"));
+    assert!(!recent.1.to_string().contains(&token));
+    assert!(rows.iter().any(|r| r["status"] == "ok"
+        && r["http_status"] == 200
+        && r["grant_id"] == grant.to_string()));
+    assert!(rows
+        .iter()
+        .any(|r| r["status"] == "error" && r["http_status"] == 400));
+    assert!(rows
+        .iter()
+        .any(|r| r["status"] == "denied" && r["http_status"] == 401 && r["grant_id"].is_null()));
+    let filtered = request(
+        &app,
+        "GET",
+        "/api/v1/mcp/calls?client_id=test-client&status=denied&tool=post_v1_projects",
+        &token,
+        None,
+    )
+    .await;
+    assert_eq!(filtered.1.as_array().unwrap().len(), 1);
+    let empty = request(
+        &app,
+        "GET",
+        "/api/v1/mcp/calls?client_id=absent",
+        &token,
+        None,
+    )
+    .await;
+    assert_eq!(empty.1, json!([]));
+    let via_mcp = rpc(
+        &app,
+        &token,
+        "get_v1_mcp_calls",
+        json!({"query":{"status":"ok"}}),
+    )
+    .await;
+    assert_eq!(via_mcp["result"]["isError"], false);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn statistics_aggregate_filter_and_zero_fill_hour_and_day_buckets(pool: PgPool) {
+    let (app, token, grant) = fixture(&pool, vec!["monitoring:read"], vec![]).await;
+    for (status, latency, tool) in [
+        ("ok", 10, "first"),
+        ("error", 20, "first"),
+        ("denied", 30, "second"),
+        ("ok", 40, "second"),
+    ] {
+        sqlx::query("INSERT INTO mcp_calls(grant_id,client_id,tool,scope,status,http_status,duration_ms,created_at) VALUES ($1,'test-client',$2,'monitoring:read',$3,200,$4,now()-interval '2 hours')").bind(grant).bind(tool).bind(status).bind(i64::from(latency)).execute(&pool).await.unwrap();
+    }
+    sqlx::query("INSERT INTO mcp_calls(client_id,tool,scope,status,http_status,duration_ms,created_at) VALUES ('test-client','old','self','ok',200,9999,now()-interval '31 days'),('other','other','self','ok',200,100,now())").execute(&pool).await.unwrap();
+    for bucket in ["hour", "day"] {
+        let stats = request(
+            &app,
+            "GET",
+            &format!("/api/v1/mcp/stats?client_id=test-client&bucket={bucket}"),
+            &token,
+            None,
+        )
+        .await;
+        assert_eq!(stats.0, StatusCode::OK, "{}", stats.1);
+        assert_eq!(stats.1["summary"]["total"], 4);
+        assert_eq!(stats.1["summary"]["error_rate"], 0.25);
+        assert_eq!(stats.1["summary"]["denied_rate"], 0.25);
+        assert_eq!(stats.1["summary"]["p50_ms"], 25.0);
+        assert!((stats.1["summary"]["p95_ms"].as_f64().unwrap() - 38.5).abs() < 0.001);
+        let buckets = stats.1["buckets"].as_array().unwrap();
+        assert_eq!(
+            buckets
+                .iter()
+                .map(|b| b["count"].as_i64().unwrap())
+                .sum::<i64>(),
+            4
+        );
+        assert!(buckets.iter().any(|b| b["count"] == 0));
+        assert_eq!(stats.1["tools"].as_array().unwrap().len(), 2);
+        assert_eq!(stats.1["clients"][0]["count"], 4);
+        assert_eq!(stats.1["grants"][0]["grant_id"], grant.to_string());
+        assert!(stats.1["grants"][0]["last_used_at"].is_string());
+    }
+    let empty = request(
+        &app,
+        "GET",
+        "/api/v1/mcp/stats?client_id=missing",
+        &token,
+        None,
+    )
+    .await;
+    assert_eq!(empty.1["summary"]["total"], 0);
+    assert_eq!(empty.1["summary"]["error_rate"], 0.0);
+    assert!(empty.1["summary"]["p95_ms"].is_null());
+    for invalid in [
+        "days=31",
+        "days=0",
+        "bucket=week",
+        "status=bad",
+        "limit=0",
+        "offset=-1",
+    ] {
+        assert_eq!(
+            request(
+                &app,
+                "GET",
+                &format!("/api/v1/mcp/stats?{invalid}"),
+                &token,
+                None
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    let filtered = request(
+        &app,
+        "GET",
+        "/api/v1/mcp/stats?status=error&tool=first",
+        &token,
+        None,
+    )
+    .await;
+    assert_eq!(filtered.1["summary"]["total"], 1);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn missing_call_storage_prevents_actions_from_running(pool: PgPool) {
+    let (app, token, _) = fixture(&pool, vec!["catalog:write"], vec![]).await;
+    sqlx::query("DROP TABLE mcp_calls")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let denied = rpc(
+        &app,
+        &token,
+        "post_v1_projects",
+        json!({"body":{"name":"must-not-exist"}}),
+    )
+    .await;
+    assert_eq!(denied["error"]["code"], -32603);
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM projects")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}
