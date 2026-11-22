@@ -5668,6 +5668,27 @@
         }
       }
     },
+    "/api/v1/stats/overview": {
+      "get": {
+        "tags": [
+          "monitoring"
+        ],
+        "summary": "Global traffic, resource, deployment, backup, alert and MCP statistics; range=1h|24h|7d|30d (default 1h)",
+        "operationId": "get_v1_stats_overview",
+        "responses": {
+          "200": {
+            "description": "Global traffic, resource, deployment, backup, alert and MCP statistics; range=1h|24h|7d|30d (default 1h)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsOverview"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/system": {
       "get": {
         "tags": [
@@ -10537,6 +10558,39 @@
           }
         }
       },
+      "JobStats": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "name",
+          "runs",
+          "failures"
+        ],
+        "properties": {
+          "failures": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_success": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "runs": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "JoinToken": {
         "type": "object",
         "required": [
@@ -13196,6 +13250,43 @@
           }
         }
       },
+      "ServerDisk": {
+        "type": "object",
+        "required": [
+          "server_id",
+          "name"
+        ],
+        "properties": {
+          "disk_percent": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "disk_used_bytes": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sampled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "server_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "ServerUsage": {
         "type": "object",
         "required": [
@@ -14146,6 +14237,268 @@
           }
         }
       },
+      "StatsCounts": {
+        "type": "object",
+        "required": [
+          "servers",
+          "services",
+          "domains",
+          "plugins"
+        ],
+        "properties": {
+          "domains": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "plugins": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "servers": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "services": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "StatsMetrics": {
+        "type": "object",
+        "required": [
+          "totals",
+          "series",
+          "top_network",
+          "top_requests",
+          "top_5xx",
+          "top_cpu",
+          "top_memory",
+          "container_restarts",
+          "disks"
+        ],
+        "properties": {
+          "container_restarts": {
+            "type": "number",
+            "format": "double",
+            "description": "Observed positive changes in sampled service restart counters, not an exact event count."
+          },
+          "disks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServerDisk"
+            }
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatsPoint"
+            }
+          },
+          "top_5xx": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopService"
+            }
+          },
+          "top_cpu": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopService"
+            }
+          },
+          "top_memory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopService"
+            }
+          },
+          "top_network": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopService"
+            }
+          },
+          "top_requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopService"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/TrafficStats"
+          }
+        }
+      },
+      "StatsOperations": {
+        "type": "object",
+        "required": [
+          "deploys",
+          "backup_runs",
+          "backup_failures",
+          "backup_jobs",
+          "alerts_fired",
+          "mcp_calls",
+          "mcp_error_rate",
+          "mcp_denied",
+          "counts"
+        ],
+        "properties": {
+          "alerts_fired": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "backup_failures": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "backup_jobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobStats"
+            }
+          },
+          "backup_runs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/StatsCounts"
+          },
+          "deploy_avg_duration_seconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "deploy_success_rate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "deploys": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mcp_calls": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mcp_denied": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mcp_error_rate": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "StatsOverview": {
+        "type": "object",
+        "required": [
+          "since",
+          "until",
+          "resolution",
+          "retention",
+          "metrics",
+          "operations"
+        ],
+        "properties": {
+          "metrics": {
+            "$ref": "#/components/schemas/StatsMetrics"
+          },
+          "operations": {
+            "$ref": "#/components/schemas/StatsOperations"
+          },
+          "resolution": {
+            "type": "string"
+          },
+          "retention": {
+            "$ref": "#/components/schemas/MetricsRetention"
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "until": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "StatsPoint": {
+        "type": "object",
+        "required": [
+          "at",
+          "requests",
+          "http_5xx",
+          "http_5xx_rate"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cpu_avg": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "cpu_peak": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "http_5xx": {
+            "type": "number",
+            "format": "double"
+          },
+          "http_5xx_rate": {
+            "type": "number",
+            "format": "double"
+          },
+          "memory_avg": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "memory_peak": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "requests": {
+            "type": "number",
+            "format": "double"
+          },
+          "rx_bytes": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "tx_bytes": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        }
+      },
       "SyncReport": {
         "type": "object",
         "required": [
@@ -14474,6 +14827,62 @@
           }
         }
       },
+      "TopService": {
+        "type": "object",
+        "required": [
+          "service_id",
+          "name",
+          "server_id"
+        ],
+        "properties": {
+          "cpu_percent": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "http_5xx": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "memory_bytes": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "name": {
+            "type": "string"
+          },
+          "network_bytes": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "requests": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "server_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "TotpDisable": {
         "type": "object",
         "required": [
@@ -14512,6 +14921,70 @@
           },
           "secret": {
             "type": "string"
+          }
+        }
+      },
+      "TrafficStats": {
+        "type": "object",
+        "required": [
+          "requests",
+          "http_5xx",
+          "http_5xx_rate"
+        ],
+        "properties": {
+          "cpu_avg": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "cpu_peak": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "http_5xx": {
+            "type": "number",
+            "format": "double"
+          },
+          "http_5xx_rate": {
+            "type": "number",
+            "format": "double"
+          },
+          "memory_avg": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "memory_peak": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "requests": {
+            "type": "number",
+            "format": "double"
+          },
+          "rx_bytes": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "tx_bytes": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
           }
         }
       },

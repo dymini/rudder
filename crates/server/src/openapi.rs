@@ -101,6 +101,10 @@ use crate::routes::stacks::{
     StackVariableView, StackView, TemplateDeployed, TemplateDetail, TemplateVariableView,
     TemplateView, UpdateStack,
 };
+use crate::routes::stats::{
+    JobStats, ServerDisk, StatsCounts, StatsMetrics, StatsOperations, StatsOverview, StatsPoint,
+    TopService, TrafficStats,
+};
 use crate::routes::system::{PanelBackupRequest, SystemInfo};
 use crate::routes::updates::{ComponentsStarted, UpdateOverview, UpdateSettings, UpdateStarted};
 use crate::stacks::StackGit;
@@ -349,6 +353,15 @@ use rudder_core::{
         ServerUsage,
         ServiceUsage,
         MetricsOverview,
+        StatsOverview,
+        StatsMetrics,
+        StatsPoint,
+        TrafficStats,
+        TopService,
+        ServerDisk,
+        StatsOperations,
+        StatsCounts,
+        JobStats,
         AlertKindView,
         AlertView,
         SaveAlert,
@@ -1715,6 +1728,15 @@ pub(crate) const ROUTES: &[Route] = &[
         summary: "Latest usage of every server and the busiest services",
         request: None,
         response: Some("MetricsOverview"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/stats/overview",
+        method: HttpMethod::Get,
+        tag: "monitoring",
+        summary: "Global traffic, resource, deployment, backup, alert and MCP statistics; range=1h|24h|7d|30d (default 1h)",
+        request: None,
+        response: Some("StatsOverview"),
         status: 200,
     },
     Route {

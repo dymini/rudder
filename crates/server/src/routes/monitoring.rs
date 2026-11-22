@@ -158,6 +158,7 @@ pub fn router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/api/v1/metrics", get(metrics))
         .route("/api/v1/metrics/overview", get(overview))
+        .route("/api/v1/stats/overview", get(super::stats::overview))
         .route("/api/v1/alert-kinds", get(alert_kinds))
         .route("/api/v1/alerts", get(list_alerts).post(create_alert))
         .route(

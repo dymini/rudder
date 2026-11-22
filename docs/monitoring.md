@@ -2,6 +2,54 @@
 
 Rudder samples every server and every running service every 10 seconds. The samples are stored in the panel's Postgres database, rolled up for charts, and checked against your alert rules.
 
+## Global statistics
+
+**Observe → Statistics** combines all servers and services for `1h`, `24h`, `7d`,
+or `30d`. It refreshes every minute. `GET /api/v1/stats/overview?range=1h` returns
+the same snapshot; agents need `monitoring:read` or the explicit
+`get_v1_stats_overview` tool. The API defaults to `1h` and rejects other ranges.
+
+- Traffic and resource charts use 1-minute buckets for 1h, 5-minute buckets for
+  24h, and hourly buckets for 7d/30d. Rollup watermarks select disjoint resolution
+  windows; finer rollups and raw samples fill the unrolled live tail. Proxy
+  traffic is available through the latest completed minute, not the access log's
+  currently accumulating minute. No raw-log scan is needed.
+- Network bytes integrate stored byte rates using observed sample counts and
+  the nominal 10-second cadence, capped at each bucket's duration. Proxy counts
+  convert the stored requests-per-minute values back to counts. Partial edge
+  buckets are proportionally clipped. These are sampled estimates, not billing
+  counters; irregular sampling, gaps, and partial buckets can affect accuracy.
+  Server network totals never add service traffic on top of host traffic.
+- CPU and memory averages weight each server's samples, then average the
+  reporting servers equally. Peaks are the highest observed server sample.
+  Memory percentages describe servers; service rankings use average bytes.
+  Five independent top-10 lists link to currently existing services. Historical
+  traffic for deleted resources remains in totals until metric retention removes it.
+- Container restarts are **observed positive changes in sampled service restart
+  counters**, using bucket peaks for rollups. Initial counter values are not
+  counted. Resets, replacement containers, and changes hidden inside a rollup
+  can be missed; this is not a complete restart-event audit.
+- Deployments are selected by creation time. Success rate uses finished deploys;
+  average duration uses finished runs with valid start/end timestamps. Backups
+  use start time, exclude restores, and count `partial` as a failure. Each job's
+  last fully successful backup is shown across all time, independent of range.
+- Alerts count `alert.fired` events, not notification retries. MCP counts finished
+  calls; its error numerator excludes denied calls (reported separately). Inventory
+  counts are current. Domain count means service-domain rows; panel/Access
+  settings hosts are not additional service-domain records. Plugin count means
+  installed plugin records, not available catalog entries.
+- Disk values show the latest retained sample per current server, independently
+  of the selected range, with an hourly fallback and its timestamp (up to 30d).
+  An hourly fallback is an average for that bucket, not an instantaneous reading.
+
+The response exposes active metric retention settings. Defaults are raw 24h,
+1m 7d, 5m 14d, and 1h 30d. Shorter custom retention, downtime, or expired event
+history can make a range incomplete; the dashboard does not invent missing data.
+Missing resource metrics are `null`/`—`; absent request traffic is zero. In-flight
+MCP calls are excluded. New time-leading indexes support range scans, and backup
+last-success lookups use a partial job/time index. The metric and operational
+queries share a repeatable-read database snapshot.
+
 ## What is measured
 
 | Scope | Metrics |
