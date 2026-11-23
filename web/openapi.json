@@ -1876,7 +1876,7 @@
         "tags": [
           "cloudflare"
         ],
-        "summary": "Save the Cloudflare account, zone, and API token after checking them (admin, write)",
+        "summary": "Save the account and token, discover zones and optionally enable a legacy zone id (admin, write)",
         "operationId": "put_v1_cloudflare_credentials",
         "requestBody": {
           "content": {
@@ -1889,7 +1889,7 @@
         },
         "responses": {
           "200": {
-            "description": "Save the Cloudflare account, zone, and API token after checking them (admin, write)",
+            "description": "Save the account and token, discover zones and optionally enable a legacy zone id (admin, write)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2189,6 +2189,87 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TunnelUpdateProgress"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/zones": {
+      "get": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "List discovered zones, enablement and per-zone visibility errors (admin)",
+        "operationId": "get_v1_cloudflare_zones",
+        "responses": {
+          "200": {
+            "description": "List discovered zones, enablement and per-zone visibility errors (admin)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CloudflareZone"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/zones/refresh": {
+      "post": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Refresh all pages of zones visible to the connected account token without deleting DNS records (admin, write)",
+        "operationId": "post_v1_cloudflare_zones_refresh",
+        "responses": {
+          "200": {
+            "description": "Refresh all pages of zones visible to the connected account token without deleting DNS records (admin, write)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CloudflareZone"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/zones/{zone_id}": {
+      "put": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Enable or disable a discovered zone without deleting its records (admin, write)",
+        "operationId": "put_v1_cloudflare_zones__zone_id_",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetZone"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Enable or disable a discovered zone without deleting its records (admin, write)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CloudflareZone"
+                  }
                 }
               }
             }
@@ -8570,6 +8651,55 @@
           }
         }
       },
+      "CloudflareZone": {
+        "type": "object",
+        "required": [
+          "zone_id",
+          "account_id",
+          "name",
+          "status",
+          "enabled",
+          "accessible",
+          "last_seen_at",
+          "published_hosts"
+        ],
+        "properties": {
+          "accessible": {
+            "type": "boolean"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_seen_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "published_hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string"
+          },
+          "zone_id": {
+            "type": "string"
+          }
+        }
+      },
       "CloudflaredRelease": {
         "type": "object",
         "required": [
@@ -9522,12 +9652,14 @@
         "type": "object",
         "required": [
           "host",
+          "zone_id",
+          "zone_name",
           "action"
         ],
         "properties": {
           "action": {
             "type": "string",
-            "description": "`created`, `kept`, `replaced`, or `conflict`."
+            "description": "`created`, `kept`, `replaced`, `conflict`, or `error`."
           },
           "detail": {
             "type": [
@@ -9536,6 +9668,12 @@
             ]
           },
           "host": {
+            "type": "string"
+          },
+          "zone_id": {
+            "type": "string"
+          },
+          "zone_name": {
             "type": "string"
           }
         }
@@ -9694,6 +9832,12 @@
             ]
           },
           "direct_warning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zone_id": {
             "type": [
               "string",
               "null"
@@ -10290,6 +10434,24 @@
             ]
           },
           "ssl_mode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zone_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zone_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zone_name": {
             "type": [
               "string",
               "null"
@@ -13924,8 +14086,7 @@
       "SaveCredentials": {
         "type": "object",
         "required": [
-          "account_id",
-          "zone_id"
+          "account_id"
         ],
         "properties": {
           "account_id": {
@@ -13941,7 +14102,7 @@
           },
           "zone_id": {
             "type": "string",
-            "description": "32-character id of the zone the hostnames live in."
+            "description": "Optional legacy zone id. When supplied, this zone is enabled."
           }
         }
       },
@@ -14730,6 +14891,17 @@
           "replicas": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "SetZone": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
           }
         }
       },
@@ -15526,6 +15698,7 @@
           "hostnames",
           "skipped",
           "dns",
+          "zones",
           "pending"
         ],
         "properties": {
@@ -15550,6 +15723,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SkippedHost"
+            }
+          },
+          "zones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZonePublishResult"
             }
           }
         }
@@ -17180,6 +17359,35 @@
           "destination_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "ZonePublishResult": {
+        "type": "object",
+        "required": [
+          "zone_id",
+          "zone_name",
+          "published_hosts",
+          "errors"
+        ],
+        "properties": {
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "published_hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "zone_id": {
+            "type": "string"
+          },
+          "zone_name": {
+            "type": "string"
           }
         }
       }

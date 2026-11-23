@@ -21,6 +21,7 @@ type Status = Schemas["CloudflareStatus"];
 
 const STATUS_KEY = ["cloudflare"];
 const READINESS_KEY = ["cloudflare-readiness"];
+const ZONES_KEY = ["cloudflare-zones"];
 
 /**
  * The optional Cloudflare Zero Trust mode: a tunnel in front of every app, Access in
@@ -46,6 +47,7 @@ export function CloudflarePanel() {
       {data ? (
         <>
           <Account status={data} />
+          {data.token_saved ? <Zones /> : null}
           <Tunnel status={data} />
           {data.tunnel_id ? <Publish status={data} /> : null}
           {data.tunnel_id ? <Access status={data} /> : null}
@@ -73,8 +75,16 @@ function useSave<T, R = unknown>(
       after?.(result);
       await queryClient.invalidateQueries({ queryKey: STATUS_KEY });
       await queryClient.invalidateQueries({ queryKey: READINESS_KEY });
+      await queryClient.invalidateQueries({ queryKey: ZONES_KEY });
+      await queryClient.invalidateQueries({ queryKey: ["global-domains"] });
+      await queryClient.invalidateQueries({ queryKey: ["domain-routing-options"] });
     },
-    onError: (error) => toast.error(error instanceof ApiError ? error.message : failure),
+    onError: async (error) => {
+      toast.error(error instanceof ApiError ? error.message : failure);
+      await queryClient.invalidateQueries({ queryKey: ZONES_KEY });
+      await queryClient.invalidateQueries({ queryKey: STATUS_KEY });
+      await queryClient.invalidateQueries({ queryKey: READINESS_KEY });
+    },
   });
 }
 
@@ -92,7 +102,7 @@ function Step({ number, children }: { number: number; children: ReactNode }) {
 function Account({ status }: { status: Status }) {
   const t = useT();
   const [accountId, setAccountId] = useState(status.account_id);
-  const [zoneId, setZoneId] = useState(status.zone_id);
+  const [zoneId, setZoneId] = useState("");
   const [token, setToken] = useState("");
   const save = useSave(
     () =>
@@ -112,7 +122,7 @@ function Account({ status }: { status: Status }) {
     <Card
       title={<Step number={1}>{t("Cloudflare account")}</Step>}
       description={t(
-        "Create an API token with: Account · Cloudflare Tunnel · Edit, Account · Access: Apps and Policies · Edit, Account · Access: SSH Auditing · Edit, Account · Cloudflare One Connectors/Networks · Edit, and Zone · DNS · Edit. The zone must already be on Cloudflare.",
+        "Use one account token with Cloudflare Tunnel Edit and Access Apps and Policies Edit; add SSH Auditing Edit and Cloudflare One Connectors/Networks Edit for SSH. Give each enabled zone Zone Read and DNS Edit permissions.",
       )}
       actions={
         status.token_saved ? <Badge value="connected" tone="success" /> : <Badge value="not connected" tone="neutral" />
@@ -133,12 +143,10 @@ function Account({ status }: { status: Status }) {
             disabled={Boolean(status.tunnel_id)}
           />
         </Field>
-        <Field label={t("Zone ID")} hint={status.zone_name ? status.zone_name : undefined}>
+        <Field label={t("Zone ID (optional)")} hint={t("Discover zones automatically, or enter a zone ID to enable it.")}>
           <TextInput
-            required
             value={zoneId}
             onChange={(event) => setZoneId(event.target.value)}
-            disabled={Boolean(status.tunnel_id)}
           />
         </Field>
         <Field
@@ -159,6 +167,49 @@ function Account({ status }: { status: Status }) {
           </Button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+function Zones() {
+  const t = useT();
+  const zones = useQuery({
+    queryKey: ZONES_KEY,
+    queryFn: () => api<Schemas["CloudflareZone"][]>("/api/v1/cloudflare/zones"),
+  });
+  const refresh = useSave(
+    () => api("/api/v1/cloudflare/zones/refresh", { method: "POST" }),
+    t("Cloudflare zones refreshed"),
+    t("Could not refresh Cloudflare zones"),
+  );
+  const toggle = useSave(
+    ({ id, enabled }: { id: string; enabled: boolean }) => api(`/api/v1/cloudflare/zones/${id}`, {
+      method: "PUT", body: JSON.stringify({ enabled }),
+    }),
+    t("Cloudflare zone updated"),
+    t("Could not update the Cloudflare zone"),
+  );
+  return (
+    <Card title={t("Cloudflare zones")} description={t("Enable zones Rudder may manage. New zones start disabled. Disabling a zone never deletes its DNS records or existing tunnel routes.")}
+      actions={<Button quiet disabled={refresh.isPending || toggle.isPending} onClick={() => refresh.mutate(undefined)}>{t("Refresh zones")}</Button>}>
+      {zones.isPending ? <p>{t("Loading…")}</p> : null}
+      {zones.isError ? <Alert tone="error">{t("Could not load Cloudflare zones")}</Alert> : null}
+      {zones.data?.length === 0 ? <p className="text-sm text-muted">{t("No zones discovered. Check Zone Read permissions and refresh.")}</p> : null}
+      {zones.data?.length ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead><tr><th className="p-2">{t("Zone")}</th><th className="p-2">{t("Status")}</th><th className="p-2">{t("Enabled")}</th></tr></thead>
+            <tbody>{zones.data.map((zone) => (
+              <tr key={zone.zone_id} className="border-t border-line align-top">
+                <td className="p-2 break-all">{zone.name}<p className="font-mono text-xs text-muted">{zone.zone_id}</p></td>
+                <td className="p-2"><Badge value={zone.accessible ? zone.status : "unavailable"} />{zone.last_error ? <p className="mt-1 max-w-md break-words text-danger">{zone.last_error}</p> : null}</td>
+                <td className="p-2"><input type="checkbox" className="size-5" aria-label={t("Manage zone {zone}", { zone: zone.name })} checked={zone.enabled}
+                  disabled={toggle.isPending || refresh.isPending} onChange={(event) => toggle.mutate({ id: zone.zone_id, enabled: event.target.checked })} /></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      ) : null}
     </Card>
   );
 }
@@ -301,7 +352,7 @@ function Publish({ status }: { status: Status }) {
         method: "POST",
         body: JSON.stringify({ overwrite_dns: overwrite }),
       }),
-    t("Domains published through the tunnel"),
+    t("Publication finished"),
     t("Could not publish the domains"),
   );
   const report = publish.data;
@@ -333,10 +384,19 @@ function Publish({ status }: { status: Status }) {
           </p>
         ) : null}
         {report ? (
+          <div className="space-y-3">
+          {report.zones.map((zone) => (
+            <div key={zone.zone_id} className="rounded border border-line p-3 text-sm">
+              <p className="font-medium">{zone.zone_name}</p>
+              <p className="break-words text-muted">{t("Published: {hosts}", { hosts: zone.published_hosts.join(", ") || "—" })}</p>
+              {zone.errors.map((error) => <p key={error} className="break-words text-danger">{error}</p>)}
+            </div>
+          ))}
           <ul className="space-y-1 text-sm">
             {report.dns.map((item) => (
-              <li key={item.host}>
-                {item.host} — {t(item.action)}
+              <li key={`${item.zone_id}:${item.host}`}>
+                {item.host} ({item.zone_name}) — {t(item.action)}
+                {item.action === "error" && item.detail ? `: ${item.detail}` : ""}
                 {item.action === "conflict" && item.detail
                   ? ` (${item.detail}). ${t("Tick the box above to replace it.")}`
                   : ""}
@@ -348,6 +408,7 @@ function Publish({ status }: { status: Status }) {
               </li>
             ))}
           </ul>
+          </div>
         ) : null}
       </div>
     </Card>

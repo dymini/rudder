@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "../api";
 import { DomainRouting } from "../components/domain-routing";
-import { Badge, Button, Card, Dialog, Empty } from "../components/ui";
+import { Badge, Button, Dialog, Empty, Field, Select } from "../components/ui";
 import { errorMessage } from "../format";
 import { useT } from "../i18n";
 import type { Schemas } from "../types";
@@ -15,6 +15,7 @@ export function DomainsPage() {
   const t = useT();
   const client = useQueryClient();
   const [editing, setEditing] = useState<Domain | null>(null);
+  const [zoneFilter, setZoneFilter] = useState("");
   const domains = useQuery({
     queryKey: ["global-domains"],
     queryFn: () => api<Domain[]>("/api/v1/domains"),
@@ -30,6 +31,8 @@ export function DomainsPage() {
     onError: (error) =>
       toast.error(errorMessage(error, t("Could not remove the domain"))),
   });
+  const zoneChoices = [...new Map((domains.data ?? []).filter((d) => d.zone_id).map((d) => [d.zone_id!, d.zone_name!])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const filtered = domains.data?.filter((domain) => !zoneFilter || (zoneFilter === "unmatched" ? !domain.zone_id : domain.zone_id === zoneFilter));
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -45,6 +48,11 @@ export function DomainsPage() {
       <p className="text-sm text-muted">
         {t("Every service, panel, and Access hostname across your servers.")}
       </p>
+      <div className="max-w-sm"><Field label={t("Filter by zone")}><Select value={zoneFilter} onChange={(event) => setZoneFilter(event.target.value)}>
+        <option value="">{t("All zones")}</option>
+        <option value="unmatched">{t("No matching zone")}</option>
+        {zoneChoices.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+      </Select></Field></div>
       {domains.isPending ? <p>{t("Loading…")}</p> : null}
       {domains.error ? (
         <p role="alert" className="text-sm break-words text-danger">
@@ -54,20 +62,21 @@ export function DomainsPage() {
       {domains.data?.length === 0 ? (
         <Empty icon="globe" title={t("No domains yet")} />
       ) : null}
-      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-        {domains.data?.map((domain) => (
-          <Card
-            key={domain.id ?? `${domain.kind}:${domain.host}`}
-            title={
-              <span className="[overflow-wrap:anywhere]">
-                {domain.host}
-                {domain.path_prefix !== "/" ? domain.path_prefix : ""}
-              </span>
-            }
-          >
-            <dl className="grid min-w-0 gap-2 text-sm [overflow-wrap:anywhere]">
-              <dt className="text-muted">{t("Service / stack")}</dt>
-              <dd>
+      {domains.data?.length && filtered?.length === 0 ? <Empty icon="globe" title={t("No domains match this zone")} /> : null}
+      <div className="min-w-0 overflow-x-auto rounded border border-line">
+        <table className="w-full text-left text-sm">
+          <thead><tr>{[t("Domain"), t("Zone"), t("Service / stack"), t("Routing mode"), t("DNS check"), t("Actions")].map((label) => <th key={label} scope="col" className="p-3">{label}</th>)}</tr></thead>
+          <tbody>{filtered?.map((domain) => (
+          <tr className="border-t border-line align-top" key={domain.id ?? `${domain.kind}:${domain.host}`}>
+            <td className="max-w-xs break-words p-3">
+              <p className="font-medium">{domain.host}{domain.path_prefix !== "/" ? domain.path_prefix : ""}</p>
+              <p className="mt-1 text-muted">{domain.ssl_mode ?? t("Unknown")} · {domain.certificate_status ? t(domain.certificate_status) : t("Unknown")}</p>
+            </td>
+            <td className="max-w-xs break-words p-3">
+              {domain.zone_name ?? "—"}
+              {domain.routing_mode === "cloudflare" && domain.zone_error ? <p className="mt-1 text-danger">{domain.zone_error}</p> : null}
+            </td>
+            <td className="max-w-xs break-words p-3">
                 {domain.service_id ? (
                   <Link
                     className="underline"
@@ -78,22 +87,13 @@ export function DomainsPage() {
                 ) : (
                   t(domain.kind === "panel" ? "Panel" : "Access portal")
                 )}
-              </dd>
-              <dt className="text-muted">{t("Server")}</dt>
-              <dd>{domain.server_name ?? t("Unknown")}</dd>
-              <dt className="text-muted">{t("Routing mode")}</dt>
-              <dd>
+              <p className="mt-1 text-muted">{domain.server_name ?? t("Unknown")}</p>
+            </td>
+            <td className="max-w-xs break-words p-3">
                 <Badge value={domain.routing} />
-              </dd>
-              <dt className="text-muted">{t("TLS / certificate")}</dt>
-              <dd>
-                {domain.ssl_mode ?? t("Unknown")} ·{" "}
-                {domain.certificate_status
-                  ? t(domain.certificate_status)
-                  : t("Unknown")}
-              </dd>
-              <dt className="text-muted">{t("DNS check")}</dt>
-              <dd className="space-y-1">
+              {domain.routing_mode === "direct" && domain.routing_options?.direct_warning ? <p className="mt-2 text-amber">{t(domain.routing_options.direct_warning)}</p> : null}
+            </td>
+            <td className="max-w-sm space-y-1 break-words p-3">
                 <p>{t(domain.dns.message)}</p>
                 {domain.dns.expected ? (
                   <p>
@@ -103,16 +103,10 @@ export function DomainsPage() {
                 <p className="font-mono text-xs">
                   {domain.dns.addresses.join(", ") || t("No addresses")}
                 </p>
-              </dd>
-            </dl>
-            {domain.routing_mode === "direct" &&
-            domain.routing_options?.direct_warning ? (
-              <p className="mt-3 text-sm text-amber">
-                {t(domain.routing_options.direct_warning)}
-              </p>
-            ) : null}
+            </td>
+            <td className="p-3">
             {domain.id ? (
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button quiet onClick={() => setEditing(domain)}>
                   {t("Change routing")}
                 </Button>
@@ -132,12 +126,14 @@ export function DomainsPage() {
                 </Button>
               </div>
             ) : (
-              <p className="mt-4 text-sm text-muted">
+              <p className="text-sm text-muted">
                 {t("Manage this hostname in its panel or Access settings.")}
               </p>
             )}
-          </Card>
-        ))}
+            </td>
+          </tr>
+        ))}</tbody>
+        </table>
       </div>
       {editing ? (
         <RoutingDialog domain={editing} onClose={() => setEditing(null)} />
