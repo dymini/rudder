@@ -12,6 +12,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 - **Manage multiple Cloudflare zones in one account.** Discover zones with the connected token and enable only the zones Rudder should manage. The existing zone stays enabled on upgrade; other discovered zones start disabled. Tokens need Zone Read plus DNS Edit for each enabled zone.
 
 ### Changed
+- **Use Access across enabled Cloudflare zones.** The login portal and panel Access application can use any enabled zone in the connected account, with hostname-specific readiness diagnostics before closing public ports.
 - **Publish DNS safely across zones.** Domains resolve to their most-specific known zone, with no fallback past a disabled or inaccessible child zone. DNS errors are reported per zone and hostname; working tunnel routes and DNS records survive discovery loss or disabled zones, and cleanup uses the zone where each record was written.
 
 ## [0.12.1] - 2026-11-23

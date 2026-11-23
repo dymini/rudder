@@ -410,11 +410,11 @@ async fn put_settings(
     };
     if let Some(host) = &portal_host {
         if body.portal_host.is_some() && crate::cloudflare::tunnel_published(&state.pool).await {
-            let cloudflare = crate::cloudflare::load(&state.pool).await?;
-            if !rudder_core::host_in_zone(host, &cloudflare.zone_name) {
+            let zones = crate::cloudflare_zones::list(&state.pool).await?;
+            if let Err(error) = crate::cloudflare_zones::resolve(&zones,host) {
                 return Err(bad("portal_outside_tunnel_zone", format!(
-                    "Access portal {host} is outside the tunnel zone {} and will not be published. Choose a portal hostname in that zone before closing public ports.",
-                    cloudflare.zone_name
+                    "Access portal {host} will not be published: {} Choose a hostname in an enabled, accessible zone before closing public ports.",
+                    error.public_message()
                 )));
             }
         }

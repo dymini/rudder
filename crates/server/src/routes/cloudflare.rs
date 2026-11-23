@@ -586,12 +586,8 @@ async fn setup_access(
             "set a panel domain under Certificates first",
         )
     })?;
-    if !rudder_core::host_in_zone(&host, &settings.zone_name) {
-        return Err(bad(
-            "outside_zone",
-            format!("the panel domain is not in the {} zone", settings.zone_name),
-        ));
-    }
+    let available = zones::list(&state.pool).await?;
+    zones::resolve(&available,&host).map_err(|error|bad("outside_zone",error.public_message()))?;
     let client = cf::client(&state, &settings)?;
     let allow = json!({
         "name": "Rudder administrators",
@@ -1011,6 +1007,9 @@ async fn readiness(
             message: check.message,
         })
         .collect();
+    for skipped in &skipped {
+        checks.push(PreflightCheckView { id: format!("hostname:{}",skipped.host), ok:false,required:true,message:format!("{}: {}",skipped.host,skipped.reason) });
+    }
     let portal: Option<String> =
         sqlx::query_scalar("SELECT portal_host FROM access_settings WHERE id=TRUE")
             .fetch_one(&state.pool)
@@ -1025,7 +1024,9 @@ async fn readiness(
             message: if ok {
                 format!("Rudder Access portal {host} is published through the tunnel")
             } else {
-                format!("Rudder Access portal {host} is not published through the tunnel. Choose a portal hostname in the {} zone in Access settings and publish the tunnel again; otherwise keep direct HTTPS ingress reachable. Do not close public ports while Access login is unreachable.", settings.zone_name)
+                let available = zones::list(&state.pool).await?;
+                let reason = zones::resolve(&available,&host).map(|z|format!("Matched zone {}. Publish the tunnel again.",z.name)).unwrap_or_else(|e|e.public_message());
+                format!("Rudder Access portal {host} is not published through the tunnel. {reason} Choose a portal hostname in an enabled zone in Access settings; otherwise keep direct HTTPS ingress reachable. Do not close public ports while Access login is unreachable.")
             },
         });
     }

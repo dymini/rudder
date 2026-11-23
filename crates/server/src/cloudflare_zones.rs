@@ -26,14 +26,19 @@ pub async fn list(pool: &PgPool) -> Result<Vec<CloudflareZone>, ApiError> {
 }
 
 pub fn resolve<'a>(zones: &'a [CloudflareZone], host: &str) -> Result<&'a CloudflareZone, ApiError> {
+    let zone = lookup(zones, host)?;
+    if !zone.enabled || !zone.accessible || zone.status != "active" {
+        return Err(bad("zone_unavailable", format!("Cloudflare zone {} is {}. Enable it and check Zone Read and DNS Edit permissions; its parent zone will not be used.", zone.name, if !zone.enabled { "disabled" } else if !zone.accessible { "inaccessible" } else { &zone.status })));
+    }
+    Ok(zone)
+}
+
+pub fn lookup<'a>(zones: &'a [CloudflareZone], host: &str) -> Result<&'a CloudflareZone, ApiError> {
     let host = host.trim().trim_end_matches('.').to_ascii_lowercase();
     validate_host(&host).map_err(|_| bad("invalid_host", "Use a valid hostname without a wildcard."))?;
     let zone = zones.iter().filter(|z| host_in_zone(&host, &z.name))
         .max_by_key(|z| z.name.len())
-        .ok_or_else(|| bad("zone_not_found", format!("No known Cloudflare zone matches {host}. Refresh zones and enable the matching zone.")))?;
-    if !zone.enabled || !zone.accessible || zone.status != "active" {
-        return Err(bad("zone_unavailable", format!("Cloudflare zone {} is {}. Enable it and check Zone Read and DNS Edit permissions; its parent zone will not be used.", zone.name, if !zone.enabled { "disabled" } else if !zone.accessible { "inaccessible" } else { &zone.status })));
-    }
+        .ok_or_else(|| bad("zone_not_found", format!("No known Cloudflare zone matches {host}. Known zones: {}. Refresh zones and enable the matching zone.", zones.iter().map(|z|z.name.as_str()).collect::<Vec<_>>().join(", "))))?;
     Ok(zone)
 }
 

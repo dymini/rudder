@@ -1025,6 +1025,92 @@ async fn tunnel_creation_publishes_an_empty_ingress(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn multi_zone_portal_keeps_plugin_access_and_dns_ownership_on_partial_failure(pool: PgPool) {
+    let (cloudflare, fake) = fake_cloudflare().await;
+    fake.lock().unwrap().zones = Some(vec![
+        json!({"id":ZONE,"name":"example.com","status":"active","account":{"id":ACCOUNT}}),
+        json!({"id":OTHER_ZONE,"name":"second.net","status":"active","account":{"id":ACCOUNT}}),
+    ]);
+    let data_dir = scratch_dir();
+    let app = app(pool.clone(), &data_dir, &cloudflare);
+    let session = owner(&app).await;
+    let server = call(&app,"POST","/api/v1/servers",&session,Some(json!({"name":"local","kind":"local","public_ip":"203.0.113.10"}))).await;
+    let project = call(&app,"POST","/api/v1/projects",&session,Some(json!({"name":"web"}))).await;
+    let env = call(&app,"POST",&format!("/api/v1/projects/{}/environments",project.body["id"].as_str().unwrap()),&session,Some(json!({"name":"prod"}))).await;
+    let service = call(&app,"POST",&format!("/api/v1/environments/{}/services",env.body["id"].as_str().unwrap()),&session,Some(json!({"name":"web","kind":"application","server_id":server.body["id"],"spec":{"image":"nginx:1.27"}}))).await;
+    assert_eq!(service.status,StatusCode::CREATED,"{}",service.body);
+    let service_id = service.body["id"].as_str().unwrap();
+    let credentials = call(&app,"PUT","/api/v1/cloudflare/credentials",&session,Some(json!({"account_id":ACCOUNT,"zone_id":ZONE,"api_token":TOKEN}))).await;
+    assert_eq!(credentials.status,StatusCode::OK,"{}",credentials.body);
+    let enabled = call(&app,"PUT",&format!("/api/v1/cloudflare/zones/{OTHER_ZONE}"),&session,Some(json!({"enabled":true}))).await;
+    assert_eq!(enabled.status,StatusCode::OK,"{}",enabled.body);
+    sqlx::query("UPDATE panel_settings SET panel_domain='panel.example.com' WHERE id=TRUE").execute(&pool).await.unwrap();
+    let tunnel = call(&app,"POST","/api/v1/cloudflare/tunnel",&session,Some(json!({"replicas":1}))).await;
+    assert_eq!(tunnel.status,StatusCode::CREATED,"{}",tunnel.body);
+    let portal = call(&app,"PUT","/api/v1/access/settings",&session,Some(json!({"portal_host":"access.second.net"}))).await;
+    assert_eq!(portal.status,StatusCode::OK,"{}",portal.body);
+    let domain = call(&app,"POST",&format!("/api/v1/services/{service_id}/domains"),&session,Some(json!({"host":"dockside.example.com","target_port":8080,"ssl_mode":"letsencrypt","routing_mode":"cloudflare"}))).await;
+    assert_eq!(domain.status,StatusCode::CREATED,"{}",domain.body);
+    let policy = call(&app,"PUT",&format!("/api/v1/access/services/{service_id}"),&session,Some(json!({"enabled":true,"rules":[{"kind":"email","email":"owner@example.com"}]}))).await;
+    assert_eq!(policy.status,StatusCode::OK,"{}",policy.body);
+    sqlx::query("INSERT INTO plugin_installs(plugin,service_id,installed_version,image) VALUES('dockside',$1,'0.2.2','dockside:test')")
+        .bind(Uuid::parse_str(service_id).unwrap()).execute(&pool).await.unwrap();
+    let publish = call(&app,"POST","/api/v1/cloudflare/tunnel/publish",&session,Some(json!({}))).await;
+    assert_eq!(publish.status,StatusCode::OK,"{}",publish.body);
+    assert_eq!(publish.body["pending"],0,"{}",publish.body);
+    assert_eq!(publish.body["zones"].as_array().unwrap().len(),2);
+    let ownership: Vec<(String,String)> = sqlx::query_as("SELECT zone_id,host FROM domain_dns_records ORDER BY host").fetch_all(&pool).await.unwrap();
+    assert!(ownership.contains(&(OTHER_ZONE.into(),"access.second.net".into())));
+    assert!(ownership.contains(&(ZONE.into(),"dockside.example.com".into())));
+    let readiness = call(&app,"GET","/api/v1/cloudflare/preflight",&session,None).await;
+    assert_eq!(readiness.body["checks"].as_array().unwrap().iter().find(|c|c["id"] == "rudder_access_portal").unwrap()["ok"],true);
+    let routes = std::fs::read_to_string(data_dir.join("traefik/dynamic/routes.yml")).unwrap();
+    let protected = routes.lines().skip_while(|line|!line.contains("Host(`dockside.example.com`) && PathPrefix(`/`)"))
+        .take_while(|line|line.starts_with("      ")).collect::<Vec<_>>().join("\n");
+    assert!(protected.contains("- rudder-gate"),"{protected}");
+    assert!(protected.contains("- websecure"),"{protected}");
+    let secret: Vec<u8> = sqlx::query_scalar("SELECT gate_secret_enc FROM access_settings WHERE id=TRUE").fetch_one(&pool).await.unwrap();
+    let secret = String::from_utf8(rudder_core::Cipher::new([0xcc;32]).decrypt(&secret).unwrap()).unwrap();
+    for (path,expected) in [("/",StatusCode::TEMPORARY_REDIRECT),("/v1/blobs/item",StatusCode::OK)] {
+        let response = app.clone().oneshot(Request::builder().uri(format!("/api/v1/edge/gate?k={secret}"))
+            .header("x-forwarded-host","dockside.example.com").header("x-forwarded-proto","https").header("x-forwarded-uri",path).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(),expected);
+        if expected == StatusCode::TEMPORARY_REDIRECT { assert!(response.headers()["location"].to_str().unwrap().starts_with("https://access.second.net/access?")); }
+    }
+    fake.lock().unwrap().failed_dns_zone = Some(OTHER_ZONE.into());
+    let partial = call(&app,"POST","/api/v1/cloudflare/tunnel/publish",&session,Some(json!({}))).await;
+    assert_eq!(partial.status,StatusCode::OK,"{}",partial.body);
+    assert!(partial.body["zones"].as_array().unwrap().iter().find(|z|z["zone_id"] == OTHER_ZONE).unwrap()["errors"].as_array().unwrap().len() > 0);
+    let status = call(&app,"GET","/api/v1/cloudflare",&session,None).await;
+    assert!(status.body["published_hosts"].as_array().unwrap().contains(&json!("access.second.net")));
+    assert!(fake.lock().unwrap().configs.last().unwrap()["config"]["ingress"].as_array().unwrap().iter().any(|r|r["hostname"] == "access.second.net"));
+    fake.lock().unwrap().failed_dns_zone = None;
+    for _ in 0..2 {
+        let retry = call(&app,"POST","/api/v1/cloudflare/tunnel/publish",&session,Some(json!({}))).await;
+        assert_eq!(retry.body["pending"],0,"{}",retry.body);
+    }
+    assert_eq!(fake.lock().unwrap().dns.len(),3);
+    let disabled = call(&app,"PUT",&format!("/api/v1/cloudflare/zones/{OTHER_ZONE}"),&session,Some(json!({"enabled":false}))).await;
+    assert_eq!(disabled.status,StatusCode::OK);
+    let retained = call(&app,"POST","/api/v1/cloudflare/tunnel/publish",&session,Some(json!({}))).await;
+    assert_eq!(retained.status,StatusCode::OK,"{}",retained.body);
+    assert_eq!(fake.lock().unwrap().dns.len(),3);
+    let blocked = call(&app,"PUT","/api/v1/cloudflare/credentials",&session,Some(json!({"account_id":"ffffffffffffffffffffffffffffffff","api_token":TOKEN}))).await;
+    assert_eq!(blocked.status,StatusCode::CONFLICT);
+    // The same record id in another zone must not be touched during cleanup.
+    let primary_id = fake.lock().unwrap().dns.iter().find(|r|r["name"] == "panel.example.com").unwrap()["id"].clone();
+    fake.lock().unwrap().dns.push(json!({"_zone":OTHER_ZONE,"id":primary_id,"name":"foreign.second.net","type":"CNAME","content":format!("{TUNNEL}.cfargotunnel.com")}));
+    let removed = call(&app,"DELETE","/api/v1/cloudflare/tunnel",&session,None).await;
+    assert_eq!(removed.status,StatusCode::OK,"{}",removed.body);
+    assert!(removed.body["warnings"].as_array().unwrap().iter().any(|v|v.as_str().unwrap().contains("second.net")));
+    let records = fake.lock().unwrap().dns.clone();
+    assert_eq!(records.len(),2,"{records:?}");
+    assert!(records.iter().all(|r|r["_zone"] == OTHER_ZONE));
+    let retained: Vec<String> = sqlx::query_scalar("SELECT zone_id FROM domain_dns_records").fetch_all(&pool).await.unwrap();
+    assert_eq!(retained,vec![OTHER_ZONE.to_owned()]);
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     let (cloudflare, fake) = fake_cloudflare().await;
     let data_dir = scratch_dir();
