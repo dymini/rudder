@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use axum::body::Body;
 use axum::extract::{Path, Query, Request as AxumRequest, State};
@@ -457,6 +458,36 @@ fn app(pool: PgPool, data_dir: &std::path::Path, cloudflare: &str) -> axum::Rout
     ]);
     let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
     rudder_server::router(rudder_server::AppState::new(pool, config))
+}
+
+async fn wait_for_mutation_rollbacks(pool: &PgPool) {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let mut guard = pool.begin().await.unwrap();
+        for key in [77_302_461_i64, 77_302_462] {
+            sqlx::query("SELECT pg_advisory_xact_lock($1)")
+                .bind(key)
+                .execute(&mut *guard)
+                .await
+                .unwrap();
+        }
+        guard.rollback().await.unwrap();
+    })
+    .await
+    .expect("Cloudflare mutation transactions must finish rolling back");
+}
+
+async fn finish_credential_request(
+    State(pool): State<PgPool>,
+    request: AxumRequest,
+    next: Next,
+) -> Response {
+    let response = next.run(request).await;
+    // SQLx queues rollback on drop; wait for PostgreSQL before the next request.
+    // Contention assertions keep their deliberately held locks until the response.
+    if response.status() != StatusCode::CONFLICT {
+        wait_for_mutation_rollbacks(&pool).await;
+    }
+    response
 }
 
 struct Reply {
@@ -986,7 +1017,9 @@ async fn zones_migration_preserves_legacy_zone_and_publication(pool: PgPool) {
 async fn credentials_are_checked_and_never_returned(pool: PgPool) {
     let (cloudflare, fake) = fake_cloudflare().await;
     let data_dir = scratch_dir();
-    let app = app(pool.clone(), &data_dir, &cloudflare);
+    let app = app(pool.clone(), &data_dir, &cloudflare).layer(
+        axum::middleware::from_fn_with_state(pool.clone(), finish_credential_request),
+    );
 
     let anonymous = call_with(&app, "GET", "/api/v1/cloudflare", None, None, None).await;
     assert_eq!(anonymous.status, StatusCode::UNAUTHORIZED);
@@ -1094,6 +1127,38 @@ async fn credentials_are_checked_and_never_returned(pool: PgPool) {
     assert!(calls(&fake)
         .iter()
         .any(|call| call.starts_with("GET /zones/")));
+    for (key, code) in [
+        (77_302_461_i64, "tunnel_busy"),
+        (77_302_462, "cloudflare_busy"),
+    ] {
+        let mut guard = pool.begin().await.unwrap();
+        sqlx::query("SELECT pg_advisory_xact_lock($1)")
+            .bind(key)
+            .execute(&mut *guard)
+            .await
+            .unwrap();
+        let busy = call(
+            &app,
+            "PUT",
+            "/api/v1/cloudflare/credentials",
+            &session,
+            Some(save(ACCOUNT, ZONE, None)),
+        )
+        .await;
+        assert_eq!(busy.status, StatusCode::CONFLICT, "{}", busy.body);
+        assert_eq!(busy.body["error"]["code"], code);
+        guard.rollback().await.unwrap();
+        wait_for_mutation_rollbacks(&pool).await;
+        let recovered = call(
+            &app,
+            "PUT",
+            "/api/v1/cloudflare/credentials",
+            &session,
+            Some(save(ACCOUNT, ZONE, None)),
+        )
+        .await;
+        assert_eq!(recovered.status, StatusCode::OK, "{}", recovered.body);
+    }
 }
 
 #[sqlx::test(migrations = "./migrations")]
