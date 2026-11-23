@@ -411,7 +411,7 @@ async fn put_settings(
     if let Some(host) = &portal_host {
         if body.portal_host.is_some() && crate::cloudflare::tunnel_published(&state.pool).await {
             let zones = crate::cloudflare_zones::list(&state.pool).await?;
-            if let Err(error) = crate::cloudflare_zones::resolve(&zones,host) {
+            if let Err(error) = crate::cloudflare_zones::resolve(&zones, host) {
                 return Err(bad("portal_outside_tunnel_zone", format!(
                     "Access portal {host} will not be published: {} Choose a hostname in an enabled, accessible zone before closing public ports.",
                     error.public_message()

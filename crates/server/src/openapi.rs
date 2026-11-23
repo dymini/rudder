@@ -7,6 +7,7 @@ use utoipa::{Modify, OpenApi as OpenApiDerive};
 
 use crate::backup::RestoreRequest;
 use crate::cloudflare::{DnsOutcome, SkippedHost, SyncReport};
+use crate::cloudflare_zones::CloudflareZone;
 use crate::deploy::DeploymentView;
 use crate::domain_routing::{DnsCheck, DomainRoutingOptions, GlobalDomainView};
 use crate::guard::{GuardSettings, GuardView, ProtectionView};
@@ -50,10 +51,9 @@ use crate::routes::catalog::{
 };
 use crate::routes::cloudflare::{
     CloudflareStatus, ConfirmSsh, CreateTunnel, PreflightCheckView, PublishRequest, Readiness,
-    SaveCredentials, SetEnforcement, SetReplicas, SetupAccess, SetupSsh, SshScript, SshSetup,
-    TeardownReport, SetZone,
+    SaveCredentials, SetEnforcement, SetReplicas, SetZone, SetupAccess, SetupSsh, SshScript,
+    SshSetup, TeardownReport,
 };
-use crate::cloudflare_zones::CloudflareZone;
 use crate::routes::databases::{
     ConnectionView, CreateDatabase, DatabaseEngineView, LifecycleView, LogsView, UpdateDatabase,
 };

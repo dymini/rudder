@@ -122,8 +122,15 @@ async fn publish_server_routes(
     let tunnel_hosts = if kind == "local" && crate::cloudflare::tunnel_published(&state.pool).await
     {
         let mut hosts = crate::cloudflare::load(&state.pool).await?.published_hosts;
-        hosts.extend(crate::cloudflare::wanted_hosts(&state.pool).await?.0.into_iter().map(|h|h.host));
-        hosts.sort(); hosts.dedup();
+        hosts.extend(
+            crate::cloudflare::wanted_hosts(&state.pool)
+                .await?
+                .0
+                .into_iter()
+                .map(|h| h.host),
+        );
+        hosts.sort();
+        hosts.dedup();
         hosts
     } else {
         Vec::new()

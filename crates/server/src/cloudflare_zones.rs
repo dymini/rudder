@@ -7,6 +7,21 @@ use crate::cloudflare::Cf;
 use crate::error::ApiError;
 use crate::routes::catalog::bad;
 
+pub async fn lock(pool: &PgPool) -> Result<sqlx::Transaction<'static, sqlx::Postgres>, ApiError> {
+    let mut tx = pool.begin().await.map_err(ApiError::database)?;
+    let acquired: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(77302462)")
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(ApiError::database)?;
+    if !acquired {
+        return Err(crate::routes::catalog::conflict(
+            "cloudflare_busy",
+            "Cloudflare DNS or zone management is running. Retry after it finishes.",
+        ));
+    }
+    Ok(tx)
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct CloudflareZone {
     pub zone_id: String,
@@ -25,7 +40,10 @@ pub async fn list(pool: &PgPool) -> Result<Vec<CloudflareZone>, ApiError> {
         .fetch_all(pool).await.map_err(ApiError::database)
 }
 
-pub fn resolve<'a>(zones: &'a [CloudflareZone], host: &str) -> Result<&'a CloudflareZone, ApiError> {
+pub fn resolve<'a>(
+    zones: &'a [CloudflareZone],
+    host: &str,
+) -> Result<&'a CloudflareZone, ApiError> {
     let zone = lookup(zones, host)?;
     if !zone.enabled || !zone.accessible || zone.status != "active" {
         return Err(bad("zone_unavailable", format!("Cloudflare zone {} is {}. Enable it and check Zone Read and DNS Edit permissions; its parent zone will not be used.", zone.name, if !zone.enabled { "disabled" } else if !zone.accessible { "inaccessible" } else { &zone.status })));
@@ -35,19 +53,30 @@ pub fn resolve<'a>(zones: &'a [CloudflareZone], host: &str) -> Result<&'a Cloudf
 
 pub fn lookup<'a>(zones: &'a [CloudflareZone], host: &str) -> Result<&'a CloudflareZone, ApiError> {
     let host = host.trim().trim_end_matches('.').to_ascii_lowercase();
-    validate_host(&host).map_err(|_| bad("invalid_host", "Use a valid hostname without a wildcard."))?;
+    validate_host(&host)
+        .map_err(|_| bad("invalid_host", "Use a valid hostname without a wildcard."))?;
     let zone = zones.iter().filter(|z| host_in_zone(&host, &z.name))
         .max_by_key(|z| z.name.len())
         .ok_or_else(|| bad("zone_not_found", format!("No known Cloudflare zone matches {host}. Known zones: {}. Refresh zones and enable the matching zone.", zones.iter().map(|z|z.name.as_str()).collect::<Vec<_>>().join(", "))))?;
     Ok(zone)
 }
 
-pub async fn refresh(pool: &PgPool, client: &Cf, account: &str) -> Result<Vec<CloudflareZone>, ApiError> {
+pub async fn refresh(
+    pool: &PgPool,
+    client: &Cf,
+    account: &str,
+) -> Result<Vec<CloudflareZone>, ApiError> {
     let discovered = match client.zones(account).await {
         Ok(zones) => zones,
         Err(error) => {
-            sqlx::query("UPDATE cloudflare_zones SET accessible=FALSE,last_error=$2 WHERE account_id=$1")
-                .bind(account).bind(error.public_message()).execute(pool).await.map_err(ApiError::database)?;
+            sqlx::query(
+                "UPDATE cloudflare_zones SET accessible=FALSE,last_error=$2 WHERE account_id=$1",
+            )
+            .bind(account)
+            .bind(error.public_message())
+            .execute(pool)
+            .await
+            .map_err(ApiError::database)?;
             return Err(error);
         }
     };
@@ -68,15 +97,34 @@ mod tests {
     use super::*;
 
     fn zone(name: &str, enabled: bool) -> CloudflareZone {
-        CloudflareZone { zone_id: name.into(), account_id: "account".into(), name: name.into(), status: "active".into(), enabled, accessible: true, last_error: None, last_seen_at: chrono::Utc::now(), published_hosts: vec![] }
+        CloudflareZone {
+            zone_id: name.into(),
+            account_id: "account".into(),
+            name: name.into(),
+            status: "active".into(),
+            enabled,
+            accessible: true,
+            last_error: None,
+            last_seen_at: chrono::Utc::now(),
+            published_hosts: vec![],
+        }
     }
 
     #[test]
     fn longest_suffix_and_boundaries() {
         let zones = vec![zone("example.com", true), zone("sub.example.com", true)];
-        assert_eq!(resolve(&zones, "  API.Sub.Example.Com. ").unwrap().name, "sub.example.com");
+        assert_eq!(
+            resolve(&zones, "  API.Sub.Example.Com. ").unwrap().name,
+            "sub.example.com"
+        );
         assert_eq!(resolve(&zones, "example.com").unwrap().name, "example.com");
-        for host in ["badexample.com", "example.com.evil.dev", "*.example.com", "", "https://example.com"] {
+        for host in [
+            "badexample.com",
+            "example.com.evil.dev",
+            "*.example.com",
+            "",
+            "https://example.com",
+        ] {
             assert!(resolve(&zones, host).is_err(), "{host}");
         }
     }

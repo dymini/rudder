@@ -109,9 +109,14 @@ async fn panel_domain(state: &AppState) -> Result<Option<String>, ApiError> {
 async fn build_status(state: &AppState) -> Result<CloudflareStatus, ApiError> {
     let settings = cf::load(&state.pool).await?;
     let enabled = zones::list(&state.pool).await?;
-    let primary = enabled.iter().filter(|z| z.enabled).find(|z| z.zone_id == settings.zone_id)
+    let primary = enabled
+        .iter()
+        .filter(|z| z.enabled)
+        .find(|z| z.zone_id == settings.zone_id)
         .or_else(|| enabled.iter().find(|z| z.enabled));
-    let (zone_id, zone_name) = primary.map(|z| (z.zone_id.clone(), z.name.clone())).unwrap_or_default();
+    let (zone_id, zone_name) = primary
+        .map(|z| (z.zone_id.clone(), z.name.clone()))
+        .unwrap_or_default();
     let connections = match (&settings.tunnel_id, &settings.api_token_enc) {
         (Some(tunnel), Some(_)) => match cf::client(state, &settings) {
             Ok(client) => client
@@ -208,6 +213,7 @@ async fn save_credentials(
 ) -> Result<Json<CloudflareStatus>, ApiError> {
     auth.require_write()?;
     let _guard = crate::tunnel::lock(&state).await?;
+    let _zones = zones::lock(&state.pool).await?;
     let account_id = request.account_id.trim().to_ascii_lowercase();
     let zone_id = request.zone_id.trim().to_ascii_lowercase();
     validate_cloudflare_id("account id", &account_id).map_err(core_error)?;
@@ -215,9 +221,7 @@ async fn save_credentials(
         validate_cloudflare_id("zone id", &zone_id).map_err(core_error)?;
     }
     let settings = cf::load(&state.pool).await?;
-    if settings.tunnel_id.is_some()
-        && settings.account_id != account_id
-    {
+    if settings.tunnel_id.is_some() && settings.account_id != account_id {
         return Err(conflict(
             "tunnel_exists",
             "remove the tunnel before changing the account",
@@ -238,7 +242,11 @@ async fn save_credentials(
         }
     };
     // Each check names the call that failed, so a missing permission is obvious.
-    let zone_name = if zone_id.is_empty() { String::new() } else { client.zone(&account_id, &zone_id).await? };
+    let zone_name = if zone_id.is_empty() {
+        String::new()
+    } else {
+        client.zone(&account_id, &zone_id).await?
+    };
     client.check_tunnel_access(&account_id).await?;
     client.check_access_apps(&account_id).await?;
     sqlx::query(
@@ -268,31 +276,62 @@ async fn save_credentials(
     Ok(Json(build_status(&state).await?))
 }
 
-async fn list_zones(State(state): State<AppState>, auth: AuthUser) -> Result<Json<Vec<CloudflareZone>>, ApiError> {
+async fn list_zones(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<Json<Vec<CloudflareZone>>, ApiError> {
     auth.require_admin()?;
     Ok(Json(zones::list(&state.pool).await?))
 }
 
-async fn refresh_zones(State(state): State<AppState>, auth: AuthUser) -> Result<Json<Vec<CloudflareZone>>, ApiError> {
+async fn refresh_zones(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<Json<Vec<CloudflareZone>>, ApiError> {
     auth.require_write()?;
     let _guard = crate::tunnel::lock(&state).await?;
+    let _zones = zones::lock(&state.pool).await?;
     let settings = cf::load(&state.pool).await?;
     let client = cf::client(&state, &settings)?;
     let result = zones::refresh(&state.pool, &client, &settings.account_id).await?;
-    audit(&state, &auth, "cloudflare.zones.refresh", json!({"count": result.len()})).await;
+    audit(
+        &state,
+        &auth,
+        "cloudflare.zones.refresh",
+        json!({"count": result.len()}),
+    )
+    .await;
     Ok(Json(result))
 }
 
 #[derive(Deserialize, ToSchema)]
-pub struct SetZone { pub enabled: bool }
+pub struct SetZone {
+    pub enabled: bool,
+}
 
-async fn set_zone(State(state): State<AppState>, auth: AuthUser, Path(zone_id): Path<String>, Json(request): Json<SetZone>) -> Result<Json<Vec<CloudflareZone>>, ApiError> {
+async fn set_zone(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(zone_id): Path<String>,
+    Json(request): Json<SetZone>,
+) -> Result<Json<Vec<CloudflareZone>>, ApiError> {
     auth.require_write()?;
     let _guard = crate::tunnel::lock(&state).await?;
+    let _zones = zones::lock(&state.pool).await?;
     let changed = sqlx::query("UPDATE cloudflare_zones SET enabled=$2 WHERE zone_id=$1 AND account_id=(SELECT account_id FROM cloudflare_settings WHERE id=TRUE)")
         .bind(&zone_id).bind(request.enabled).execute(&state.pool).await.map_err(ApiError::database)?;
-    if changed.rows_affected() == 0 { return Err(crate::routes::catalog::not_found("Cloudflare zone not found; refresh zones first")); }
-    audit(&state, &auth, "cloudflare.zones.update", json!({"zone_id":zone_id,"enabled":request.enabled})).await;
+    if changed.rows_affected() == 0 {
+        return Err(crate::routes::catalog::not_found(
+            "Cloudflare zone not found; refresh zones first",
+        ));
+    }
+    audit(
+        &state,
+        &auth,
+        "cloudflare.zones.update",
+        json!({"zone_id":zone_id,"enabled":request.enabled}),
+    )
+    .await;
     Ok(Json(zones::list(&state.pool).await?))
 }
 
@@ -436,6 +475,7 @@ async fn remove_tunnel(
 ) -> Result<Json<TeardownReport>, ApiError> {
     auth.require_write()?;
     let _guard = crate::tunnel::lock(&state).await?;
+    let zone_guard = zones::lock(&state.pool).await?;
     let settings = cf::load(&state.pool).await?;
     let tunnel_id = cf::require_tunnel(&settings)?.to_owned();
     let mut report = TeardownReport {
@@ -457,14 +497,18 @@ async fn remove_tunnel(
     cf::remove_replicas(&state).await;
     for zone in zones::list(&state.pool).await? {
         if !zone.enabled || !zone.accessible || zone.status != "active" {
-            report.warnings.push(format!("{}: disabled or inaccessible; DNS records retained", zone.name));
+            report.warnings.push(format!(
+                "{}: disabled or inaccessible; DNS records retained",
+                zone.name
+            ));
             continue;
         }
         let managed: Vec<String> = sqlx::query_scalar("SELECT DISTINCT host FROM domain_dns_records WHERE zone_id=$1 AND kind='CNAME' AND lower(content)=lower($2)")
             .bind(&zone.zone_id).bind(tunnel_cname(&tunnel_id)).fetch_all(&state.pool).await.map_err(ApiError::database)?;
         let mut hosts = zone.published_hosts.clone();
         hosts.extend(managed);
-        hosts.sort(); hosts.dedup();
+        hosts.sort();
+        hosts.dedup();
         for host in hosts {
             match cf::cleanup_tunnel_host(&state, &client, &zone.zone_id, &host, &tunnel_id).await {
                 Ok(()) => {
@@ -472,7 +516,11 @@ async fn remove_tunnel(
                     sqlx::query("UPDATE cloudflare_zones SET published_hosts=array_remove(published_hosts,$2) WHERE zone_id=$1")
                         .bind(&zone.zone_id).bind(&host).execute(&state.pool).await.map_err(ApiError::database)?;
                 }
-                Err(error) => report.warnings.push(format!("{} / {host}: {}", zone.name,error.public_message())),
+                Err(error) => report.warnings.push(format!(
+                    "{} / {host}: {}",
+                    zone.name,
+                    error.public_message()
+                )),
             }
         }
     }
@@ -519,6 +567,7 @@ async fn remove_tunnel(
     .await
     .map_err(ApiError::database)?;
     cf::refresh_mode(&state).await;
+    zone_guard.rollback().await.map_err(ApiError::database)?;
     if let Err(error) = crate::publish::publish_local(&state).await {
         report.warnings.push(error.public_message());
     }
@@ -587,7 +636,8 @@ async fn setup_access(
         )
     })?;
     let available = zones::list(&state.pool).await?;
-    zones::resolve(&available,&host).map_err(|error|bad("outside_zone",error.public_message()))?;
+    zones::resolve(&available, &host)
+        .map_err(|error| bad("outside_zone", error.public_message()))?;
     let client = cf::client(&state, &settings)?;
     let allow = json!({
         "name": "Rudder administrators",
@@ -970,7 +1020,7 @@ async fn readiness(
     auth.require_admin()?;
     let settings: Settings = cf::load(&state.pool).await?;
     let (resolved, skipped) = cf::wanted_hosts(&state.pool).await?;
-    let hosts: Vec<_> = resolved.iter().map(|h|h.host.clone()).collect();
+    let hosts: Vec<_> = resolved.iter().map(|h| h.host.clone()).collect();
     let connections = match (&settings.tunnel_id, &settings.api_token_enc) {
         (Some(tunnel), Some(_)) => match cf::client(&state, &settings) {
             Ok(client) => client
@@ -1008,7 +1058,12 @@ async fn readiness(
         })
         .collect();
     for skipped in &skipped {
-        checks.push(PreflightCheckView { id: format!("hostname:{}",skipped.host), ok:false,required:true,message:format!("{}: {}",skipped.host,skipped.reason) });
+        checks.push(PreflightCheckView {
+            id: format!("hostname:{}", skipped.host),
+            ok: false,
+            required: true,
+            message: format!("{}: {}", skipped.host, skipped.reason),
+        });
     }
     let portal: Option<String> =
         sqlx::query_scalar("SELECT portal_host FROM access_settings WHERE id=TRUE")

@@ -45,12 +45,14 @@ pub async fn options(
     let resolved = zones::resolve(&available, host);
     let reason = if settings.api_token_enc.is_none() {
         Some("Save Cloudflare account credentials before choosing Cloudflare routing.".to_owned())
-    } else { resolved.as_ref().err().map(|e| e.public_message()) };
+    } else {
+        resolved.as_ref().err().map(|e| e.public_message())
+    };
     Ok(DomainRoutingOptions {
         cloudflare_available: reason.is_none(),
         cloudflare_reason_code: reason.as_ref().map(|_| if settings.api_token_enc.is_none() {"credentials"} else {"zone"}.into()),
-        zone_name: resolved.as_ref().map(|z| z.name.clone()).unwrap_or_default(),
-        zone_id: resolved.as_ref().ok().map(|z| z.zone_id.clone()),
+        zone_name: zones::lookup(&available,host).map(|z| z.name.clone()).unwrap_or_default(),
+        zone_id: zones::lookup(&available,host).ok().map(|z| z.zone_id.clone()),
         cloudflare_reason: reason,
         direct_warning: (kind == "local" && settings.tunnel_id.is_some()).then(||
             "Direct routing requires public ports 80/443. If those ports are closed, this domain will not be reachable.".to_owned()),
@@ -159,10 +161,25 @@ pub async fn reconcile(
     overwrite: bool,
     overwrite_host: Option<&str>,
 ) -> Result<(), ApiError> {
+    let _guard = zones::lock(&state.pool).await?;
     let settings = cf::load(&state.pool).await?;
     let results = reconcile_settings(state, settings, overwrite, overwrite_host).await?;
-    if let Some(failed) = results.iter().find(|r| matches!(r.action.as_str(), "error" | "conflict")) {
-        return Err(conflict("dns_conflict", format!("{} ({}): {}", failed.host, failed.zone_name, failed.detail.as_deref().unwrap_or("DNS reconciliation failed"))));
+    if let Some(failed) = results
+        .iter()
+        .find(|r| matches!(r.action.as_str(), "error" | "conflict"))
+    {
+        return Err(conflict(
+            "dns_conflict",
+            format!(
+                "{} ({}): {}",
+                failed.host,
+                failed.zone_name,
+                failed
+                    .detail
+                    .as_deref()
+                    .unwrap_or("DNS reconciliation failed")
+            ),
+        ));
     }
     Ok(())
 }
@@ -211,14 +228,28 @@ async fn reconcile_settings(
         } else {
             let ip = match public_ip(row.get::<Option<String>, _>("public_ip").as_deref()) {
                 Ok(ip) => ip,
-                Err(error) => { results.push(cf::DnsOutcome { host, zone_id: zone.zone_id.clone(), zone_name: zone.name.clone(), action: "error".into(), detail: Some(error.public_message()) }); continue; }
+                Err(error) => {
+                    results.push(cf::DnsOutcome {
+                        host,
+                        zone_id: zone.zone_id.clone(),
+                        zone_name: zone.name.clone(),
+                        action: "error".into(),
+                        detail: Some(error.public_message()),
+                    });
+                    continue;
+                }
             };
             (if ip.is_ipv4() { "A" } else { "AAAA" }, ip.to_string())
         };
         desired.push((host, zone, kind, content));
     }
     let keep_tunnel_hosts = if tunnel.is_some() {
-        cf::wanted_hosts(&state.pool).await?.0.into_iter().map(|h| h.host).collect()
+        cf::wanted_hosts(&state.pool)
+            .await?
+            .0
+            .into_iter()
+            .map(|h| h.host)
+            .collect()
     } else {
         Vec::new()
     };
@@ -232,30 +263,43 @@ async fn reconcile_settings(
     for row in managed {
         let host: String = row.get("host");
         let zone_id: String = row.get("zone_id");
-        let keep = all_hosts.contains(&host) || zones::resolve(&available, &host).is_err() || (row.get::<String, _>("kind") == "CNAME"
-            && tunnel.is_some_and(|id| {
-                row.get::<String, _>("content") == rudder_core::tunnel_cname(id)
-            })
-            && keep_tunnel_hosts.contains(&host));
+        let keep = all_hosts.contains(&host)
+            || zones::resolve(&available, &host).is_err()
+            || (row.get::<String, _>("kind") == "CNAME"
+                && tunnel.is_some_and(|id| {
+                    row.get::<String, _>("content") == rudder_core::tunnel_cname(id)
+                })
+                && keep_tunnel_hosts.contains(&host));
         if !keep {
             let cleanup = async {
-            for record in client.dns_records(&zone_id, &host).await? {
-                if record.id == row.get::<String, _>("record_id")
-                    && owned(state, &zone_id, &record).await?
-                {
-                    client.delete_dns(&zone_id, &record.id).await?;
+                for record in client.dns_records(&zone_id, &host).await? {
+                    if record.id == row.get::<String, _>("record_id")
+                        && owned(state, &zone_id, &record).await?
+                    {
+                        client.delete_dns(&zone_id, &record.id).await?;
+                    }
                 }
+                sqlx::query("DELETE FROM domain_dns_records WHERE zone_id=$1 AND record_id=$2")
+                    .bind(&zone_id)
+                    .bind(row.get::<String, _>("record_id"))
+                    .execute(&state.pool)
+                    .await
+                    .map_err(ApiError::database)?;
+                Ok::<_, ApiError>(())
             }
-            sqlx::query("DELETE FROM domain_dns_records WHERE zone_id=$1 AND record_id=$2")
-                .bind(&zone_id)
-                .bind(row.get::<String, _>("record_id"))
-                .execute(&state.pool)
-                .await
-                .map_err(ApiError::database)?;
-            Ok::<_, ApiError>(())
-            }.await;
+            .await;
             if let Err(error) = cleanup {
-                results.push(cf::DnsOutcome { host, zone_id: zone_id.clone(), zone_name: available.iter().find(|z| z.zone_id == zone_id).map(|z| z.name.clone()).unwrap_or_default(), action: "error".into(), detail: Some(error.public_message()) });
+                results.push(cf::DnsOutcome {
+                    host,
+                    zone_id: zone_id.clone(),
+                    zone_name: available
+                        .iter()
+                        .find(|z| z.zone_id == zone_id)
+                        .map(|z| z.name.clone())
+                        .unwrap_or_default(),
+                    action: "error".into(),
+                    detail: Some(error.public_message()),
+                });
             }
         }
     }
@@ -263,53 +307,75 @@ async fn reconcile_settings(
         if kind == "CNAME" {
             continue;
         }
-        let result = async {
-        let existing = client.dns_records(&zone.zone_id, &host).await?;
-        let mut keep = false;
-        for record in &existing {
-            if !matches!(record.kind.as_str(), "A" | "AAAA" | "CNAME") {
-                continue;
-            }
-            if !owned(state, &zone.zone_id, record).await?
-                && !(overwrite && overwrite_host.is_none_or(|allowed| allowed == host))
-            {
-                return Err(conflict("dns_conflict", format!("DNS for {host} is not managed by Rudder. Use overwrite_dns to explicitly replace it.")));
-            }
-        }
-        if existing.len() == 1 && matches!(existing[0].kind.as_str(), "A" | "AAAA" | "CNAME") {
-            let record = &existing[0];
-            if record.kind == kind && record.content.eq_ignore_ascii_case(&content) {
-                remember(state, &zone.zone_id, &host, &record.id, kind, &content).await?;
-                return Ok("kept");
-            }
-            client.replace_dns(&zone.zone_id, &record.id, &host, kind, &content).await?;
-            remember(state, &zone.zone_id, &host, &record.id, kind, &content).await?;
-            return Ok("replaced");
-        }
-        for record in existing {
-            if !matches!(record.kind.as_str(), "A" | "AAAA" | "CNAME") {
-                continue;
-            }
-            if record.kind == kind
-                && record.content.eq_ignore_ascii_case(&content)
-                && owned(state, &zone.zone_id, &record).await?
-            {
-                keep = true;
-            } else {
-                client.delete_dns(&zone.zone_id, &record.id).await?;
-            }
-        }
-        if !keep {
-            let id = client
-                .create_address(&zone.zone_id, &host, public_ip(Some(&content))?)
-                .await?;
-            remember(state, &zone.zone_id, &host, &id, kind, &content).await?;
-        }
-        Ok::<_,ApiError>(if keep {"kept"} else {"created"})
-        }.await;
-        results.push(cf::DnsOutcome {host,zone_id:zone.zone_id.clone(),zone_name:zone.name.clone(),action:result.as_ref().copied().unwrap_or("error").into(),detail:result.err().map(|e|e.public_message())});
+        let result = reconcile_address(
+            state,
+            &client,
+            &zone.zone_id,
+            &host,
+            kind,
+            &content,
+            overwrite && overwrite_host.is_none_or(|allowed| allowed == host),
+        )
+        .await;
+        results.push(cf::DnsOutcome {
+            host,
+            zone_id: zone.zone_id.clone(),
+            zone_name: zone.name.clone(),
+            action: result.as_ref().copied().unwrap_or("error").into(),
+            detail: result.err().map(|e| e.public_message()),
+        });
     }
     Ok(results)
+}
+
+async fn reconcile_address(
+    state: &AppState,
+    client: &cf::Cf,
+    zone: &str,
+    host: &str,
+    kind: &str,
+    content: &str,
+    overwrite: bool,
+) -> Result<&'static str, ApiError> {
+    let records = client.dns_records(zone, host).await?;
+    let addresses: Vec<_> = records
+        .iter()
+        .filter(|r| matches!(r.kind.as_str(), "A" | "AAAA" | "CNAME"))
+        .collect();
+    for record in &addresses {
+        if !owned(state, zone, record).await? && !overwrite {
+            return Err(conflict("dns_conflict",format!("DNS for {host} is not managed by Rudder. Use overwrite_dns to explicitly replace it.")));
+        }
+    }
+    let matching = addresses
+        .iter()
+        .find(|r| r.kind == kind && r.content.eq_ignore_ascii_case(content));
+    let (id, action) = if let Some(record) = matching {
+        (record.id.clone(), "kept")
+    } else if let Some(record) = addresses.first() {
+        client
+            .replace_dns(zone, &record.id, host, kind, content)
+            .await?;
+        (record.id.clone(), "replaced")
+    } else {
+        (
+            client
+                .create_address(zone, host, public_ip(Some(content))?)
+                .await?,
+            "created",
+        )
+    };
+    remember(state, zone, host, &id, kind, content).await?;
+    for record in addresses.iter().filter(|r| r.id != id) {
+        client.delete_dns(zone, &record.id).await?;
+        sqlx::query("DELETE FROM domain_dns_records WHERE zone_id=$1 AND record_id=$2")
+            .bind(zone)
+            .bind(&record.id)
+            .execute(&state.pool)
+            .await
+            .map_err(ApiError::database)?;
+    }
+    Ok(action)
 }
 
 #[derive(Deserialize)]
@@ -411,21 +477,27 @@ async fn dns_check(
     let matched = if addresses.is_empty() {
         Some(false)
     } else if proxied {
-        match (client, expected.as_deref(), zones::resolve(available,host).ok()) {
-            (Some(client), Some(target), Some(zone)) if !networks.is_empty() => match tokio::time::timeout(
-                Duration::from_secs(2),
-                client.proxied_target(&zone.zone_id, host, target),
-            )
-            .await
-            {
-                Ok(Ok(origin_matches)) => Some(
-                    origin_matches
-                        && addresses
-                            .iter()
-                            .all(|ip| networks.iter().any(|cidr| in_network(ip, cidr))),
-                ),
-                _ => None,
-            },
+        match (
+            client,
+            expected.as_deref(),
+            zones::resolve(available, host).ok(),
+        ) {
+            (Some(client), Some(target), Some(zone)) if !networks.is_empty() => {
+                match tokio::time::timeout(
+                    Duration::from_secs(2),
+                    client.proxied_target(&zone.zone_id, host, target),
+                )
+                .await
+                {
+                    Ok(Ok(origin_matches)) => Some(
+                        origin_matches
+                            && addresses
+                                .iter()
+                                .all(|ip| networks.iter().any(|cidr| in_network(ip, cidr))),
+                    ),
+                    _ => None,
+                }
+            }
             _ => None,
         }
     } else {
@@ -481,9 +553,15 @@ pub async fn inventory(
         let expiry: Option<chrono::DateTime<chrono::Utc>> = row.get("not_after");
         let ssl: String = row.get("ssl_mode");
         views.push(GlobalDomainView {
-            zone_id: zones::resolve(&available,&host).ok().map(|z|z.zone_id.clone()),
-            zone_name: zones::resolve(&available,&host).ok().map(|z|z.name.clone()),
-            zone_error: zones::resolve(&available,&host).err().map(|e|e.public_message()),
+            zone_id: zones::lookup(&available, &host)
+                .ok()
+                .map(|z| z.zone_id.clone()),
+            zone_name: zones::lookup(&available, &host)
+                .ok()
+                .map(|z| z.name.clone()),
+            zone_error: zones::resolve(&available, &host)
+                .err()
+                .map(|e| e.public_message()),
             id: Some(row.get("id")),
             host: host.clone(),
             path_prefix: row.get("path_prefix"),
@@ -538,9 +616,15 @@ pub async fn inventory(
             let tunnel = settings.tunnel_published && settings.published_hosts.contains(&host);
             let ip: Option<String> = local.as_ref().and_then(|r| r.get("public_ip"));
             views.push(GlobalDomainView {
-                zone_id: zones::resolve(&available,&host).ok().map(|z|z.zone_id.clone()),
-                zone_name: zones::resolve(&available,&host).ok().map(|z|z.name.clone()),
-                zone_error: zones::resolve(&available,&host).err().map(|e|e.public_message()),
+                zone_id: zones::lookup(&available, &host)
+                    .ok()
+                    .map(|z| z.zone_id.clone()),
+                zone_name: zones::lookup(&available, &host)
+                    .ok()
+                    .map(|z| z.name.clone()),
+                zone_error: zones::resolve(&available, &host)
+                    .err()
+                    .map(|e| e.public_message()),
                 id: None,
                 host: host.clone(),
                 path_prefix: "/".into(),
