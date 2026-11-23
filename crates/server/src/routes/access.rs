@@ -86,6 +86,7 @@ pub fn router() -> axum::Router<AppState> {
         .route("/api/v1/access/me", get(me))
         .route("/api/v1/access/apps", get(apps))
         .route("/api/v1/access/callback", get(handoff_callback))
+        .route("/_rudder/callback", get(handoff_callback))
         .route("/api/v1/access/introspect", post(introspect))
         .route("/api/v1/edge/gate", get(edge_gate))
 }
@@ -102,6 +103,7 @@ pub struct AccessPublic {
 
 #[derive(Serialize, ToSchema)]
 pub struct AccessSettingsView {
+    pub warnings: Vec<String>,
     pub portal_host: Option<String>,
     pub turnstile_site_key: String,
     pub has_turnstile_secret: bool,
@@ -292,6 +294,7 @@ pub struct AccessApp {
     pub service_id: Uuid,
     pub name: String,
     pub host: Option<String>,
+    pub hosts: Vec<String>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -385,7 +388,7 @@ async fn get_settings(
 ) -> Result<Json<AccessSettingsView>, ApiError> {
     let settings = load_settings(&state).await?;
     let origin = portal_origin(&state, &settings, &headers).await?;
-    Ok(Json(settings_view(&settings, &origin)))
+    Ok(Json(settings_view(&state, &settings, &origin).await?))
 }
 
 async fn put_settings(
@@ -530,7 +533,7 @@ async fn put_settings(
     let _ = crate::publish::publish_local(&state).await;
     let settings = load_settings(&state).await?;
     let origin = portal_origin(&state, &settings, &headers).await?;
-    Ok(Json(settings_view(&settings, &origin)))
+    Ok(Json(settings_view(&state, &settings, &origin).await?))
 }
 
 async fn test_email(
@@ -1286,7 +1289,7 @@ async fn email_verify(
     }
     consume_login_code(&state, &email, code).await?;
     let host = request_host(&headers);
-    let (jar, csrf) = issue_session(&state, jar, identity, &host, &ip, &headers).await?;
+    let (jar, csrf) = issue_session(&state, jar, identity, &host, &ip, &headers, false).await?;
     let redirect = handoff_url(
         &state,
         &email,
@@ -1459,7 +1462,7 @@ async fn google_finish(
     link_google(&state, identity, sub).await?;
     let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
     let host = request_host(&headers);
-    let (jar, _csrf) = issue_session(&state, jar, identity, &host, &ip, &headers).await?;
+    let (jar, _csrf) = issue_session(&state, jar, identity, &host, &ip, &headers, false).await?;
     let return_host = payload.get("host").and_then(Value::as_str);
     let return_path = payload.get("path").and_then(Value::as_str);
     let next = match handoff_url(&state, &email, return_host, return_path).await? {
@@ -1511,12 +1514,11 @@ async fn apps(
     let rows = sqlx::query!(
         r#"
         SELECT s.id, s.name,
-               (
-                   SELECT d.host FROM domains d
-                   WHERE d.service_id = s.id AND NOT d.is_preview
-                   ORDER BY d.created_at
-                   LIMIT 1
-               ) AS "host?"
+               ARRAY(
+                   SELECT d.host FROM domains d WHERE d.service_id = s.id
+                   GROUP BY d.host
+                   ORDER BY bool_and(d.is_preview), min(d.created_at), d.host
+               ) AS "hosts!"
         FROM services s
         JOIN access_policies p ON p.service_id = s.id AND p.enabled
         ORDER BY s.name
@@ -1531,7 +1533,8 @@ async fn apps(
             apps.push(AccessApp {
                 service_id: row.id,
                 name: row.name,
-                host: row.host,
+                host: row.hosts.first().cloned(),
+                hosts: row.hosts,
             });
         }
     }
@@ -1550,15 +1553,24 @@ async fn handoff_callback(
     jar: CookieJar,
     Query(query): Query<CallbackQuery>,
 ) -> Result<Response, ApiError> {
+    let host = headers
+        .get(axum::http::header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .map(strip_port)
+        .unwrap_or_default();
+    if host.is_empty() {
+        return Err(blocked());
+    }
     let hash = auth::sha256_hex(query.code.trim());
     let row = sqlx::query!(
         r#"
         UPDATE access_codes SET used_at = now()
         WHERE code_hash = $1 AND purpose = 'handoff'
-          AND used_at IS NULL AND expires_at > now()
-        RETURNING email, return_host, return_path
+          AND used_at IS NULL AND expires_at > now() AND return_host = $2
+        RETURNING email, return_path
         "#,
-        hash
+        hash,
+        host,
     )
     .fetch_optional(&state.pool)
     .await
@@ -1566,14 +1578,19 @@ async fn handoff_callback(
     let Some(row) = row else {
         return Err(blocked());
     };
-    let host = row.return_host.unwrap_or_default();
     let path =
         safe_return_path(row.return_path.as_deref().unwrap_or("/")).unwrap_or_else(|| "/".into());
     let Some(identity) = active_identity(&state, &row.email).await? else {
         return Err(blocked());
     };
+    let Some(service) = protected_service(&state, &host).await? else {
+        return Err(blocked());
+    };
+    if !person_allowed(&state, identity, &row.email, service).await? {
+        return Err(blocked());
+    }
     let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
-    let (jar, _csrf) = issue_session(&state, jar, identity, &host, &ip, &headers).await?;
+    let (jar, _csrf) = issue_session(&state, jar, identity, &host, &ip, &headers, true).await?;
     let mut response = Redirect::temporary(&path).into_response();
     if let Some(cookie) = jar.get(ACCESS_COOKIE) {
         if let Ok(value) = HeaderValue::from_str(&cookie.to_string()) {
@@ -1938,6 +1955,7 @@ async fn issue_session(
     host: &str,
     ip: &str,
     headers: &HeaderMap,
+    force_secure: bool,
 ) -> Result<(CookieJar, String), ApiError> {
     let token = hex::encode(rudder_core::random_bytes::<32>());
     let csrf = hex::encode(rudder_core::random_bytes::<16>());
@@ -1969,7 +1987,7 @@ async fn issue_session(
     let cookie = Cookie::build((ACCESS_COOKIE, token))
         .path("/")
         .http_only(true)
-        .secure(state.config.cookie_secure)
+        .secure(state.config.cookie_secure || force_secure)
         .same_site(cookie::SameSite::Lax)
         .max_age(cookie::time::Duration::hours(SESSION_HOURS))
         .build();
@@ -2180,8 +2198,25 @@ async fn load_settings(state: &AppState) -> Result<SettingsRow, ApiError> {
     })
 }
 
-fn settings_view(settings: &SettingsRow, origin: &str) -> AccessSettingsView {
-    AccessSettingsView {
+pub(crate) async fn portal_cloudflare_warning(
+    state: &AppState,
+    portal: Option<&str>,
+) -> Result<Option<String>, ApiError> {
+    let (panel,enforced): (Option<String>,bool) = sqlx::query_as("SELECT p.panel_domain,c.access_enforced FROM panel_settings p CROSS JOIN cloudflare_settings c WHERE p.id=TRUE AND c.id=TRUE")
+        .fetch_one(&state.pool).await.map_err(ApiError::database)?;
+    Ok(panel.filter(|host| !host.is_empty() && enforced && portal.filter(|p|!p.is_empty()).is_none_or(|p|p.eq_ignore_ascii_case(host))).map(|_| "Cloudflare Access also protects Rudder Access login and assets on the panel hostname. Use a dedicated portal hostname, publish its DNS/tunnel route, and update Turnstile and Google callbacks. Admin APIs remain protected.".into()))
+}
+
+async fn settings_view(
+    state: &AppState,
+    settings: &SettingsRow,
+    origin: &str,
+) -> Result<AccessSettingsView, ApiError> {
+    Ok(AccessSettingsView {
+        warnings: portal_cloudflare_warning(state, settings.portal_host.as_deref())
+            .await?
+            .into_iter()
+            .collect(),
         portal_host: settings.portal_host.clone(),
         turnstile_site_key: settings.turnstile_site_key.clone(),
         has_turnstile_secret: settings.turnstile_secret_enc.is_some(),
@@ -2192,7 +2227,7 @@ fn settings_view(settings: &SettingsRow, origin: &str) -> AccessSettingsView {
         email_from: settings.email_from.clone(),
         email_ready: email_ready(settings),
         google_redirect_uri: redirect_uri(origin),
-    }
+    })
 }
 
 fn turnstile_ready(settings: &SettingsRow) -> bool {

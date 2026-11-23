@@ -52,7 +52,22 @@ async fn call(
     csrf: Option<&str>,
     body: Option<Value>,
 ) -> Reply {
+    call_host(app, method, path, None, cookie, csrf, body).await
+}
+
+async fn call_host(
+    app: &axum::Router,
+    method: &str,
+    path: &str,
+    host: Option<&str>,
+    cookie: Option<&str>,
+    csrf: Option<&str>,
+    body: Option<Value>,
+) -> Reply {
     let mut builder = Request::builder().method(method).uri(path);
+    if let Some(host) = host {
+        builder = builder.header("host", host);
+    }
     if let Some(cookie) = cookie {
         builder = builder.header("cookie", cookie);
     }
@@ -387,16 +402,35 @@ async fn access_blocks_unknown_people_and_limits_a_host(pool: PgPool) {
     .await
     .unwrap();
     let callback = "/api/v1/access/callback?code=handoff-code";
-    let replies = futures_util::future::join_all(
-        (0..8).map(|_| call(&app, "GET", callback, None, None, None)),
-    )
+    sqlx::query("INSERT INTO domains(service_id,host,target_port,ssl_mode) VALUES($1,'invoices.example.com',80,'none')")
+        .bind(uuid::Uuid::parse_str(service_id).unwrap()).execute(&pool).await.unwrap();
+    let replies = futures_util::future::join_all((0..8).map(|_| {
+        call_host(
+            &app,
+            "GET",
+            callback,
+            Some("invoices.example.com"),
+            None,
+            None,
+            None,
+        )
+    }))
     .await;
     let redeemed = replies
         .iter()
         .filter(|reply| reply.status == StatusCode::TEMPORARY_REDIRECT && reply.cookie.is_some())
         .count();
     assert_eq!(redeemed, 1, "a handoff code must redeem exactly once");
-    let again = call(&app, "GET", callback, None, None, None).await;
+    let again = call_host(
+        &app,
+        "GET",
+        callback,
+        Some("invoices.example.com"),
+        None,
+        None,
+        None,
+    )
+    .await;
     assert_eq!(again.status, StatusCode::FORBIDDEN);
     assert!(again.cookie.is_none());
 }
@@ -425,6 +459,241 @@ async fn gate_secret(pool: &PgPool) -> String {
         .unwrap();
     let cipher = Cipher::new([0xbb; 32]);
     String::from_utf8(cipher.decrypt(&bytes).unwrap()).unwrap()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn portal_lists_all_authorized_services_and_domains(pool: PgPool) {
+    let siteverify = turnstile().await;
+    let url = std::env::var("DATABASE_URL").unwrap();
+    let app = rudder_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
+    let server: uuid::Uuid =
+        sqlx::query_scalar("INSERT INTO servers(name,kind) VALUES('local','local') RETURNING id")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let project: uuid::Uuid =
+        sqlx::query_scalar("INSERT INTO projects(name) VALUES('access-apps') RETURNING id")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let environment: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO environments(project_id,name) VALUES($1,'prod') RETURNING id",
+    )
+    .bind(project)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let identity: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO access_identities(email) VALUES('person@example.com') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let parent: uuid::Uuid = sqlx::query_scalar("INSERT INTO access_departments(name,slug) VALUES('Engineering','engineering') RETURNING id").fetch_one(&pool).await.unwrap();
+    let child: uuid::Uuid = sqlx::query_scalar("INSERT INTO access_departments(name,slug,parent_id) VALUES('Platform','platform',$1) RETURNING id").bind(parent).fetch_one(&pool).await.unwrap();
+    let rank: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO access_ranks(name,slug,level) VALUES('Lead','lead',40) RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO access_memberships(identity_id,department_id,rank_id) VALUES($1,$2,$3)",
+    )
+    .bind(identity)
+    .bind(child)
+    .bind(rank)
+    .execute(&pool)
+    .await
+    .unwrap();
+    for (name, kind, enabled) in [
+        ("email", "email", true),
+        ("department", "department", true),
+        ("rank", "rank", true),
+        ("plugin", "email", true),
+        ("stopped", "email", true),
+        ("preview", "email", true),
+        ("denied", "email", true),
+        ("disabled", "email", false),
+    ] {
+        let service: uuid::Uuid = sqlx::query_scalar("INSERT INTO services(environment_id,server_id,name,kind,status) VALUES($1,$2,$3,$4,$5) RETURNING id")
+            .bind(environment).bind(server).bind(name).bind(if name=="plugin" {"compose"}else{"application"}).bind(if name=="stopped" {"stopped"}else{"running"}).fetch_one(&pool).await.unwrap();
+        sqlx::query("INSERT INTO access_policies(service_id,enabled) VALUES($1,$2)")
+            .bind(service)
+            .bind(enabled)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO access_rules(service_id,kind,email,department_id,rank_id) VALUES($1,$2,$3,$4,$5)")
+            .bind(service).bind(kind).bind((kind=="email").then_some(if name=="denied" {"other@example.com"}else{"person@example.com"}))
+            .bind((kind=="department").then_some(parent)).bind((kind=="rank").then_some(rank)).execute(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO domains(service_id,host,target_port,is_preview,ssl_mode) VALUES($1,$2,8080,$3,'none')",
+        )
+        .bind(service)
+        .bind(format!("{name}.example.com"))
+        .bind(name == "preview")
+        .execute(&pool)
+        .await
+        .unwrap();
+        if name == "email" {
+            sqlx::query("INSERT INTO domains(service_id,host,target_port,path_prefix,ssl_mode) VALUES($1,'alias.example.com',8080,'/','none'),($1,'alias.example.com',8080,'/admin','none')").bind(service).execute(&pool).await.unwrap();
+        }
+        if name == "plugin" {
+            sqlx::query("INSERT INTO plugin_installs(plugin,service_id,installed_version,image) VALUES('dockside',$1,'0.2.2','dockside:test')").bind(service).execute(&pool).await.unwrap();
+        }
+    }
+    sqlx::query("WITH added AS (INSERT INTO services(environment_id,server_id,name,kind) SELECT $1,$2,'extra-'||n,'application' FROM generate_series(1,25) n RETURNING id) INSERT INTO access_policies(service_id,enabled) SELECT id,TRUE FROM added")
+        .bind(environment).bind(server).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO access_rules(service_id,kind,email) SELECT id,'email','person@example.com' FROM services WHERE name LIKE 'extra-%'").execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO access_sessions(identity_id,token_hash,csrf_token,host,expires_at) VALUES($1,encode(digest('portal-token','sha256'),'hex'),'csrf','',now()+interval '1 hour')").bind(identity).execute(&pool).await.unwrap();
+    let cookie = "rudder_access=portal-token";
+    let listed = call(&app, "GET", "/api/v1/access/apps", Some(cookie), None, None).await;
+    assert_eq!(listed.status, StatusCode::OK, "{}", listed.body);
+    let rows = listed.body.as_array().unwrap();
+    assert_eq!(rows.len(), 31, "{}", listed.body);
+    for name in [
+        "email",
+        "department",
+        "rank",
+        "plugin",
+        "stopped",
+        "preview",
+    ] {
+        assert!(rows.iter().any(|r| r["name"] == name), "{name}");
+    }
+    for name in ["denied", "disabled"] {
+        assert!(!rows.iter().any(|r| r["name"] == name), "{name}");
+    }
+    let email = rows.iter().find(|r| r["name"] == "email").unwrap();
+    assert_eq!(email["host"], "email.example.com");
+    assert_eq!(
+        email["hosts"],
+        json!(["email.example.com", "alias.example.com"])
+    );
+    let preview = rows.iter().find(|r| r["name"] == "preview").unwrap();
+    assert_eq!(preview["hosts"], json!(["preview.example.com"]));
+    assert_eq!(
+        rows.iter().find(|r| r["name"] == "extra-1").unwrap()["hosts"],
+        json!([])
+    );
+    sqlx::query("DELETE FROM access_rules")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        call(&app, "GET", "/api/v1/access/apps", Some(cookie), None, None)
+            .await
+            .body,
+        json!([])
+    );
+    sqlx::query("UPDATE access_identities SET status='blocked' WHERE id=$1")
+        .bind(identity)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        call(&app, "GET", "/api/v1/access/apps", Some(cookie), None, None)
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        call(&app, "GET", "/api/v1/access/apps", None, None, None)
+            .await
+            .status,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn shared_cloudflare_portal_warns_without_opening_admin_routes(pool: PgPool) {
+    let siteverify = turnstile().await;
+    let url = std::env::var("DATABASE_URL").unwrap();
+    let app = rudder_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
+    let owner=call(&app,"POST","/api/v1/setup",None,None,Some(json!({"setup_token":"test-setup-token","email":"owner@example.com","password":"correct-horse-battery"}))).await;
+    assert_eq!(owner.status, StatusCode::OK, "{}", owner.body);
+    let cookie = owner.cookie.unwrap();
+    sqlx::query("UPDATE panel_settings SET panel_domain='panel.example.com' WHERE id=TRUE")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let settings = call(
+        &app,
+        "GET",
+        "/api/v1/access/settings",
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(settings.body["warnings"], json!([]));
+    sqlx::query("UPDATE cloudflare_settings SET access_enforced=TRUE,team_domain='myteam.cloudflareaccess.com',access_aud='test-audience' WHERE id=TRUE").execute(&pool).await.unwrap();
+    for portal in [None, Some("panel.example.com"), Some("access.example.com")] {
+        sqlx::query("UPDATE access_settings SET portal_host=$1 WHERE id=TRUE")
+            .bind(portal)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let settings = call(
+            &app,
+            "GET",
+            "/api/v1/access/settings",
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(settings.status, StatusCode::OK, "{}", settings.body);
+        let conflict = portal != Some("access.example.com");
+        assert_eq!(
+            !settings.body["warnings"].as_array().unwrap().is_empty(),
+            conflict
+        );
+        let readiness = call(
+            &app,
+            "GET",
+            "/api/v1/cloudflare/preflight",
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(readiness.status, StatusCode::OK, "{}", readiness.body);
+        let diagnostic = readiness.body["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["id"] == "rudder_access_portal_cloudflare");
+        assert_eq!(diagnostic.is_some(), conflict);
+        if let Some(diagnostic) = diagnostic {
+            assert_eq!(diagnostic["ok"], false);
+            assert_eq!(diagnostic["required"], true);
+            assert!(diagnostic["message"]
+                .as_str()
+                .unwrap()
+                .contains("dedicated portal hostname"));
+        }
+    }
+    for path in [
+        "/access",
+        "/api/v1/access/settings",
+        "/api/v1/access/login/google",
+        "/assets/app.js",
+        "/api/v1/me",
+    ] {
+        let blocked = call_host(
+            &app,
+            "GET",
+            path,
+            Some("panel.example.com"),
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(blocked.status, StatusCode::FORBIDDEN, "{path}");
+    }
 }
 
 #[sqlx::test(migrations = "./migrations")]

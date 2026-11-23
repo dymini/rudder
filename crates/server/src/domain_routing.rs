@@ -161,9 +161,10 @@ pub async fn reconcile(
     overwrite: bool,
     overwrite_host: Option<&str>,
 ) -> Result<(), ApiError> {
-    let _guard = zones::lock(&state.pool).await?;
+    let guard = zones::lock(&state.pool).await?;
     let settings = cf::load(&state.pool).await?;
     let results = reconcile_settings(state, settings, overwrite, overwrite_host).await?;
+    guard.rollback().await.map_err(ApiError::database)?;
     if let Some(failed) = results
         .iter()
         .find(|r| matches!(r.action.as_str(), "error" | "conflict"))
@@ -684,6 +685,42 @@ pub async fn inventory(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::PgPool;
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn completed_reconciliation_releases_its_zone_lock(pool: PgPool) {
+        let vars = std::collections::HashMap::from([
+            (
+                "DATABASE_URL".into(),
+                std::env::var("DATABASE_URL").unwrap(),
+            ),
+            ("RUDDER_MASTER_KEY".into(), "bb".repeat(32)),
+            ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
+            (
+                "RUDDER_DATA_DIR".into(),
+                std::env::temp_dir()
+                    .join(format!("rudder-dns-lock-{}", Uuid::new_v4()))
+                    .display()
+                    .to_string(),
+            ),
+        ]);
+        let config = crate::Config::from_map(&vars, |_| unreachable!()).unwrap();
+        let state = AppState::new(pool.clone(), config);
+        for _ in 0..2 {
+            reconcile(&state, false, None).await.unwrap();
+            let mut guard = pool.begin().await.unwrap();
+            let acquired: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(77302462)")
+                .fetch_one(&mut *guard)
+                .await
+                .unwrap();
+            assert!(acquired, "completed reconciliation must release its lock");
+            let busy = reconcile(&state, false, None).await.unwrap_err();
+            assert!(busy
+                .public_message()
+                .contains("Cloudflare DNS or zone management is running"));
+            guard.rollback().await.unwrap();
+        }
+    }
 
     #[test]
     fn network_checks_handle_both_families_and_bad_input() {

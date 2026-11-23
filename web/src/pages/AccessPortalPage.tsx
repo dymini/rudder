@@ -182,10 +182,14 @@ export function AccessPortalPage() {
               {apps.map((app) => (
                 <li key={app.service_id} className="flex items-center justify-between py-3">
                   <span className="font-medium">{app.name}</span>
-                  {app.host ? (
-                    <a className="text-sm text-pine" href={`https://${app.host}`}>
-                      {app.host}
-                    </a>
+                  {app.hosts.length > 0 ? (
+                    <div className="grid min-w-0 gap-1 text-right">
+                      {app.hosts.map((host) => (
+                        <a key={host} className="break-all text-sm text-pine" href={`https://${host}`}>
+                          {host}
+                        </a>
+                      ))}
+                    </div>
                   ) : (
                     <span className="text-sm text-muted">{t("No domain yet")}</span>
                   )}

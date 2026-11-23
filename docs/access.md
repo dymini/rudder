@@ -72,6 +72,10 @@ Both methods require a Cloudflare Turnstile token. Rudder checks the token on th
 
 After sign-in, the portal lists the internal apps that person may open. Choosing an app sends them to that app's domain. If they are not signed in there yet, Rudder sends them back through the portal and then sets a cookie on the app's own hostname.
 
+The list includes every hostname of each authorized service, including plugins and gated preview domains. Multiple path routes on one hostname are shown once. The legacy API `host` field remains the first hostname; `hosts` contains the complete list. Department descendants and exact-rank grants use the gate's authorization rules. A stopped service remains authorized and listed; a disabled Access policy is not an Access app. Services without a domain are listed with no link.
+
+If Cloudflare Access protects the panel hostname, using that same hostname for the Rudder Access portal also puts `/access`, login APIs, Google callbacks and their assets behind Cloudflare sign-in. Ordinary Rudder Access users may not be authorized there. Access settings and tunnel readiness warn about this combination, including when the portal hostname is left blank. Prefer a dedicated portal hostname, publish its DNS/tunnel route, add it to the Turnstile allowlist, and update Google's redirect URI. Rudder does not automatically create Cloudflare bypass applications or expose any administrative APIs.
+
 ## Who may open an app
 
 On the app's **Domains & SSL** tab, turn on **Require Rudder Access** and list the email addresses. You can also allow a whole department or a rank. A department grant includes the departments nested under it. A rank grant matches that rank exactly.
@@ -88,9 +92,11 @@ Save, then add a domain if the app does not have one. Rudder stands in front of 
 - `X-Rudder-Access-Departments` (comma-separated slugs)
 - `X-Rudder-Access-Ranks` (comma-separated slugs)
 
+The callback router takes priority over the app router, bypasses forward-auth only for the reserved `/_rudder` path, and uses the tunnel's HTTPS entrypoint. The callback exchanges a short-lived, single-use code bound to the actual request hostname, checks that the person can still access the service, and sets a Secure, HttpOnly, SameSite=Lax cookie without a Domain attribute. Wrong-host requests do not consume a valid code. Invalid, expired and replayed codes are rejected; unknown `/_rudder/*` paths return 404 rather than loading the panel SPA. `/api/v1/access/callback` remains available as a compatibility alias with the same host checks.
+
 Those headers are trustworthy when network isolation is on, because the app is not published on a host port and visitors cannot connect to it except through Traefik. If you turn isolation off, do not trust the headers. Use the introspect API instead.
 
-The panel hostname and the Access portal hostname are not gated, so a rate limit or a mistake cannot lock the operator out of Rudder.
+The panel hostname and the Access portal hostname are not gated by Rudder Access. Optional Cloudflare Access can still protect the panel hostname; use a dedicated portal hostname as described above when coworkers should not need Cloudflare sign-in.
 
 ## Departments and ranks
 

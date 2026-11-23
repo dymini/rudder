@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use axum::body::Body;
 use axum::extract::{Path, Query, Request as AxumRequest, State};
@@ -456,7 +457,53 @@ fn app(pool: PgPool, data_dir: &std::path::Path, cloudflare: &str) -> axum::Rout
         ),
     ]);
     let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::router(rudder_server::AppState::new(pool, config))
+    rudder_server::router(rudder_server::AppState::new(pool.clone(), config)).layer(
+        axum::middleware::from_fn_with_state(pool, finish_mutation_request),
+    )
+}
+
+async fn wait_for_mutation_rollbacks(pool: &PgPool) {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let mut guard = pool.begin().await.unwrap();
+        for key in [77_302_461_i64, 77_302_462] {
+            sqlx::query("SELECT pg_advisory_xact_lock($1)")
+                .bind(key)
+                .execute(&mut *guard)
+                .await
+                .unwrap();
+        }
+        guard.rollback().await.unwrap();
+    })
+    .await
+    .expect("Cloudflare mutation transactions must finish rolling back");
+}
+
+async fn finish_mutation_request(
+    State(pool): State<PgPool>,
+    request: AxumRequest,
+    next: Next,
+) -> Response {
+    let mutation = !matches!(request.method().as_str(), "GET" | "HEAD" | "OPTIONS");
+    let held_lock = request.extensions().get::<HeldMutationLock>().is_some();
+    let response = next.run(request).await;
+    // SQLx queues rollback on drop; wait for PostgreSQL before the next request.
+    // Do not wait for deliberately held locks or accepted background updates.
+    if mutation && !held_lock && response.status() != StatusCode::ACCEPTED {
+        wait_for_mutation_rollbacks(&pool).await;
+    }
+    response
+}
+
+#[derive(Clone, Copy)]
+struct HeldMutationLock;
+
+fn holding_mutation_lock(app: &axum::Router) -> axum::Router {
+    app.clone().layer(axum::middleware::from_fn(
+        |mut request: AxumRequest, next: Next| async move {
+            request.extensions_mut().insert(HeldMutationLock);
+            next.run(request).await
+        },
+    ))
 }
 
 struct Reply {
@@ -652,13 +699,14 @@ async fn connector_status_caches_versions_and_serializes_updates(pool: PgPool) {
     )
     .await;
     assert_eq!(invalid.status, StatusCode::BAD_REQUEST);
+    let contended = holding_mutation_lock(&app);
     let mut guard = pool.begin().await.unwrap();
     sqlx::query("SELECT pg_advisory_xact_lock(77302461)")
         .execute(&mut *guard)
         .await
         .unwrap();
     let busy = call(
-        &app,
+        &contended,
         "POST",
         "/api/v1/cloudflare/tunnel/update",
         &session,
@@ -667,7 +715,7 @@ async fn connector_status_caches_versions_and_serializes_updates(pool: PgPool) {
     .await;
     assert_eq!(busy.status, StatusCode::CONFLICT);
     let scale = call(
-        &app,
+        &contended,
         "PUT",
         "/api/v1/cloudflare/tunnel/replicas",
         &session,
@@ -1094,6 +1142,39 @@ async fn credentials_are_checked_and_never_returned(pool: PgPool) {
     assert!(calls(&fake)
         .iter()
         .any(|call| call.starts_with("GET /zones/")));
+    let contended = holding_mutation_lock(&app);
+    for (key, code) in [
+        (77_302_461_i64, "tunnel_busy"),
+        (77_302_462, "cloudflare_busy"),
+    ] {
+        let mut guard = pool.begin().await.unwrap();
+        sqlx::query("SELECT pg_advisory_xact_lock($1)")
+            .bind(key)
+            .execute(&mut *guard)
+            .await
+            .unwrap();
+        let busy = call(
+            &contended,
+            "PUT",
+            "/api/v1/cloudflare/credentials",
+            &session,
+            Some(save(ACCOUNT, ZONE, None)),
+        )
+        .await;
+        assert_eq!(busy.status, StatusCode::CONFLICT, "{}", busy.body);
+        assert_eq!(busy.body["error"]["code"], code);
+        guard.rollback().await.unwrap();
+        wait_for_mutation_rollbacks(&pool).await;
+        let recovered = call(
+            &app,
+            "PUT",
+            "/api/v1/cloudflare/credentials",
+            &session,
+            Some(save(ACCOUNT, ZONE, None)),
+        )
+        .await;
+        assert_eq!(recovered.status, StatusCode::OK, "{}", recovered.body);
+    }
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -1252,6 +1333,16 @@ async fn multi_zone_portal_keeps_plugin_access_and_dns_ownership_on_partial_fail
             .unwrap()["ok"],
         true
     );
+    sqlx::query("UPDATE cloudflare_settings SET access_enforced=TRUE,access_aud='cross-zone-test',team_domain='myteam.cloudflareaccess.com' WHERE id=TRUE").execute(&pool).await.unwrap();
+    let settings = call(&app, "GET", "/api/v1/access/settings", &session, None).await;
+    assert_eq!(settings.status, StatusCode::OK, "{}", settings.body);
+    assert_eq!(settings.body["warnings"], json!([]));
+    let readiness = call(&app, "GET", "/api/v1/cloudflare/preflight", &session, None).await;
+    assert!(!readiness.body["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|check| check["id"] == "rudder_access_portal_cloudflare"));
     let routes = std::fs::read_to_string(data_dir.join("traefik/dynamic/routes.yml")).unwrap();
     let protected = routes
         .lines()
@@ -1297,6 +1388,47 @@ async fn multi_zone_portal_keeps_plugin_access_and_dns_ownership_on_partial_fail
                 .starts_with("https://access.second.net/access?"));
         }
     }
+    sqlx::query("INSERT INTO access_identities(email) VALUES('owner@example.com') ON CONFLICT(email) DO UPDATE SET status='active'").execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO access_codes(email,code_hash,purpose,return_host,return_path,expires_at) VALUES('owner@example.com',encode(digest('cross-zone-handoff','sha256'),'hex'),'handoff','dockside.example.com','/dashboard',now()+interval '2 minutes')").execute(&pool).await.unwrap();
+    let callback_app = self::app(pool.clone(), &data_dir, &cloudflare);
+    let wrong_host = call_with(
+        &callback_app,
+        "GET",
+        "/_rudder/callback?code=cross-zone-handoff",
+        None,
+        None,
+        Some("access.second.net"),
+    )
+    .await;
+    assert_eq!(wrong_host.status, StatusCode::FORBIDDEN);
+    let callback = callback_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/_rudder/callback?code=cross-zone-handoff")
+                .header("host", "dockside.example.com")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(callback.status(), StatusCode::TEMPORARY_REDIRECT);
+    assert_eq!(callback.headers()["location"], "/dashboard");
+    let cookie = callback.headers()["set-cookie"].to_str().unwrap();
+    assert!(cookie.contains("Secure"));
+    let authorized = callback_app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/edge/gate?k={secret}"))
+                .header("x-forwarded-host", "dockside.example.com")
+                .header("x-forwarded-uri", "/dashboard")
+                .header("cookie", cookie.split(';').next().unwrap())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(authorized.status(), StatusCode::OK);
     fake.lock().unwrap().failed_dns_zone = Some(OTHER_ZONE.into());
     let late = call(&app,"POST",&format!("/api/v1/services/{service_id}/domains"),&session,Some(json!({"host":"late.example.com","target_port":8080,"ssl_mode":"letsencrypt","routing_mode":"cloudflare"}))).await;
     assert_eq!(late.status, StatusCode::CREATED, "{}", late.body);
@@ -1849,6 +1981,169 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
                 .starts_with("https://panel.example.com/access?"));
         }
     }
+    sqlx::query("UPDATE access_settings SET portal_host='panel.example.com' WHERE id=TRUE")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE cloudflare_settings SET access_enforced=TRUE,access_aud='callback-test',team_domain='myteam.cloudflareaccess.com' WHERE id=TRUE").execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO access_identities(email) VALUES('admin@example.com') ON CONFLICT(email) DO UPDATE SET status='active'").execute(&pool).await.unwrap();
+    let callback_app = self::app(pool.clone(), &data_dir, &cloudflare);
+    let callback_route = routes
+        .lines()
+        .skip_while(|line| !line.contains("Host(`app.example.com`) && PathPrefix(`/_rudder`)"))
+        .take_while(|line| line.starts_with("      "))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        callback_route.contains("priority: 1000"),
+        "{callback_route}"
+    );
+    assert!(
+        callback_route.contains("service: rudder-panel"),
+        "{callback_route}"
+    );
+    assert!(callback_route.contains("- websecure"), "{callback_route}");
+    assert!(!callback_route.contains("rudder-gate"), "{callback_route}");
+    sqlx::query("INSERT INTO access_codes(email,code_hash,purpose,return_host,return_path,expires_at) VALUES('admin@example.com',encode(digest('tunnel-handoff','sha256'),'hex'),'handoff','app.example.com','/dashboard?view=files',now()+interval '2 minutes')").execute(&pool).await.unwrap();
+    let wrong = call_with(
+        &callback_app,
+        "GET",
+        "/_rudder/callback?code=tunnel-handoff",
+        None,
+        None,
+        Some("other.example.com"),
+    )
+    .await;
+    assert_eq!(wrong.status, StatusCode::FORBIDDEN, "{}", wrong.body);
+    let callback = callback_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/_rudder/callback?code=tunnel-handoff")
+                .header("host", "app.example.com")
+                .header("x-forwarded-proto", "http")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(callback.status(), StatusCode::TEMPORARY_REDIRECT);
+    assert_eq!(callback.headers()["location"], "/dashboard?view=files");
+    assert_eq!(callback.headers()["cache-control"], "no-store");
+    let cookie = callback.headers()["set-cookie"].to_str().unwrap();
+    for attribute in ["Secure", "HttpOnly", "SameSite=Lax", "Path=/"] {
+        assert!(cookie.contains(attribute), "{cookie}");
+    }
+    assert!(!cookie.contains("Domain="), "{cookie}");
+    let cookie = cookie.split(';').next().unwrap().to_owned();
+    let authorized = callback_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/edge/gate?k={secret}"))
+                .header("x-forwarded-host", "app.example.com")
+                .header("x-forwarded-uri", "/dashboard?view=files")
+                .header("cookie", cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(authorized.status(), StatusCode::OK);
+    let replay = call_with(
+        &callback_app,
+        "GET",
+        "/_rudder/callback?code=tunnel-handoff",
+        None,
+        None,
+        Some("app.example.com"),
+    )
+    .await;
+    assert_eq!(replay.status, StatusCode::FORBIDDEN);
+    let missing = call_with(
+        &callback_app,
+        "GET",
+        "/_rudder/unknown",
+        None,
+        None,
+        Some("app.example.com"),
+    )
+    .await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND);
+    let invalid = call_with(
+        &callback_app,
+        "GET",
+        "/_rudder/callback?code=x",
+        None,
+        None,
+        Some("app.example.com"),
+    )
+    .await;
+    assert_eq!(invalid.status, StatusCode::FORBIDDEN);
+    for denied in ["expired", "revoked", "blocked"] {
+        sqlx::query("INSERT INTO access_codes(email,code_hash,purpose,return_host,return_path,expires_at) VALUES('admin@example.com',encode(digest($1,'sha256'),'hex'),'handoff','app.example.com','/',CASE WHEN $1='expired' THEN now()-interval '1 minute' ELSE now()+interval '2 minutes' END)").bind(denied).execute(&pool).await.unwrap();
+        if denied == "revoked" {
+            sqlx::query("UPDATE access_policies SET enabled=FALSE WHERE service_id=$1")
+                .bind(service_uuid)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        if denied == "blocked" {
+            sqlx::query(
+                "UPDATE access_identities SET status='blocked' WHERE email='admin@example.com'",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        let rejected = call_with(
+            &callback_app,
+            "GET",
+            &format!("/_rudder/callback?code={denied}"),
+            None,
+            None,
+            Some("app.example.com"),
+        )
+        .await;
+        assert_eq!(
+            rejected.status,
+            StatusCode::FORBIDDEN,
+            "{denied}: {}",
+            rejected.body
+        );
+        sqlx::query("UPDATE access_policies SET enabled=TRUE WHERE service_id=$1")
+            .bind(service_uuid)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE access_identities SET status='active' WHERE email='admin@example.com'")
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let sessions: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM access_sessions WHERE host='app.example.com'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(sessions, 1);
+    let panel_blocked = call_with(
+        &callback_app,
+        "GET",
+        "/api/v1/me",
+        Some(&session),
+        None,
+        Some("panel.example.com"),
+    )
+    .await;
+    assert_eq!(panel_blocked.status, StatusCode::FORBIDDEN);
+    sqlx::query("UPDATE access_settings SET portal_host=NULL WHERE id=TRUE")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE cloudflare_settings SET access_enforced=FALSE,access_aud=NULL,team_domain='' WHERE id=TRUE").execute(&pool).await.unwrap();
+
     let disabled = call(
         &app,
         "PUT",

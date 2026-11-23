@@ -1,5 +1,6 @@
 // Vietnamese strings, keyed by the English source text. Missing keys fall back to English.
 export const vi: Record<string, string> = {
+  "Cloudflare Access also protects Rudder Access login and assets on the panel hostname. Use a dedicated portal hostname, publish its DNS/tunnel route, and update Turnstile and Google callbacks. Admin APIs remain protected.": "Cloudflare Access cũng bảo vệ đăng nhập Rudder Access và các tài nguyên trên tên miền bảng điều khiển. Hãy dùng tên miền cổng đăng nhập riêng, xuất bản tuyến DNS/tunnel và cập nhật Turnstile cùng callback Google. API quản trị vẫn được bảo vệ.",
   "Cloudflare zones": "Các zone Cloudflare",
   "Zone": "Zone",
   "Zone ID (optional)": "Zone ID (không bắt buộc)",

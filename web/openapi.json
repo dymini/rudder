@@ -66,6 +66,20 @@
         }
       }
     },
+    "/_rudder/callback": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "summary": "Redeem a one-time Access code on its gated service hostname",
+        "operationId": "get___rudder_callback",
+        "responses": {
+          "307": {
+            "description": "Redeem a one-time Access code on its gated service hostname"
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -6790,7 +6804,8 @@
         "type": "object",
         "required": [
           "service_id",
-          "name"
+          "name",
+          "hosts"
         ],
         "properties": {
           "host": {
@@ -6798,6 +6813,12 @@
               "string",
               "null"
             ]
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "name": {
             "type": "string"
@@ -7234,6 +7255,7 @@
       "AccessSettingsView": {
         "type": "object",
         "required": [
+          "warnings",
           "turnstile_site_key",
           "has_turnstile_secret",
           "turnstile_hostnames",
@@ -7280,6 +7302,12 @@
           },
           "turnstile_site_key": {
             "type": "string"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

@@ -101,6 +101,8 @@ target version changes only after the whole rollout succeeds. Interrupted jobs
 are visible after restarting the panel. Updates, scaling, credential changes
 and removal share a database lock; overlapping mutations return 409.
 
+DNS and zone mutations are also serialized. Completed DNS reconciliation and tunnel publication release their zone lock before the next routing phase begins, so a single domain save does not conflict with its own completed work. A genuinely concurrent mutation still returns 409; wait for it to finish before retrying.
+
 The same controls are available through API/MCP in the existing Cloudflare
 scope: `GET /api/v1/cloudflare/tunnel/status`,
 `POST /api/v1/cloudflare/tunnel/check`, and

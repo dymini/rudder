@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE access_codes SET used_at = now()\n        WHERE code_hash = $1 AND purpose = 'handoff'\n          AND used_at IS NULL AND expires_at > now() AND return_host = $2\n        RETURNING email, return_path\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "return_path",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "6b95fbb8a5ba44cbae233900266113d1537b382cceba7aba2eee3b0ead56b4b3"
+}
