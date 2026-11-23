@@ -58,6 +58,18 @@ pub async fn publish_server_with_dns(
     overwrite_dns: bool,
     overwrite_host: Option<&str>,
 ) -> Result<bool, ApiError> {
+    let result =
+        publish_server_with_dns_inner(state, server_id, overwrite_dns, overwrite_host).await;
+    crate::routes::plugins::access_publish_result(state, server_id, &result).await?;
+    result
+}
+
+async fn publish_server_with_dns_inner(
+    state: &AppState,
+    server_id: Uuid,
+    overwrite_dns: bool,
+    overwrite_host: Option<&str>,
+) -> Result<bool, ApiError> {
     let kind = sqlx::query_scalar!(r#"SELECT kind FROM servers WHERE id = $1"#, server_id)
         .fetch_optional(&state.pool)
         .await
@@ -65,6 +77,7 @@ pub async fn publish_server_with_dns(
     let Some(kind) = kind else {
         return Err(crate::routes::catalog::not_found("server not found"));
     };
+    crate::routes::plugins::reconcile_access(state, server_id).await?;
     crate::domain_routing::reconcile(state, overwrite_dns, overwrite_host).await?;
     if kind == "local" && crate::cloudflare::tunnel_published(&state.pool).await {
         crate::cloudflare::sync_hostnames(state, overwrite_dns, overwrite_host).await?;
@@ -139,7 +152,13 @@ pub async fn publish_local(state: &AppState) -> Result<(), ApiError> {
 
 pub(crate) async fn publish_local_routes(state: &AppState) -> Result<(), ApiError> {
     if let Some(id) = local_server_id(&state.pool).await? {
-        publish_server_routes(state, id, "local").await?;
+        let result = async {
+            crate::routes::plugins::reconcile_access(state, id).await?;
+            publish_server_routes(state, id, "local").await
+        }
+        .await;
+        crate::routes::plugins::access_publish_result(state, id, &result).await?;
+        result?;
     }
     Ok(())
 }

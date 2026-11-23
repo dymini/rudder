@@ -553,6 +553,32 @@ async fn configure_access(
     Ok(())
 }
 
+pub(crate) async fn reconcile_access(state: &AppState, server: Uuid) -> Result<(), ApiError> {
+    let ids: Vec<Uuid> = sqlx::query_scalar("SELECT i.id FROM plugin_installs i JOIN services s ON s.id=i.service_id WHERE s.server_id=$1")
+        .bind(server).fetch_all(&state.pool).await.map_err(ApiError::database)?;
+    for id in ids {
+        let install = load_install(state, id).await?;
+        configure_access(state, &install, install.access_enabled).await?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn access_publish_result(
+    state: &AppState,
+    server: Uuid,
+    result: &Result<bool, ApiError>,
+) -> Result<(), ApiError> {
+    let error = result.as_ref().err().map(|error| {
+        format!(
+            "Access route publication failed: {}",
+            error.public_message()
+        )
+    });
+    sqlx::query("UPDATE plugin_installs i SET last_error=$2 FROM services s WHERE s.id=i.service_id AND s.server_id=$1 AND ($2 IS NOT NULL OR i.last_error LIKE 'Access route publication failed:%')")
+        .bind(server).bind(error).execute(&state.pool).await.map_err(ApiError::database)?;
+    Ok(())
+}
+
 pub(crate) async fn protect_stack_action(
     state: &AppState,
     service: Uuid,
