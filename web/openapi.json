@@ -6723,7 +6723,8 @@
         "type": "object",
         "required": [
           "service_id",
-          "name"
+          "name",
+          "hosts"
         ],
         "properties": {
           "host": {
@@ -6731,6 +6732,12 @@
               "string",
               "null"
             ]
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "name": {
             "type": "string"

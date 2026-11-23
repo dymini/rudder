@@ -4065,6 +4065,7 @@ export interface components {
     schemas: {
         AccessApp: {
             host?: string | null;
+            hosts: string[];
             name: string;
             /** Format: uuid */
             service_id: string;
@@ -7193,6 +7194,24 @@ export interface operations {
         responses: {
             /** @description OAuth protected-resource metadata for the MCP server */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get___rudder_callback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redeem a one-time Access code on its gated service hostname */
+            307: {
                 headers: {
                     [name: string]: unknown;
                 };

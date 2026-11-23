@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT s.id, s.name,\n               ARRAY(\n                   SELECT d.host FROM domains d WHERE d.service_id = s.id\n                   GROUP BY d.host\n                   ORDER BY bool_and(d.is_preview), min(d.created_at), d.host\n               ) AS \"hosts!\"\n        FROM services s\n        JOIN access_policies p ON p.service_id = s.id AND p.enabled\n        ORDER BY s.name\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "hosts!",
+        "type_info": "TextArray"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "79469ac987adb0a995e13ff194018f4a82f73e93883cbdb00b95b5ab9971d665"
+}

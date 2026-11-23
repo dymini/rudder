@@ -294,6 +294,7 @@ pub struct AccessApp {
     pub service_id: Uuid,
     pub name: String,
     pub host: Option<String>,
+    pub hosts: Vec<String>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -1513,12 +1514,11 @@ async fn apps(
     let rows = sqlx::query!(
         r#"
         SELECT s.id, s.name,
-               (
-                   SELECT d.host FROM domains d
-                   WHERE d.service_id = s.id AND NOT d.is_preview
-                   ORDER BY d.created_at
-                   LIMIT 1
-               ) AS "host?"
+               ARRAY(
+                   SELECT d.host FROM domains d WHERE d.service_id = s.id
+                   GROUP BY d.host
+                   ORDER BY bool_and(d.is_preview), min(d.created_at), d.host
+               ) AS "hosts!"
         FROM services s
         JOIN access_policies p ON p.service_id = s.id AND p.enabled
         ORDER BY s.name
@@ -1533,7 +1533,8 @@ async fn apps(
             apps.push(AccessApp {
                 service_id: row.id,
                 name: row.name,
-                host: row.host,
+                host: row.hosts.first().cloned(),
+                hosts: row.hosts,
             });
         }
     }

@@ -11,6 +11,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ### Fixed
 - **Finish Access sign-in on app hostnames.** Service-host callbacks now exchange the one-time code instead of loading the panel, set a Secure host-only cookie, and return to the original path. Invalid, expired, replayed or wrong-host codes do not create a session.
 - **Explain Cloudflare-protected shared login portals.** Access settings and tunnel readiness warn when the portal shares the panel hostname protected by Cloudflare Access. Use a dedicated portal hostname and update its DNS/tunnel route, Turnstile allowlist and Google callback; no administrative routes are automatically bypassed.
+- **Show every authorized app hostname.** The Access portal now lists all domains, including gated preview domains, for allowed services and plugins instead of only one hostname. Department descendants and exact-rank grants use the same authorization rules as the gate; stopped apps remain listed and disabled Access policies stay excluded.
 
 ## [0.12.1] - 2026-11-23
 

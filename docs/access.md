@@ -72,6 +72,8 @@ Both methods require a Cloudflare Turnstile token. Rudder checks the token on th
 
 After sign-in, the portal lists the internal apps that person may open. Choosing an app sends them to that app's domain. If they are not signed in there yet, Rudder sends them back through the portal and then sets a cookie on the app's own hostname.
 
+The list includes every hostname of each authorized service, including plugins and gated preview domains. Multiple path routes on one hostname are shown once. The legacy API `host` field remains the first hostname; `hosts` contains the complete list. Department descendants and exact-rank grants use the gate's authorization rules. A stopped service remains authorized and listed; a disabled Access policy is not an Access app. Services without a domain are listed with no link.
+
 If Cloudflare Access protects the panel hostname, using that same hostname for the Rudder Access portal also puts `/access`, login APIs, Google callbacks and their assets behind Cloudflare sign-in. Ordinary Rudder Access users may not be authorized there. Access settings and tunnel readiness warn about this combination, including when the portal hostname is left blank. Prefer a dedicated portal hostname, publish its DNS/tunnel route, add it to the Turnstile allowlist, and update Google's redirect URI. Rudder does not automatically create Cloudflare bypass applications or expose any administrative APIs.
 
 ## Who may open an app
