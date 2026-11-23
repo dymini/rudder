@@ -1140,7 +1140,7 @@ pub(crate) async fn sync_hostnames(
     overwrite_dns: bool,
     overwrite_host: Option<&str>,
 ) -> Result<SyncReport, ApiError> {
-    let _guard = crate::cloudflare_zones::lock(&state.pool).await?;
+    let guard = crate::cloudflare_zones::lock(&state.pool).await?;
     let settings = load(&state.pool).await?;
     let tunnel_id = require_tunnel(&settings)?.to_owned();
     let cf = client(state, &settings)?;
@@ -1278,6 +1278,7 @@ pub(crate) async fn sync_hostnames(
         .iter()
         .filter(|d| matches!(d.action.as_str(), "conflict" | "error"))
         .count();
+    guard.rollback().await.map_err(ApiError::database)?;
     Ok(SyncReport {
         hostnames: hosts.into_iter().map(|h| h.host).collect(),
         skipped,

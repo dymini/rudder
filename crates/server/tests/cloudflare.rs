@@ -484,18 +484,26 @@ async fn finish_mutation_request(
     next: Next,
 ) -> Response {
     let mutation = !matches!(request.method().as_str(), "GET" | "HEAD" | "OPTIONS");
+    let held_lock = request.extensions().get::<HeldMutationLock>().is_some();
     let response = next.run(request).await;
     // SQLx queues rollback on drop; wait for PostgreSQL before the next request.
     // Do not wait for deliberately held locks or accepted background updates.
-    if mutation
-        && !matches!(
-            response.status(),
-            StatusCode::CONFLICT | StatusCode::ACCEPTED
-        )
-    {
+    if mutation && !held_lock && response.status() != StatusCode::ACCEPTED {
         wait_for_mutation_rollbacks(&pool).await;
     }
     response
+}
+
+#[derive(Clone, Copy)]
+struct HeldMutationLock;
+
+fn holding_mutation_lock(app: &axum::Router) -> axum::Router {
+    app.clone().layer(axum::middleware::from_fn(
+        |mut request: AxumRequest, next: Next| async move {
+            request.extensions_mut().insert(HeldMutationLock);
+            next.run(request).await
+        },
+    ))
 }
 
 struct Reply {
@@ -691,13 +699,14 @@ async fn connector_status_caches_versions_and_serializes_updates(pool: PgPool) {
     )
     .await;
     assert_eq!(invalid.status, StatusCode::BAD_REQUEST);
+    let contended = holding_mutation_lock(&app);
     let mut guard = pool.begin().await.unwrap();
     sqlx::query("SELECT pg_advisory_xact_lock(77302461)")
         .execute(&mut *guard)
         .await
         .unwrap();
     let busy = call(
-        &app,
+        &contended,
         "POST",
         "/api/v1/cloudflare/tunnel/update",
         &session,
@@ -706,7 +715,7 @@ async fn connector_status_caches_versions_and_serializes_updates(pool: PgPool) {
     .await;
     assert_eq!(busy.status, StatusCode::CONFLICT);
     let scale = call(
-        &app,
+        &contended,
         "PUT",
         "/api/v1/cloudflare/tunnel/replicas",
         &session,
@@ -1133,6 +1142,7 @@ async fn credentials_are_checked_and_never_returned(pool: PgPool) {
     assert!(calls(&fake)
         .iter()
         .any(|call| call.starts_with("GET /zones/")));
+    let contended = holding_mutation_lock(&app);
     for (key, code) in [
         (77_302_461_i64, "tunnel_busy"),
         (77_302_462, "cloudflare_busy"),
@@ -1144,7 +1154,7 @@ async fn credentials_are_checked_and_never_returned(pool: PgPool) {
             .await
             .unwrap();
         let busy = call(
-            &app,
+            &contended,
             "PUT",
             "/api/v1/cloudflare/credentials",
             &session,
