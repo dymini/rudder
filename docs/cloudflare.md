@@ -13,20 +13,56 @@ agent API bypasses still require the application's bearer token. Panel-host
 Access login redirects use HTTPS when that hostname is tunnel-published, even
 when direct-origin TLS is disabled.
 
-The Access portal must also be reachable. Rudder currently manages **one DNS
-zone**: a portal outside that zone is listed as skipped and is not published,
-even if the API token can access another zone. For example, with tunnel zone
-`dymini.com`, use a portal such as `access.dymini.com`, not `access.knotree.site`.
-In Access settings choose an unused hostname in the selected zone, update any
-Turnstile/identity-provider hostname and callback configuration, then publish
-the tunnel again. Existing out-of-zone portals are not changed automatically;
-they can work only while their direct HTTPS ingress remains reachable.
+The Access portal must also be reachable. It can be in **any enabled zone in the
+connected account**. For example, apps in `dymini.com` can use
+`access.knotree.site` after discovering and enabling `knotree.site`. In Access
+settings choose an unused hostname, update Turnstile/identity-provider hostname
+allowlists and callbacks yourself, then publish the tunnel again. A hostname
+outside the enabled, accessible zones is skipped; it still needs working direct
+HTTPS ingress until repaired. Existing portal settings are never silently moved.
 
 **Security → Cloudflare → Close the public ports** and
 `GET /api/v1/cloudflare/preflight` (also available through MCP) include a required
 `rudder_access_portal` diagnostic naming an unpublished portal and how to repair
 it. Do not close public ports until it passes. While a tunnel is published,
-saving a new out-of-zone portal is rejected with `portal_outside_tunnel_zone`.
+saving a portal without an enabled, accessible matching zone is rejected with
+`portal_outside_tunnel_zone`.
+
+## Zones and upgrade safety
+
+Rudder connects **one account and one API token**, with multiple selected zones.
+Tunnel/connectors, Cloudflare Access applications and SSH remain account-level;
+Turnstile remains a separately configured widget and hostname allowlist. Rudder's
+origin cache, rate limiting and certificates do not become Cloudflare zone policies.
+
+Saving credentials discovers all pages from `GET /zones?account.id=…`. **Refresh
+zones** repeats discovery without changing the selected zones. Newly discovered
+zones start disabled. A complete successful discovery marks absent zones
+inaccessible; a failed discovery marks visibility uncertain without deleting DNS.
+On upgrade the former configured zone and its publication history are backfilled
+as enabled. Add **Zone Read** to existing tokens before refreshing, and retain
+**DNS Edit** for each enabled zone. A legacy `zone_id` in the credentials request
+is still accepted and enables that zone; it is no longer required.
+
+For every hostname, Rudder normalizes case and matches the apex or a dot-boundary
+suffix, taking the most-specific known zone. A disabled, inaccessible or inactive
+child zone blocks the hostname: Rudder never falls back to a parent zone. The
+Domains inventory shows the matched zone, diagnostics and a zone filter.
+
+Publication reports outcomes per zone and per hostname. A failing zone does not
+prevent other zones from publishing. Existing DNS and tunnel routes are retained
+when a zone is disabled or becomes invisible. Retry **Publish again** after fixing
+permissions or conflicts; retries reuse matching records. Discovery does not prove
+DNS-write access: write failures are reported when publication runs.
+
+Cleanup and teardown use recorded zone ownership, not today's hostname resolution,
+and never delete foreign records. Disabled or inaccessible zones are left alone,
+with teardown warnings; retained records may need manual cleanup after access is
+restored. Disabling a zone is **not** an unpublish or security-deny action.
+Changing zone selection is allowed with a running tunnel; changing accounts still
+requires removing the tunnel. Legacy status `zone_id` and `zone_name` fields show
+the enabled primary zone, or the first enabled zone, or empty strings when none
+are enabled. New integrations should use the zones API instead.
 
 ## Connector management and rolling updates
 
@@ -81,7 +117,8 @@ downgrade or retry).
   - Account · Access: Apps and Policies · Edit
   - Account · Access: SSH Auditing · Edit (only for SSH)
   - Account · Cloudflare One Connectors/Networks · Edit (only for SSH)
-  - Zone · DNS · Edit
+  - Zone · Zone · Read, for discovery of every zone the token should expose
+  - Zone · DNS · Edit, for every enabled zone
 
 The token and the tunnel token are encrypted with the master key and are never returned by the API. Leave the token field blank to keep the saved one.
 
@@ -89,7 +126,7 @@ The token and the tunnel token are encrypted with the master key and are never r
 
 Do them in order. The page shows what each step did and what is still missing.
 
-1. **Cloudflare account.** Save the account id, zone id, and token. Rudder checks each permission and says which one is missing.
+1. **Cloudflare account.** Save the account id and token, then enable the zones Rudder may manage in the zones table. Zone ID is optional. Refresh after changing token permissions. Rudder checks account API access; per-zone DNS errors are reported during publication.
 2. **Tunnel.** Create one tunnel and choose one to five replicas. Each replica is a `rudder-cloudflared-N` container on the `rudder-proxy` network that connects out to Cloudflare, so no inbound port is needed. With two or more, the apps stay online when one replica or one Cloudflare connection is lost. Changing the number adds or removes containers without restarting the others.
 3. **Publish domains.** Creating the tunnel automatically sends app domains whose routing mode is **Cloudflare**, the panel domain, and the Rudder Access portal through the tunnel, with proxied CNAME records. Domain changes are synchronized automatically while tunnel mode is active. New service domains default to **Direct**; opt in to Cloudflare in each domain's settings. Upgrading preserves existing service domains on an already-published local tunnel. Rudder does not replace foreign A, AAAA, or CNAME records unless you tick the overwrite box; the page lists names it skipped. Tunnel domains use Cloudflare's certificate without Let's Encrypt or HTTP redirects; direct domains retain their TLS settings and need public ports. Use **Publish again** to retry failures or resolve conflicts. If tunnel creation reports a publication error, the tunnel is still saved; retry publishing instead of creating another tunnel.
 4. **Cloudflare Access for the panel.** Enter your team domain (`myteam.cloudflareaccess.com`) and the emails allowed in. Rudder creates an Access application for the panel domain. Rudder's own sign-in, authenticator, and Rudder Access for internal apps stay in place behind it.
@@ -127,7 +164,10 @@ Everything above is available through the HTTP API and the MCP server under the 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/v1/cloudflare` | Settings, tunnel health, and what each step has done |
-| PUT | `/api/v1/cloudflare/credentials` | Check and save the account id, zone id, and token |
+| PUT | `/api/v1/cloudflare/credentials` | Save account/token, discover zones; optional legacy `zone_id` enables that zone |
+| GET | `/api/v1/cloudflare/zones` | List zones with enablement, visibility, status and errors |
+| POST | `/api/v1/cloudflare/zones/refresh` | Refresh the paginated zone inventory without deleting DNS |
+| PUT | `/api/v1/cloudflare/zones/{zone_id}` | Set `{"enabled":true}` or `false`; no DNS deletion |
 | POST, DELETE | `/api/v1/cloudflare/tunnel` | Create the tunnel, or remove it and everything it made |
 | PUT | `/api/v1/cloudflare/tunnel/replicas` | Set the number of replicas (1 to 5) |
 | GET | `/api/v1/cloudflare/tunnel/status` | Connections, local containers, versions and update progress |

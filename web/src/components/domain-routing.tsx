@@ -29,12 +29,7 @@ export function DomainRouting({
     enabled: Boolean(host.trim()),
   });
   const available = options.data?.cloudflare_available ?? false;
-  const reason =
-    options.data?.cloudflare_reason_code === "zone"
-      ? t("The hostname must be inside {zone}. Wildcards are not supported.", {
-          zone: options.data.zone_name,
-        })
-      : options.data?.cloudflare_reason
+  const reason = options.data?.cloudflare_reason
         ? t(options.data.cloudflare_reason)
         : undefined;
   return (
@@ -50,6 +45,9 @@ export function DomainRouting({
           </option>
         </Select>
       </Field>
+      {available && options.data?.zone_name ? (
+        <p className="text-sm text-muted">{t("Matched Cloudflare zone: {zone}", { zone: options.data.zone_name })}</p>
+      ) : null}
       {options.isError ? (
         <p role="alert" className="text-sm text-danger">
           {t("Could not check routing availability. Try again.")}
