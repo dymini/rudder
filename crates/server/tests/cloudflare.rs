@@ -1317,6 +1317,16 @@ async fn multi_zone_portal_keeps_plugin_access_and_dns_ownership_on_partial_fail
             .unwrap()["ok"],
         true
     );
+    sqlx::query("UPDATE cloudflare_settings SET access_enforced=TRUE,access_aud='cross-zone-test',team_domain='myteam.cloudflareaccess.com' WHERE id=TRUE").execute(&pool).await.unwrap();
+    let settings = call(&app, "GET", "/api/v1/access/settings", &session, None).await;
+    assert_eq!(settings.status, StatusCode::OK, "{}", settings.body);
+    assert_eq!(settings.body["warnings"], json!([]));
+    let readiness = call(&app, "GET", "/api/v1/cloudflare/preflight", &session, None).await;
+    assert!(!readiness.body["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|check| check["id"] == "rudder_access_portal_cloudflare"));
     let routes = std::fs::read_to_string(data_dir.join("traefik/dynamic/routes.yml")).unwrap();
     let protected = routes
         .lines()
@@ -1362,6 +1372,47 @@ async fn multi_zone_portal_keeps_plugin_access_and_dns_ownership_on_partial_fail
                 .starts_with("https://access.second.net/access?"));
         }
     }
+    sqlx::query("INSERT INTO access_identities(email) VALUES('owner@example.com') ON CONFLICT(email) DO UPDATE SET status='active'").execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO access_codes(email,code_hash,purpose,return_host,return_path,expires_at) VALUES('owner@example.com',encode(digest('cross-zone-handoff','sha256'),'hex'),'handoff','dockside.example.com','/dashboard',now()+interval '2 minutes')").execute(&pool).await.unwrap();
+    let callback_app = self::app(pool.clone(), &data_dir, &cloudflare);
+    let wrong_host = call_with(
+        &callback_app,
+        "GET",
+        "/_rudder/callback?code=cross-zone-handoff",
+        None,
+        None,
+        Some("access.second.net"),
+    )
+    .await;
+    assert_eq!(wrong_host.status, StatusCode::FORBIDDEN);
+    let callback = callback_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/_rudder/callback?code=cross-zone-handoff")
+                .header("host", "dockside.example.com")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(callback.status(), StatusCode::TEMPORARY_REDIRECT);
+    assert_eq!(callback.headers()["location"], "/dashboard");
+    let cookie = callback.headers()["set-cookie"].to_str().unwrap();
+    assert!(cookie.contains("Secure"));
+    let authorized = callback_app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/edge/gate?k={secret}"))
+                .header("x-forwarded-host", "dockside.example.com")
+                .header("x-forwarded-uri", "/dashboard")
+                .header("cookie", cookie.split(';').next().unwrap())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(authorized.status(), StatusCode::OK);
     fake.lock().unwrap().failed_dns_zone = Some(OTHER_ZONE.into());
     let late = call(&app,"POST",&format!("/api/v1/services/{service_id}/domains"),&session,Some(json!({"host":"late.example.com","target_port":8080,"ssl_mode":"letsencrypt","routing_mode":"cloudflare"}))).await;
     assert_eq!(late.status, StatusCode::CREATED, "{}", late.body);
