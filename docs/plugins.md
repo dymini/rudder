@@ -9,6 +9,13 @@ original panel owner's email and create that Access identity if absent; they do
 not make the identity an Access administrator or unblock a blocked identity.
 Existing policies retain their people/department/rank rules. Updates synchronize
 the manifest's path bypasses and the saved toggle, including older installs.
+Every route publication (including startup and tunnel synchronization) also
+reconciles existing installs, so upgrading does not require reinstalling or
+updating Dockside to apply protection. The saved plugin toggle is authoritative;
+changing the service's Access toggle updates it too. Plugin bypass paths remain
+manifest-managed. Existing allow rules are preserved. Publication failures are
+returned by the API and recorded in the plugin's `last_error`; retry publication
+after resolving the error.
 An offline server cannot apply proxy changes until connected; API errors report
 publication failure rather than pretending the live proxy was updated. A stopped
 offline install can store its policy; protection is published before starting it.

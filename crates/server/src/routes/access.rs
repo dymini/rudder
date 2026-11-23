@@ -409,6 +409,15 @@ async fn put_settings(
         current.portal_host.clone()
     };
     if let Some(host) = &portal_host {
+        if body.portal_host.is_some() && crate::cloudflare::tunnel_published(&state.pool).await {
+            let cloudflare = crate::cloudflare::load(&state.pool).await?;
+            if !rudder_core::host_in_zone(host, &cloudflare.zone_name) {
+                return Err(bad("portal_outside_tunnel_zone", format!(
+                    "Access portal {host} is outside the tunnel zone {} and will not be published. Choose a portal hostname in that zone before closing public ports.",
+                    cloudflare.zone_name
+                )));
+            }
+        }
         let taken = sqlx::query_scalar!(
             r#"SELECT EXISTS(SELECT 1 FROM domains WHERE host = $1) AS "taken!""#,
             host
@@ -1130,6 +1139,14 @@ async fn put_policy(
             .await
             .map_err(ApiError::database)?;
     }
+    sqlx::query(
+        "UPDATE plugin_installs SET access_enabled=$2,updated_at=now() WHERE service_id=$1",
+    )
+    .bind(id)
+    .bind(body.enabled)
+    .execute(&mut *tx)
+    .await
+    .map_err(ApiError::database)?;
     tx.commit().await.map_err(ApiError::database)?;
     audit::record(
         &state.pool,
@@ -1141,7 +1158,7 @@ async fn put_policy(
         None,
     )
     .await;
-    let _ = crate::publish::publish_for_service(&state, id).await;
+    crate::publish::publish_for_service(&state, id).await?;
     Ok(Json(policy_view(&state, id).await?))
 }
 
@@ -2555,7 +2572,9 @@ async fn portal_origin(
             .await
             .map_err(ApiError::database)?;
     if let Some(host) = panel.panel_domain.filter(|host| !host.is_empty()) {
-        let scheme = if panel.panel_ssl_mode == "none" {
+        let cloudflare = crate::cloudflare::load(&state.pool).await?;
+        let tunneled = cloudflare.tunnel_published && cloudflare.published_hosts.contains(&host);
+        let scheme = if panel.panel_ssl_mode == "none" && !tunneled {
             "http"
         } else {
             "https"

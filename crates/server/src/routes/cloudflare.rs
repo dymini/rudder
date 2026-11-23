@@ -9,9 +9,9 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post, put};
 use axum::Json;
 use rudder_core::{
-    can_close_ports, normalize_team_domain, preflight, sshd_trust_script, tunnel_cname,
-    validate_access_email, validate_cloudflare_id, validate_replicas, validate_ssh_ca_public_key,
-    validate_unix_user, PreflightInput, MAX_TUNNEL_REPLICAS,
+    normalize_team_domain, preflight, sshd_trust_script, tunnel_cname, validate_access_email,
+    validate_cloudflare_id, validate_replicas, validate_ssh_ca_public_key, validate_unix_user,
+    PreflightInput, MAX_TUNNEL_REPLICAS,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -959,17 +959,36 @@ async fn readiness(
         access_enforced: settings.access_enforced,
         ssh_ready: settings.ssh_ready,
     });
+    let mut checks: Vec<PreflightCheckView> = checks
+        .into_iter()
+        .map(|check| PreflightCheckView {
+            id: check.id.to_owned(),
+            ok: check.ok,
+            required: check.required,
+            message: check.message,
+        })
+        .collect();
+    let portal: Option<String> =
+        sqlx::query_scalar("SELECT portal_host FROM access_settings WHERE id=TRUE")
+            .fetch_one(&state.pool)
+            .await
+            .map_err(ApiError::database)?;
+    if let Some(host) = portal.filter(|host| !host.is_empty()) {
+        let ok = hosts.contains(&host) && settings.published_hosts.contains(&host);
+        checks.push(PreflightCheckView {
+            id: "rudder_access_portal".into(),
+            ok,
+            required: true,
+            message: if ok {
+                format!("Rudder Access portal {host} is published through the tunnel")
+            } else {
+                format!("Rudder Access portal {host} is not published through the tunnel. Choose a portal hostname in the {} zone in Access settings and publish the tunnel again; otherwise keep direct HTTPS ingress reachable. Do not close public ports while Access login is unreachable.", settings.zone_name)
+            },
+        });
+    }
     Ok(Json(Readiness {
-        ready: can_close_ports(&checks),
-        checks: checks
-            .into_iter()
-            .map(|check| PreflightCheckView {
-                id: check.id.to_owned(),
-                ok: check.ok,
-                required: check.required,
-                message: check.message,
-            })
-            .collect(),
+        ready: checks.iter().all(|check| !check.required || check.ok),
+        checks,
         skipped,
     }))
 }

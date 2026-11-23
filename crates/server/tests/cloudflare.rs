@@ -1148,6 +1148,188 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     assert!(failing.contains(&"access"));
     assert!(failing.contains(&"replicas"));
 
+    sqlx::query("UPDATE access_settings SET portal_host='access.other.org' WHERE id=TRUE")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let report = call(&app, "GET", "/api/v1/cloudflare/preflight", &session, None).await;
+    let portal = report.body["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|check| check["id"] == "rudder_access_portal")
+        .unwrap();
+    assert_eq!(portal["ok"], false);
+    assert_eq!(portal["required"], true);
+    assert!(portal["message"]
+        .as_str()
+        .unwrap()
+        .contains("access.other.org"));
+    let invalid = call(
+        &app,
+        "PUT",
+        "/api/v1/access/settings",
+        &session,
+        Some(json!({"portal_host":"access.other.org"})),
+    )
+    .await;
+    assert_eq!(invalid.status, StatusCode::BAD_REQUEST, "{}", invalid.body);
+    assert_eq!(invalid.body["error"]["code"], "portal_outside_tunnel_zone");
+    sqlx::query("UPDATE access_settings SET portal_host='panel.example.com' WHERE id=TRUE")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let report = call(&app, "GET", "/api/v1/cloudflare/preflight", &session, None).await;
+    assert_eq!(
+        report.body["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|check| check["id"] == "rudder_access_portal")
+            .unwrap()["ok"],
+        true
+    );
+    sqlx::query("UPDATE access_settings SET portal_host=NULL WHERE id=TRUE")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let policy_uri = format!("/api/v1/access/services/{service_id}");
+    let policy_body =
+        json!({"enabled":true,"rules":[{"kind":"email","email":"admin@example.com"}]});
+    let protected = call(
+        &app,
+        "PUT",
+        &policy_uri,
+        &session,
+        Some(policy_body.clone()),
+    )
+    .await;
+    assert_eq!(protected.status, StatusCode::OK, "{}", protected.body);
+    let routes = std::fs::read_to_string(&routes_path).unwrap();
+    assert!(routes.contains("- rudder-gate"));
+    assert!(routes.contains("forwardAuth:"));
+    assert!(routes.contains("PathPrefix(`/_rudder`)"));
+
+    // Reproduce an upgraded install whose default flag disagrees with its old policy.
+    let service_uuid = Uuid::parse_str(&service_id).unwrap();
+    sqlx::query("INSERT INTO plugin_installs(plugin,service_id,installed_version,image) VALUES('dockside',$1,'0.2.2','dockside:test')")
+        .bind(service_uuid).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE access_policies SET enabled=false WHERE service_id=$1")
+        .bind(service_uuid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let republished = call(
+        &app,
+        "POST",
+        "/api/v1/cloudflare/tunnel/publish",
+        &session,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(republished.status, StatusCode::OK, "{}", republished.body);
+    let policy = call(&app, "GET", &policy_uri, &session, None).await;
+    assert_eq!(policy.body["enabled"], true);
+    assert_eq!(policy.body["rules"][0]["email"], "admin@example.com");
+    assert!(policy.body["bypass_paths"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("/v1/health")));
+    let secret: Vec<u8> =
+        sqlx::query_scalar("SELECT gate_secret_enc FROM access_settings WHERE id=TRUE")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let secret = String::from_utf8(
+        rudder_core::Cipher::new([0xcc; 32])
+            .decrypt(&secret)
+            .unwrap(),
+    )
+    .unwrap();
+    let routes = std::fs::read_to_string(&routes_path).unwrap();
+    let protected = routes
+        .lines()
+        .skip_while(|line| !line.contains("Host(`app.example.com`) && PathPrefix(`/`)"))
+        .take_while(|line| line.starts_with("      "))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(protected.contains("- websecure"), "{protected}");
+    assert!(protected.contains("- rudder-gate"), "{protected}");
+    assert!(protected.contains("tls: {}"), "{protected}");
+    for (path, expected) in [
+        ("/", StatusCode::TEMPORARY_REDIRECT),
+        ("/v1/blobs/item", StatusCode::OK),
+        ("/v1/queue/drain", StatusCode::TEMPORARY_REDIRECT),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/edge/gate?k={secret}"))
+                    .header("x-forwarded-host", "app.example.com")
+                    .header("x-forwarded-proto", "https")
+                    .header("x-forwarded-uri", path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected, "{path}");
+        if expected == StatusCode::TEMPORARY_REDIRECT {
+            assert!(response.headers()["location"]
+                .to_str()
+                .unwrap()
+                .starts_with("https://panel.example.com/access?"));
+        }
+    }
+    let disabled = call(
+        &app,
+        "PUT",
+        &policy_uri,
+        &session,
+        Some(json!({"enabled":false,"rules":policy_body["rules"]})),
+    )
+    .await;
+    assert_eq!(disabled.status, StatusCode::OK, "{}", disabled.body);
+    let enabled: bool =
+        sqlx::query_scalar("SELECT access_enabled FROM plugin_installs WHERE service_id=$1")
+            .bind(service_uuid)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(!enabled);
+    std::fs::remove_file(&routes_path).unwrap();
+    std::fs::create_dir(&routes_path).unwrap();
+    let failed = call(
+        &app,
+        "PUT",
+        &policy_uri,
+        &session,
+        Some(policy_body.clone()),
+    )
+    .await;
+    assert!(failed.status.is_server_error(), "{}", failed.body);
+    let error: Option<String> =
+        sqlx::query_scalar("SELECT last_error FROM plugin_installs WHERE service_id=$1")
+            .bind(service_uuid)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(error
+        .unwrap()
+        .starts_with("Access route publication failed:"));
+    std::fs::remove_dir(&routes_path).unwrap();
+    let repaired = call(&app, "PUT", &policy_uri, &session, Some(policy_body)).await;
+    assert_eq!(repaired.status, StatusCode::OK, "{}", repaired.body);
+    let error: Option<String> =
+        sqlx::query_scalar("SELECT last_error FROM plugin_installs WHERE service_id=$1")
+            .bind(service_uuid)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(error.is_none());
+
     let second = call(
         &app,
         "POST",

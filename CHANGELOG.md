@@ -8,6 +8,10 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Fixed
+- **Keep plugin dashboards protected through Cloudflare tunnels.** Route publication now reconciles existing plugin Access flags and manifest paths with the enforced service policy, including upgrades; service and plugin toggles stay synchronized, and publication errors are returned and recorded on the install instead of silently succeeding.
+- **Diagnose unreachable Access login portals.** Tunnel readiness now blocks closing public ports when the configured portal is not published, with guidance for out-of-zone hosts. New out-of-zone portal settings are rejected while a tunnel is active, and panel-host login redirects use HTTPS when published through the tunnel.
+
 ## [0.12.0] - 2026-11-23
 
 ### Added

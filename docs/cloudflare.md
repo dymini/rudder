@@ -4,6 +4,30 @@ An optional, advanced mode in **Security → Cloudflare**. It puts the panel and
 
 The decision record is [0025](decisions/0025-cloudflare-zero-trust.md).
 
+## Rudder Access through the tunnel
+
+Published service and plugin hostnames go to Traefik over HTTPS on the proxy
+network, not directly to their containers. Access-protected routes keep the
+forward-auth middleware and the `/_rudder` session handoff route. Declared plugin
+agent API bypasses still require the application's bearer token. Panel-host
+Access login redirects use HTTPS when that hostname is tunnel-published, even
+when direct-origin TLS is disabled.
+
+The Access portal must also be reachable. Rudder currently manages **one DNS
+zone**: a portal outside that zone is listed as skipped and is not published,
+even if the API token can access another zone. For example, with tunnel zone
+`dymini.com`, use a portal such as `access.dymini.com`, not `access.knotree.site`.
+In Access settings choose an unused hostname in the selected zone, update any
+Turnstile/identity-provider hostname and callback configuration, then publish
+the tunnel again. Existing out-of-zone portals are not changed automatically;
+they can work only while their direct HTTPS ingress remains reachable.
+
+**Security → Cloudflare → Close the public ports** and
+`GET /api/v1/cloudflare/preflight` (also available through MCP) include a required
+`rudder_access_portal` diagnostic naming an unpublished portal and how to repair
+it. Do not close public ports until it passes. While a tunnel is published,
+saving a new out-of-zone portal is rejected with `portal_outside_tunnel_zone`.
+
 ## Connector management and rolling updates
 
 The tunnel card shows Cloudflare's connectors (connector ID, cloudflared version,

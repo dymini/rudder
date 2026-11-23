@@ -20,6 +20,13 @@ fn config(database_url: &str, siteverify: &str) -> rudder_server::Config {
         ("RUDDER_COOKIE_SECURE".into(), "false".into()),
         ("RUDDER_LOG_FORMAT".into(), "pretty".into()),
         (
+            "RUDDER_DATA_DIR".into(),
+            std::env::temp_dir()
+                .join(format!("rudder-access-{}", uuid::Uuid::new_v4()))
+                .display()
+                .to_string(),
+        ),
+        (
             "RUDDER_PUBLIC_URL".into(),
             "https://panel.example.com".into(),
         ),
