@@ -316,6 +316,7 @@ use crate::routes::mfa::{
         PublishRequest,
         SyncReport,
         DnsOutcome,
+        crate::cloudflare::ZonePublishResult,
         SkippedHost,
         TeardownReport,
         SetupAccess,

@@ -29,6 +29,7 @@ const CA_KEY: &str =
 
 #[derive(Default)]
 struct Fake {
+    failed_dns_zone: Option<String>,
     zones: Option<Vec<Value>>,
     fail_discovery: bool,
     zone_page_size: usize,
@@ -159,34 +160,48 @@ async fn releases(State(fake): State<Shared>) -> (StatusCode, Json<Value>) {
 
 async fn list_dns(
     State(fake): State<Shared>,
+    Path(zone): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Json<Value> {
     let name = query.get("name").cloned().unwrap_or_default();
+    if fake.lock().unwrap().failed_dns_zone.as_deref() == Some(&zone) {
+        return Json(json!({"success":false,"errors":[{"code":10000,"message":"DNS permission denied"}]}));
+    }
     let found: Vec<Value> = fake
         .lock()
         .unwrap()
         .dns
         .iter()
-        .filter(|record| record["name"] == name)
+        .filter(|record| record["name"] == name && record.get("_zone").and_then(Value::as_str).unwrap_or(ZONE) == zone)
         .cloned()
         .collect();
     ok(Value::Array(found))
 }
 
-async fn create_dns(State(fake): State<Shared>, Json(mut body): Json<Value>) -> Json<Value> {
+async fn create_dns(State(fake): State<Shared>, Path(zone): Path<String>, Json(mut body): Json<Value>) -> Json<Value> {
     let mut fake = fake.lock().unwrap();
     fake.next += 1;
     body["id"] = json!(format!("dns-{}", fake.next));
+    body["_zone"] = json!(zone);
     fake.dns.push(body.clone());
     ok(body)
 }
 
 async fn delete_dns(
     State(fake): State<Shared>,
-    Path((_, id)): Path<(String, String)>,
+    Path((zone, id)): Path<(String, String)>,
 ) -> Json<Value> {
-    fake.lock().unwrap().dns.retain(|record| record["id"] != id);
+    fake.lock().unwrap().dns.retain(|record| record["id"] != id || record.get("_zone").and_then(Value::as_str).unwrap_or(ZONE) != zone);
     ok(json!({ "id": id }))
+}
+
+async fn update_dns(State(fake): State<Shared>, Path((zone,id)): Path<(String,String)>, Json(mut body): Json<Value>) -> Json<Value> {
+    body["id"] = json!(id);
+    body["_zone"] = json!(zone);
+    let mut fake = fake.lock().unwrap();
+    let index = fake.dns.iter().position(|r|r["id"] == id && r.get("_zone").and_then(Value::as_str).unwrap_or(ZONE) == zone).unwrap();
+    fake.dns[index] = body.clone();
+    ok(body)
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -215,13 +230,13 @@ async fn domain_routing_migration_preserves_existing_tunnels_and_direct_defaults
     tx.rollback().await.unwrap();
 }
 
-async fn get_dns(State(fake): State<Shared>, Path((_, id)): Path<(String, String)>) -> Json<Value> {
+async fn get_dns(State(fake): State<Shared>, Path((zone, id)): Path<(String, String)>) -> Json<Value> {
     let record = fake
         .lock()
         .unwrap()
         .dns
         .iter()
-        .find(|r| r["id"] == id)
+        .find(|r| r["id"] == id && r.get("_zone").and_then(Value::as_str).unwrap_or(ZONE) == zone)
         .cloned()
         .unwrap_or(json!({}));
     ok(record)
@@ -321,7 +336,7 @@ async fn fake_cloudflare() -> (String, Shared) {
         .route("/zones/{id}/dns_records", get(list_dns).post(create_dns))
         .route(
             "/zones/{id}/dns_records/{record}",
-            get(get_dns).delete(delete_dns),
+            get(get_dns).put(update_dns).delete(delete_dns),
         )
         .route(
             "/accounts/{account}/cfd_tunnel",

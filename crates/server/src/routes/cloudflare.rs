@@ -455,27 +455,25 @@ async fn remove_tunnel(
         report.warnings.push(error.public_message());
     }
     cf::remove_replicas(&state).await;
-    for host in &settings.published_hosts {
-        match client.dns_records(&settings.zone_id, host).await {
-            Ok(records) => {
-                for record in records.iter().filter(|record| {
-                    record.kind == "CNAME"
-                        && record
-                            .content
-                            .eq_ignore_ascii_case(&tunnel_cname(&tunnel_id))
-                }) {
-                    if !cf::owned_record_or_legacy(&state, &client, &settings.zone_id, record)
-                        .await?
-                    {
-                        continue;
-                    }
-                    match client.delete_dns(&settings.zone_id, &record.id).await {
-                        Ok(()) => report.removed_dns.push(host.clone()),
-                        Err(error) => report.warnings.push(error.public_message()),
-                    }
+    for zone in zones::list(&state.pool).await? {
+        if !zone.enabled || !zone.accessible || zone.status != "active" {
+            report.warnings.push(format!("{}: disabled or inaccessible; DNS records retained", zone.name));
+            continue;
+        }
+        let managed: Vec<String> = sqlx::query_scalar("SELECT DISTINCT host FROM domain_dns_records WHERE zone_id=$1 AND kind='CNAME' AND lower(content)=lower($2)")
+            .bind(&zone.zone_id).bind(tunnel_cname(&tunnel_id)).fetch_all(&state.pool).await.map_err(ApiError::database)?;
+        let mut hosts = zone.published_hosts.clone();
+        hosts.extend(managed);
+        hosts.sort(); hosts.dedup();
+        for host in hosts {
+            match cf::cleanup_tunnel_host(&state, &client, &zone.zone_id, &host, &tunnel_id).await {
+                Ok(()) => {
+                    report.removed_dns.push(host.clone());
+                    sqlx::query("UPDATE cloudflare_zones SET published_hosts=array_remove(published_hosts,$2) WHERE zone_id=$1")
+                        .bind(&zone.zone_id).bind(&host).execute(&state.pool).await.map_err(ApiError::database)?;
                 }
+                Err(error) => report.warnings.push(format!("{} / {host}: {}", zone.name,error.public_message())),
             }
-            Err(error) => report.warnings.push(error.public_message()),
         }
     }
     let mut apps: Vec<&String> = settings.agent_bypass_app_ids.iter().collect();
@@ -975,7 +973,8 @@ async fn readiness(
 ) -> Result<Json<Readiness>, ApiError> {
     auth.require_admin()?;
     let settings: Settings = cf::load(&state.pool).await?;
-    let (hosts, skipped) = cf::wanted_hosts(&state.pool, &settings.zone_name).await?;
+    let (resolved, skipped) = cf::wanted_hosts(&state.pool).await?;
+    let hosts: Vec<_> = resolved.iter().map(|h|h.host.clone()).collect();
     let connections = match (&settings.tunnel_id, &settings.api_token_enc) {
         (Some(tunnel), Some(_)) => match cf::client(&state, &settings) {
             Ok(client) => client

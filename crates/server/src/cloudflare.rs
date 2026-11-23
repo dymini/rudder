@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use axum::http::{Method, StatusCode};
 use rudder_core::{
-    cloudflared_spec, host_in_zone, plan_dns, replica_container_name, tunnel_cname, tunnel_config,
+    cloudflared_spec, plan_dns, replica_container_name, tunnel_cname, tunnel_config,
     validate_host, DnsAction, DnsRecord, NodeDriver, MAX_TUNNEL_REPLICAS,
 };
 use serde::Serialize;
@@ -470,6 +470,12 @@ impl Cf {
         .map_err(|e| e.into_api("deleting a DNS record"))
     }
 
+    pub async fn replace_dns(&self, zone: &str, id: &str, host: &str, kind: &str, content: &str) -> Result<(), ApiError> {
+        self.call(Method::PUT, &format!("/zones/{zone}/dns_records/{id}"), Some(&json!({
+            "type":kind,"name":host,"content":content,"proxied":true,"ttl":1,"comment":"Managed by Rudder (service domain)"
+        }))).await.map(|_|()).map_err(|e|e.into_api("updating a DNS record"))
+    }
+
     pub async fn rudder_record(&self, zone: &str, id: &str) -> Result<bool, ApiError> {
         let record = self
             .call(
@@ -911,12 +917,19 @@ pub struct SkippedHost {
     pub reason: String,
 }
 
+#[derive(Clone, Serialize, ToSchema)]
+pub struct HostZone {
+    pub host: String,
+    pub zone_id: String,
+    pub zone_name: String,
+}
+
 /// Hostnames the local server answers for: app domains, the panel domain, and
 /// the Rudder Access portal.
 pub async fn wanted_hosts(
     pool: &PgPool,
-    zone: &str,
-) -> Result<(Vec<String>, Vec<SkippedHost>), ApiError> {
+) -> Result<(Vec<HostZone>, Vec<SkippedHost>), ApiError> {
+    let zones = crate::cloudflare_zones::list(pool).await?;
     let rows: Vec<String> = sqlx::query_scalar(
         r#"
         SELECT lower(d.host) FROM domains d
@@ -946,16 +959,14 @@ pub async fn wanted_hosts(
                 host,
                 reason: "wildcard or unusual names are not published through the tunnel".into(),
             });
-        } else if !host_in_zone(&host, zone) {
-            skipped.push(SkippedHost {
-                host,
-                reason: format!("not in the {zone} zone"),
-            });
         } else {
-            hosts.push(host);
+            match crate::cloudflare_zones::resolve(&zones, &host) {
+                Ok(zone) => hosts.push(HostZone { host, zone_id: zone.zone_id.clone(), zone_name: zone.name.clone() }),
+                Err(error) => skipped.push(SkippedHost { host, reason: error.public_message() }),
+            }
         }
     }
-    hosts.sort();
+    hosts.sort_by(|a,b| a.host.cmp(&b.host));
     skipped.sort_by(|a, b| a.host.cmp(&b.host));
     Ok((hosts, skipped))
 }
@@ -963,6 +974,8 @@ pub async fn wanted_hosts(
 #[derive(Serialize, ToSchema, Clone)]
 pub struct DnsOutcome {
     pub host: String,
+    pub zone_id: String,
+    pub zone_name: String,
     /// `created`, `kept`, `replaced`, or `conflict`.
     pub action: String,
     pub detail: Option<String>,
@@ -973,8 +986,43 @@ pub struct SyncReport {
     pub hostnames: Vec<String>,
     pub skipped: Vec<SkippedHost>,
     pub dns: Vec<DnsOutcome>,
+    pub zones: Vec<ZonePublishResult>,
     /// Hostnames whose DNS record Rudder did not change.
     pub pending: usize,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct ZonePublishResult {
+    pub zone_id: String,
+    pub zone_name: String,
+    pub published_hosts: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+async fn publish_host(state: &AppState, cf: &Cf, tunnel: &str, host: &HostZone, overwrite: bool) -> Result<(&'static str, Option<String>), ApiError> {
+    let records = cf.dns_records(&host.zone_id, &host.host).await?;
+    let plan = plan_dns(std::slice::from_ref(&host.host), tunnel, &records, overwrite);
+    let (action, detail) = match plan.into_iter().next() {
+        Some(DnsAction::Keep { .. }) => {
+            for record in &records {
+                if record.kind == "CNAME" && record.content.eq_ignore_ascii_case(&tunnel_cname(tunnel))
+                    && owned_record_or_legacy(state, cf, &host.zone_id, record).await? {
+                    crate::domain_routing::remember(state, &host.zone_id, &host.host, &record.id, &record.kind, &record.content).await?;
+                }
+            }
+            return Ok(("kept", None));
+        }
+        Some(DnsAction::Conflict { was, .. }) => return Ok(("conflict", Some(was))),
+        Some(DnsAction::Replace {record_id, was, ..}) => {
+            cf.replace_dns(&host.zone_id, &record_id, &host.host, "CNAME", &tunnel_cname(tunnel)).await?;
+            crate::domain_routing::remember(state, &host.zone_id, &host.host, &record_id, "CNAME", &tunnel_cname(tunnel)).await?;
+            return Ok(("replaced", Some(was)));
+        }
+        _ => ("created", None),
+    };
+    let id = cf.create_cname(&host.zone_id, &host.host, tunnel).await?;
+    crate::domain_routing::remember(state, &host.zone_id, &host.host, &id, "CNAME", &tunnel_cname(tunnel)).await?;
+    Ok((action, detail))
 }
 
 /// Push the hostnames to the tunnel, point their DNS at it, and switch Traefik
@@ -992,147 +1040,89 @@ pub(crate) async fn sync_hostnames(
 ) -> Result<SyncReport, ApiError> {
     let settings = load(&state.pool).await?;
     let tunnel_id = require_tunnel(&settings)?.to_owned();
-    if settings.zone_id.is_empty() {
-        return Err(bad("not_configured", "save the Cloudflare zone first"));
-    }
     let cf = client(state, &settings)?;
-    let (hosts, skipped) = wanted_hosts(&state.pool, &settings.zone_name).await?;
-    let config = tunnel_config(&hosts).map_err(core_error)?;
-    cf.put_tunnel_config(&settings.account_id, &tunnel_id, &config)
-        .await?;
-    crate::domain_routing::reconcile_tunnel(state, overwrite_dns, overwrite_host).await?;
-
-    let mut existing = Vec::new();
-    for host in &hosts {
-        existing.extend(cf.dns_records(&settings.zone_id, host).await?);
-    }
-    let plan: Vec<_> = hosts
-        .iter()
-        .flat_map(|host| {
-            plan_dns(
-                std::slice::from_ref(host),
-                &tunnel_id,
-                &existing,
-                overwrite_dns && overwrite_host.is_none_or(|allowed| allowed == host),
-            )
-        })
-        .collect();
-    let mut dns = Vec::new();
-    let mut published = Vec::new();
-    for action in plan {
-        match action {
-            DnsAction::Create { host } => {
-                let id = cf
-                    .create_cname(&settings.zone_id, &host, &tunnel_id)
-                    .await?;
-                crate::domain_routing::remember(
-                    state,
-                    &settings.zone_id,
-                    &host,
-                    &id,
-                    "CNAME",
-                    &tunnel_cname(&tunnel_id),
-                )
-                .await?;
-                published.push(host.clone());
-                dns.push(DnsOutcome {
-                    host,
-                    action: "created".into(),
-                    detail: None,
-                });
-            }
-            DnsAction::Keep { host } => {
-                for record in cf.dns_records(&settings.zone_id, &host).await? {
-                    if record.kind == "CNAME"
-                        && record
-                            .content
-                            .eq_ignore_ascii_case(&tunnel_cname(&tunnel_id))
-                        && cf.rudder_record(&settings.zone_id, &record.id).await?
-                    {
-                        crate::domain_routing::remember(
-                            state,
-                            &settings.zone_id,
-                            &host,
-                            &record.id,
-                            &record.kind,
-                            &record.content,
-                        )
-                        .await?;
-                    }
+    let (hosts, skipped) = wanted_hosts(&state.pool).await?;
+    let available = crate::cloudflare_zones::list(&state.pool).await?;
+    let mut serving = settings.published_hosts.clone();
+    serving.extend(hosts.iter().map(|h|h.host.clone()));
+    serving.sort(); serving.dedup();
+    cf.put_tunnel_config(&settings.account_id, &tunnel_id, &tunnel_config(&serving).map_err(core_error)?).await?;
+    let mut dns = crate::domain_routing::reconcile_tunnel(state, overwrite_dns, overwrite_host).await?;
+    let mut published = settings.published_hosts.clone();
+    let mut zone_results = Vec::new();
+    for zone in &available {
+        let mut kept = zone.published_hosts.clone();
+        let mut errors = Vec::new();
+        if zone.enabled && zone.accessible && zone.status == "active" {
+            for host in hosts.iter().filter(|h| h.zone_id == zone.zone_id) {
+                let result = publish_host(state, &cf, &tunnel_id, host, overwrite_dns && overwrite_host.is_none_or(|h| h == host.host)).await;
+                let (action, detail) = match result {
+                    Ok(result) => result,
+                    Err(error) => ("error", Some(error.public_message())),
+                };
+                if matches!(action, "error" | "conflict") {
+                    errors.push(format!("{}: {}", host.host, detail.as_deref().unwrap_or(action)));
+                } else {
+                    if !published.contains(&host.host) { published.push(host.host.clone()); }
+                    if !kept.contains(&host.host) { kept.push(host.host.clone()); }
                 }
-                published.push(host.clone());
-                dns.push(DnsOutcome {
-                    host,
-                    action: "kept".into(),
-                    detail: None,
-                });
+                dns.push(DnsOutcome { host: host.host.clone(), zone_id: zone.zone_id.clone(), zone_name: zone.name.clone(), action: action.into(), detail });
             }
-            DnsAction::Replace {
-                host,
-                record_id,
-                was,
-            } => {
-                cf.delete_dns(&settings.zone_id, &record_id).await?;
-                let id = cf
-                    .create_cname(&settings.zone_id, &host, &tunnel_id)
-                    .await?;
-                crate::domain_routing::remember(
-                    state,
-                    &settings.zone_id,
-                    &host,
-                    &id,
-                    "CNAME",
-                    &tunnel_cname(&tunnel_id),
-                )
-                .await?;
-                published.push(host.clone());
-                dns.push(DnsOutcome {
-                    host,
-                    action: "replaced".into(),
-                    detail: Some(was),
-                });
+            for stale in &zone.published_hosts {
+                if hosts.iter().any(|h| h.host == *stale) || skipped.iter().any(|h| h.host == *stale) { continue; }
+                let cleanup = cleanup_tunnel_host(state, &cf, &zone.zone_id, stale, &tunnel_id).await;
+                match cleanup {
+                    Ok(()) => { kept.retain(|h| h != stale); published.retain(|h| h != stale); }
+                    Err(error) => { let detail = error.public_message(); errors.push(format!("{stale}: {detail}")); dns.push(DnsOutcome { host: stale.clone(), zone_id: zone.zone_id.clone(), zone_name: zone.name.clone(), action: "error".into(), detail: Some(detail) }); }
+                }
             }
-            DnsAction::Conflict { host, was } => dns.push(DnsOutcome {
-                host,
-                action: "conflict".into(),
-                detail: Some(was),
-            }),
+        } else {
+            errors.push(format!("{}: disabled or inaccessible; existing DNS and routes retained", zone.name));
         }
-    }
-    // Hostnames that left the list lose the record Rudder made for them.
-    for stale in settings
-        .published_hosts
-        .iter()
-        .filter(|host| !hosts.contains(host))
-    {
-        for record in cf.dns_records(&settings.zone_id, stale).await? {
-            if owned_record_or_legacy(state, &cf, &settings.zone_id, &record).await?
-                && record.kind == "CNAME"
-                && record
-                    .content
-                    .eq_ignore_ascii_case(&tunnel_cname(&tunnel_id))
-            {
-                cf.delete_dns(&settings.zone_id, &record.id).await?;
-            }
-        }
+        zone_results.push(ZonePublishResult { zone_id: zone.zone_id.clone(), zone_name: zone.name.clone(), published_hosts: kept, errors });
     }
     published.sort();
+    published.dedup();
+    let mut ingress_hosts = published.clone();
+    ingress_hosts.extend(hosts.iter().map(|h|h.host.clone()));
+    ingress_hosts.sort(); ingress_hosts.dedup();
+    let config = tunnel_config(&ingress_hosts).map_err(core_error)?;
+    cf.put_tunnel_config(&settings.account_id, &tunnel_id, &config).await?;
+    let mut tx = state.pool.begin().await.map_err(ApiError::database)?;
+    for zone in &zone_results {
+        sqlx::query("UPDATE cloudflare_zones SET published_hosts=$2 WHERE zone_id=$1")
+            .bind(&zone.zone_id).bind(&zone.published_hosts).execute(&mut *tx).await.map_err(ApiError::database)?;
+    }
     sqlx::query(
         r#"UPDATE cloudflare_settings
            SET tunnel_published = TRUE, published_hosts = $1, updated_at = now()
            WHERE id = TRUE"#,
     )
     .bind(&published)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await
     .map_err(ApiError::database)?;
-    let pending = dns.iter().filter(|d| d.action == "conflict").count();
+    tx.commit().await.map_err(ApiError::database)?;
+    let pending = dns.iter().filter(|d| matches!(d.action.as_str(), "conflict" | "error")).count();
     Ok(SyncReport {
-        hostnames: hosts,
+        hostnames: hosts.into_iter().map(|h|h.host).collect(),
         skipped,
         dns,
+        zones: zone_results,
         pending,
     })
+}
+
+pub(crate) async fn cleanup_tunnel_host(state: &AppState, cf: &Cf, zone: &str, host: &str, tunnel: &str) -> Result<(), ApiError> {
+    for record in cf.dns_records(zone, host).await? {
+        if record.kind == "CNAME" && record.content.eq_ignore_ascii_case(&tunnel_cname(tunnel))
+            && owned_record_or_legacy(state, cf, zone, &record).await? {
+            cf.delete_dns(zone, &record.id).await?;
+            sqlx::query("DELETE FROM domain_dns_records WHERE zone_id=$1 AND record_id=$2")
+                .bind(zone).bind(&record.id).execute(&state.pool).await.map_err(ApiError::database)?;
+        }
+    }
+    Ok(())
 }
 
 // ----------------------------------------------------- Access token checks
