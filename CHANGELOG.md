@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Added
+- **Manage multiple Cloudflare zones in one account.** Discover zones with the connected token and enable only the zones Rudder should manage. The existing zone stays enabled on upgrade; other discovered zones start disabled. Tokens need Zone Read plus DNS Edit for each enabled zone.
+
 ## [0.12.1] - 2026-11-23
 
 ### Fixed

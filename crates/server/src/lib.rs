@@ -10,6 +10,7 @@ mod backup;
 mod build_queue;
 mod cache;
 mod cloudflare;
+mod cloudflare_zones;
 mod config;
 mod db;
 mod deploy;

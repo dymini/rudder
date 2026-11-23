@@ -51,8 +51,9 @@ use crate::routes::catalog::{
 use crate::routes::cloudflare::{
     CloudflareStatus, ConfirmSsh, CreateTunnel, PreflightCheckView, PublishRequest, Readiness,
     SaveCredentials, SetEnforcement, SetReplicas, SetupAccess, SetupSsh, SshScript, SshSetup,
-    TeardownReport,
+    TeardownReport, SetZone,
 };
+use crate::cloudflare_zones::CloudflareZone;
 use crate::routes::databases::{
     ConnectionView, CreateDatabase, DatabaseEngineView, LifecycleView, LogsView, UpdateDatabase,
 };
@@ -301,6 +302,8 @@ use crate::routes::mfa::{
         AccessDepartmentGrant,
         AccessIntrospect,
         CloudflareStatus,
+        CloudflareZone,
+        SetZone,
         CloudflaredRelease,
         TunnelConnection,
         TunnelReplica,
@@ -2488,7 +2491,10 @@ pub(crate) const ROUTES: &[Route] = &[
     Route { path: "/api/v1/security/rate-limits/stats", method: HttpMethod::Get, tag: "security", summary: "Allowed and blocked requests for the last day", request: None, response: Some("[RateLimitStat]"), status: 200 },
     Route { path: "/api/v1/security/edge", method: HttpMethod::Get, tag: "security", summary: "HTTP and raw-IP request counts, and recent rate-limit blocks", request: None, response: Some("EdgeStats"), status: 200 },
     Route { path: "/api/v1/cloudflare", method: HttpMethod::Get, tag: "cloudflare", summary: "Cloudflare Zero Trust settings and tunnel status (admin)", request: None, response: Some("CloudflareStatus"), status: 200 },
-    Route { path: "/api/v1/cloudflare/credentials", method: HttpMethod::Put, tag: "cloudflare", summary: "Save the Cloudflare account, zone, and API token after checking them (admin, write)", request: Some("SaveCredentials"), response: Some("CloudflareStatus"), status: 200 },
+    Route { path: "/api/v1/cloudflare/credentials", method: HttpMethod::Put, tag: "cloudflare", summary: "Save the account and token, discover zones and optionally enable a legacy zone id (admin, write)", request: Some("SaveCredentials"), response: Some("CloudflareStatus"), status: 200 },
+    Route { path: "/api/v1/cloudflare/zones", method: HttpMethod::Get, tag: "cloudflare", summary: "List discovered zones, enablement and per-zone visibility errors (admin)", request: None, response: Some("[CloudflareZone]"), status: 200 },
+    Route { path: "/api/v1/cloudflare/zones/refresh", method: HttpMethod::Post, tag: "cloudflare", summary: "Refresh all pages of zones visible to the connected account token without deleting DNS records (admin, write)", request: None, response: Some("[CloudflareZone]"), status: 200 },
+    Route { path: "/api/v1/cloudflare/zones/{zone_id}", method: HttpMethod::Put, tag: "cloudflare", summary: "Enable or disable a discovered zone without deleting its records (admin, write)", request: Some("SetZone"), response: Some("[CloudflareZone]"), status: 200 },
     Route { path: "/api/v1/cloudflare/tunnel", method: HttpMethod::Post, tag: "cloudflare", summary: "Create the tunnel and start its replicas (admin, write)", request: Some("CreateTunnel"), response: Some("CloudflareStatus"), status: 201 },
     Route { path: "/api/v1/cloudflare/tunnel", method: HttpMethod::Delete, tag: "cloudflare", summary: "Remove the tunnel, its DNS records, Access applications, and replicas (admin, write)", request: None, response: Some("TeardownReport"), status: 200 },
     Route { path: "/api/v1/cloudflare/tunnel/replicas", method: HttpMethod::Put, tag: "cloudflare", summary: "Set the number of tunnel replicas, 1 to 5 (admin, write)", request: Some("SetReplicas"), response: Some("CloudflareStatus"), status: 200 },

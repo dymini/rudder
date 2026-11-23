@@ -132,6 +132,10 @@ impl Cf {
         path: &str,
         body: Option<&Value>,
     ) -> Result<Value, CfError> {
+        self.call_response(method, path, body).await.map(|parsed| parsed.get("result").cloned().unwrap_or(Value::Null))
+    }
+
+    async fn call_response(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Value, CfError> {
         let mut request = self
             .http
             .request(method, format!("{}{path}", self.base))
@@ -152,7 +156,7 @@ impl Cf {
         let parsed: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
         let success = parsed.get("success").and_then(Value::as_bool);
         if status.is_success() && success != Some(false) {
-            return Ok(parsed.get("result").cloned().unwrap_or(Value::Null));
+            return Ok(parsed);
         }
         let message = parsed
             .get("errors")
@@ -173,6 +177,33 @@ impl Cf {
             status: status.as_u16(),
             message: message.chars().take(300).collect(),
         })
+    }
+
+    pub async fn zones(&self, account: &str) -> Result<Vec<crate::cloudflare_zones::CloudflareZone>, ApiError> {
+        let mut zones = Vec::new();
+        for page in 1..=10000 {
+            let response = self.call_response(Method::GET, &format!("/zones?account.id={account}&per_page=50&page={page}"), None).await
+                .map_err(|e| e.into_api("discovering Cloudflare zones"))?;
+            let rows = response.get("result").and_then(Value::as_array).ok_or_else(|| bad("cloudflare", "Cloudflare returned an invalid zone list"))?;
+            for row in rows {
+                if row.pointer("/account/id").and_then(Value::as_str) != Some(account) {
+                    return Err(bad("zone_account_mismatch", "discovery returned a zone in another account"));
+                }
+                let id = row.get("id").and_then(Value::as_str).unwrap_or_default();
+                let name = row.get("name").and_then(Value::as_str).unwrap_or_default().to_ascii_lowercase();
+                rudder_core::validate_cloudflare_id("zone id", id).map_err(core_error)?;
+                validate_host(&name).map_err(core_error)?;
+                zones.push(crate::cloudflare_zones::CloudflareZone {
+                    zone_id: id.into(), account_id: account.into(), name,
+                    status: row.get("status").and_then(Value::as_str).unwrap_or("unknown").into(),
+                    enabled: false, accessible: true, last_error: None,
+                    last_seen_at: chrono::Utc::now(), published_hosts: Vec::new(),
+                });
+            }
+            let pages = response.pointer("/result_info/total_pages").and_then(Value::as_u64);
+            if pages.is_some_and(|pages| page >= pages) || (pages.is_none() && rows.len() < 50) { return Ok(zones); }
+        }
+        Err(bad("cloudflare", "Cloudflare zone discovery exceeded the pagination limit"))
     }
 
     /// Check the zone and return its name, refusing a zone in another account.

@@ -29,6 +29,9 @@ const CA_KEY: &str =
 
 #[derive(Default)]
 struct Fake {
+    zones: Option<Vec<Value>>,
+    fail_discovery: bool,
+    zone_page_size: usize,
     fail_config: bool,
     fail_releases: bool,
     dns: Vec<Value>,
@@ -94,6 +97,20 @@ async fn zone(Path(id): Path<String>) -> Json<Value> {
 
 async fn empty_list() -> Json<Value> {
     ok(json!([]))
+}
+
+async fn list_zones(State(fake): State<Shared>, Query(query): Query<HashMap<String, String>>) -> Json<Value> {
+    let mut fake = fake.lock().unwrap();
+    if fake.fail_discovery {
+        return Json(json!({"success":false,"errors":[{"code":10000,"message":"Zone Read permission denied"}]}));
+    }
+    let page: usize = query.get("page").unwrap().parse().unwrap();
+    assert_eq!(query.get("account.id").unwrap(), ACCOUNT);
+    fake.calls.push(format!("zones page {page}"));
+    let zones = fake.zones.clone().unwrap_or_else(|| vec![json!({"id":ZONE,"name":"example.com","status":"active","account":{"id":ACCOUNT}})]);
+    let size = if fake.zone_page_size == 0 {50} else {fake.zone_page_size};
+    let rows: Vec<_> = zones.iter().skip((page-1)*size).take(size).cloned().collect();
+    Json(json!({"success":true,"result":rows,"result_info":{"total_pages":zones.len().div_ceil(size).max(1)}}))
 }
 
 async fn create_tunnel(State(fake): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
@@ -299,6 +316,7 @@ async fn delete_target(
 async fn fake_cloudflare() -> (String, Shared) {
     let fake = Shared::default();
     let router = axum::Router::new()
+        .route("/zones", get(list_zones))
         .route("/zones/{id}", get(zone))
         .route("/zones/{id}/dns_records", get(list_dns).post(create_dns))
         .route(
@@ -788,6 +806,58 @@ async fn domain_routing_is_opt_in_and_dns_cleanup_respects_ownership(pool: PgPoo
         .unwrap()
         .iter()
         .any(|r| r["kind"] == "access"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn zones_discovery_is_paginated_and_permission_loss_is_non_destructive(pool: PgPool) {
+    let (cloudflare, fake) = fake_cloudflare().await;
+    {
+        let mut state = fake.lock().unwrap();
+        state.zone_page_size = 1;
+        state.zones = Some(vec![
+            json!({"id":ZONE,"name":"example.com","status":"active","account":{"id":ACCOUNT}}),
+            json!({"id":OTHER_ZONE,"name":"second.net","status":"active","account":{"id":ACCOUNT}}),
+        ]);
+    }
+    let data_dir = scratch_dir();
+    let app = app(pool.clone(), &data_dir, &cloudflare);
+    let session = owner(&app).await;
+    let saved = call(&app,"PUT","/api/v1/cloudflare/credentials",&session,Some(json!({"account_id":ACCOUNT,"api_token":TOKEN}))).await;
+    assert_eq!(saved.status,StatusCode::OK,"{}",saved.body);
+    assert_eq!(saved.body["zone_id"], "");
+    let discovered = call(&app,"GET","/api/v1/cloudflare/zones",&session,None).await;
+    assert_eq!(discovered.body.as_array().unwrap().len(),2);
+    assert!(discovered.body.as_array().unwrap().iter().all(|z| z["enabled"] == false));
+    assert!(fake.lock().unwrap().calls.iter().any(|c| c == "zones page 2"));
+    let enabled = call(&app,"PUT",&format!("/api/v1/cloudflare/zones/{OTHER_ZONE}"),&session,Some(json!({"enabled":true}))).await;
+    assert_eq!(enabled.status,StatusCode::OK,"{}",enabled.body);
+    let status = call(&app,"GET","/api/v1/cloudflare",&session,None).await;
+    assert_eq!(status.body["zone_name"],"second.net");
+    sqlx::query("INSERT INTO domain_dns_records VALUES($1,'app.second.net','retained','A','192.0.2.10')")
+        .bind(OTHER_ZONE).execute(&pool).await.unwrap();
+    fake.lock().unwrap().zones = Some(vec![]);
+    let lost = call(&app,"POST","/api/v1/cloudflare/zones/refresh",&session,None).await;
+    assert_eq!(lost.status,StatusCode::OK,"{}",lost.body);
+    assert!(lost.body.as_array().unwrap().iter().all(|z| z["accessible"] == false));
+    fake.lock().unwrap().fail_discovery = true;
+    let denied = call(&app,"POST","/api/v1/cloudflare/zones/refresh",&session,None).await;
+    assert_eq!(denied.status,StatusCode::FAILED_DEPENDENCY);
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM domain_dns_records").fetch_one(&pool).await.unwrap();
+    assert_eq!(count,1);
+    let enabled: bool = sqlx::query_scalar("SELECT enabled FROM cloudflare_zones WHERE zone_id=$1").bind(OTHER_ZONE).fetch_one(&pool).await.unwrap();
+    assert!(enabled);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn zones_migration_preserves_legacy_zone_and_publication(pool: PgPool) {
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::raw_sql("CREATE TEMP TABLE cloudflare_settings(zone_id TEXT,account_id TEXT,zone_name TEXT,published_hosts TEXT[]); INSERT INTO cloudflare_settings VALUES('legacy','account','Example.Com',ARRAY['app.example.com']); DROP TABLE cloudflare_zones;")
+        .execute(&mut *tx).await.unwrap();
+    sqlx::raw_sql(include_str!("../migrations/0027_cloudflare_zones.sql")).execute(&mut *tx).await.unwrap();
+    let row: (String,bool,Vec<String>) = sqlx::query_as("SELECT name,enabled,published_hosts FROM cloudflare_zones WHERE zone_id='legacy'")
+        .fetch_one(&mut *tx).await.unwrap();
+    assert_eq!(row,("example.com".into(),true,vec!["app.example.com".into()]));
+    tx.rollback().await.unwrap();
 }
 
 #[sqlx::test(migrations = "./migrations")]
