@@ -457,7 +457,9 @@ fn app(pool: PgPool, data_dir: &std::path::Path, cloudflare: &str) -> axum::Rout
         ),
     ]);
     let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::router(rudder_server::AppState::new(pool, config))
+    rudder_server::router(rudder_server::AppState::new(pool.clone(), config)).layer(
+        axum::middleware::from_fn_with_state(pool, finish_mutation_request),
+    )
 }
 
 async fn wait_for_mutation_rollbacks(pool: &PgPool) {
@@ -476,15 +478,21 @@ async fn wait_for_mutation_rollbacks(pool: &PgPool) {
     .expect("Cloudflare mutation transactions must finish rolling back");
 }
 
-async fn finish_credential_request(
+async fn finish_mutation_request(
     State(pool): State<PgPool>,
     request: AxumRequest,
     next: Next,
 ) -> Response {
+    let mutation = !matches!(request.method().as_str(), "GET" | "HEAD" | "OPTIONS");
     let response = next.run(request).await;
     // SQLx queues rollback on drop; wait for PostgreSQL before the next request.
-    // Contention assertions keep their deliberately held locks until the response.
-    if response.status() != StatusCode::CONFLICT {
+    // Do not wait for deliberately held locks or accepted background updates.
+    if mutation
+        && !matches!(
+            response.status(),
+            StatusCode::CONFLICT | StatusCode::ACCEPTED
+        )
+    {
         wait_for_mutation_rollbacks(&pool).await;
     }
     response
@@ -1017,9 +1025,7 @@ async fn zones_migration_preserves_legacy_zone_and_publication(pool: PgPool) {
 async fn credentials_are_checked_and_never_returned(pool: PgPool) {
     let (cloudflare, fake) = fake_cloudflare().await;
     let data_dir = scratch_dir();
-    let app = app(pool.clone(), &data_dir, &cloudflare).layer(
-        axum::middleware::from_fn_with_state(pool.clone(), finish_credential_request),
-    );
+    let app = app(pool.clone(), &data_dir, &cloudflare);
 
     let anonymous = call_with(&app, "GET", "/api/v1/cloudflare", None, None, None).await;
     assert_eq!(anonymous.status, StatusCode::UNAUTHORIZED);
