@@ -973,6 +973,16 @@ async fn readiness(
             .fetch_one(&state.pool)
             .await
             .map_err(ApiError::database)?;
+    if let Some(message) =
+        crate::routes::access::portal_cloudflare_warning(&state, portal.as_deref()).await?
+    {
+        checks.push(PreflightCheckView {
+            id: "rudder_access_portal_cloudflare".into(),
+            ok: false,
+            required: true,
+            message,
+        });
+    }
     if let Some(host) = portal.filter(|host| !host.is_empty()) {
         let ok = hosts.contains(&host) && settings.published_hosts.contains(&host);
         checks.push(PreflightCheckView {

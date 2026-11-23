@@ -72,6 +72,8 @@ Both methods require a Cloudflare Turnstile token. Rudder checks the token on th
 
 After sign-in, the portal lists the internal apps that person may open. Choosing an app sends them to that app's domain. If they are not signed in there yet, Rudder sends them back through the portal and then sets a cookie on the app's own hostname.
 
+If Cloudflare Access protects the panel hostname, using that same hostname for the Rudder Access portal also puts `/access`, login APIs, Google callbacks and their assets behind Cloudflare sign-in. Ordinary Rudder Access users may not be authorized there. Access settings and tunnel readiness warn about this combination, including when the portal hostname is left blank. Prefer a dedicated portal hostname, publish its DNS/tunnel route, add it to the Turnstile allowlist, and update Google's redirect URI. Rudder does not automatically create Cloudflare bypass applications or expose any administrative APIs.
+
 ## Who may open an app
 
 On the app's **Domains & SSL** tab, turn on **Require Rudder Access** and list the email addresses. You can also allow a whole department or a rank. A department grant includes the departments nested under it. A rank grant matches that rank exactly.
@@ -92,7 +94,7 @@ The callback router takes priority over the app router, bypasses forward-auth on
 
 Those headers are trustworthy when network isolation is on, because the app is not published on a host port and visitors cannot connect to it except through Traefik. If you turn isolation off, do not trust the headers. Use the introspect API instead.
 
-The panel hostname and the Access portal hostname are not gated, so a rate limit or a mistake cannot lock the operator out of Rudder.
+The panel hostname and the Access portal hostname are not gated by Rudder Access. Optional Cloudflare Access can still protect the panel hostname; use a dedicated portal hostname as described above when coworkers should not need Cloudflare sign-in.
 
 ## Departments and ranks
 

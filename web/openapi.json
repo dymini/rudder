@@ -7167,6 +7167,7 @@
       "AccessSettingsView": {
         "type": "object",
         "required": [
+          "warnings",
           "turnstile_site_key",
           "has_turnstile_secret",
           "turnstile_hostnames",
@@ -7213,6 +7214,12 @@
           },
           "turnstile_site_key": {
             "type": "string"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

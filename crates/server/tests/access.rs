@@ -462,6 +462,96 @@ async fn gate_secret(pool: &PgPool) -> String {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn shared_cloudflare_portal_warns_without_opening_admin_routes(pool: PgPool) {
+    let siteverify = turnstile().await;
+    let url = std::env::var("DATABASE_URL").unwrap();
+    let app = rudder_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
+    let owner=call(&app,"POST","/api/v1/setup",None,None,Some(json!({"setup_token":"test-setup-token","email":"owner@example.com","password":"correct-horse-battery"}))).await;
+    assert_eq!(owner.status, StatusCode::OK, "{}", owner.body);
+    let cookie = owner.cookie.unwrap();
+    sqlx::query("UPDATE panel_settings SET panel_domain='panel.example.com' WHERE id=TRUE")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let settings = call(
+        &app,
+        "GET",
+        "/api/v1/access/settings",
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(settings.body["warnings"], json!([]));
+    sqlx::query("UPDATE cloudflare_settings SET access_enforced=TRUE,team_domain='myteam.cloudflareaccess.com',access_aud='test-audience' WHERE id=TRUE").execute(&pool).await.unwrap();
+    for portal in [None, Some("panel.example.com"), Some("access.example.com")] {
+        sqlx::query("UPDATE access_settings SET portal_host=$1 WHERE id=TRUE")
+            .bind(portal)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let settings = call(
+            &app,
+            "GET",
+            "/api/v1/access/settings",
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(settings.status, StatusCode::OK, "{}", settings.body);
+        let conflict = portal != Some("access.example.com");
+        assert_eq!(
+            !settings.body["warnings"].as_array().unwrap().is_empty(),
+            conflict
+        );
+        let readiness = call(
+            &app,
+            "GET",
+            "/api/v1/cloudflare/preflight",
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(readiness.status, StatusCode::OK, "{}", readiness.body);
+        let diagnostic = readiness.body["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["id"] == "rudder_access_portal_cloudflare");
+        assert_eq!(diagnostic.is_some(), conflict);
+        if let Some(diagnostic) = diagnostic {
+            assert_eq!(diagnostic["ok"], false);
+            assert_eq!(diagnostic["required"], true);
+            assert!(diagnostic["message"]
+                .as_str()
+                .unwrap()
+                .contains("dedicated portal hostname"));
+        }
+    }
+    for path in [
+        "/access",
+        "/api/v1/access/settings",
+        "/api/v1/access/login/google",
+        "/assets/app.js",
+        "/api/v1/me",
+    ] {
+        let blocked = call_host(
+            &app,
+            "GET",
+            path,
+            Some("panel.example.com"),
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(blocked.status, StatusCode::FORBIDDEN, "{path}");
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn parallel_code_guesses_share_five_attempts(pool: PgPool) {
     let siteverify = turnstile().await;
     let url = std::env::var("DATABASE_URL")

@@ -103,6 +103,7 @@ pub struct AccessPublic {
 
 #[derive(Serialize, ToSchema)]
 pub struct AccessSettingsView {
+    pub warnings: Vec<String>,
     pub portal_host: Option<String>,
     pub turnstile_site_key: String,
     pub has_turnstile_secret: bool,
@@ -386,7 +387,7 @@ async fn get_settings(
 ) -> Result<Json<AccessSettingsView>, ApiError> {
     let settings = load_settings(&state).await?;
     let origin = portal_origin(&state, &settings, &headers).await?;
-    Ok(Json(settings_view(&settings, &origin)))
+    Ok(Json(settings_view(&state, &settings, &origin).await?))
 }
 
 async fn put_settings(
@@ -531,7 +532,7 @@ async fn put_settings(
     let _ = crate::publish::publish_local(&state).await;
     let settings = load_settings(&state).await?;
     let origin = portal_origin(&state, &settings, &headers).await?;
-    Ok(Json(settings_view(&settings, &origin)))
+    Ok(Json(settings_view(&state, &settings, &origin).await?))
 }
 
 async fn test_email(
@@ -2196,8 +2197,25 @@ async fn load_settings(state: &AppState) -> Result<SettingsRow, ApiError> {
     })
 }
 
-fn settings_view(settings: &SettingsRow, origin: &str) -> AccessSettingsView {
-    AccessSettingsView {
+pub(crate) async fn portal_cloudflare_warning(
+    state: &AppState,
+    portal: Option<&str>,
+) -> Result<Option<String>, ApiError> {
+    let (panel,enforced): (Option<String>,bool) = sqlx::query_as("SELECT p.panel_domain,c.access_enforced FROM panel_settings p CROSS JOIN cloudflare_settings c WHERE p.id=TRUE AND c.id=TRUE")
+        .fetch_one(&state.pool).await.map_err(ApiError::database)?;
+    Ok(panel.filter(|host| !host.is_empty() && enforced && portal.filter(|p|!p.is_empty()).is_none_or(|p|p.eq_ignore_ascii_case(host))).map(|_| "Cloudflare Access also protects Rudder Access login and assets on the panel hostname. Use a dedicated portal hostname, publish its DNS/tunnel route, and update Turnstile and Google callbacks. Admin APIs remain protected.".into()))
+}
+
+async fn settings_view(
+    state: &AppState,
+    settings: &SettingsRow,
+    origin: &str,
+) -> Result<AccessSettingsView, ApiError> {
+    Ok(AccessSettingsView {
+        warnings: portal_cloudflare_warning(state, settings.portal_host.as_deref())
+            .await?
+            .into_iter()
+            .collect(),
         portal_host: settings.portal_host.clone(),
         turnstile_site_key: settings.turnstile_site_key.clone(),
         has_turnstile_secret: settings.turnstile_secret_enc.is_some(),
@@ -2208,7 +2226,7 @@ fn settings_view(settings: &SettingsRow, origin: &str) -> AccessSettingsView {
         email_from: settings.email_from.clone(),
         email_ready: email_ready(settings),
         google_redirect_uri: redirect_uri(origin),
-    }
+    })
 }
 
 fn turnstile_ready(settings: &SettingsRow) -> bool {

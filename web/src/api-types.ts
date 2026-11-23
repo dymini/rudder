@@ -4188,6 +4188,7 @@ export interface components {
             portal_host?: string | null;
             turnstile_hostnames: string[];
             turnstile_site_key: string;
+            warnings: string[];
         };
         AccessTokenCreated: {
             token: string;

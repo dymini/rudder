@@ -147,6 +147,9 @@ function SettingsForm({ current }: { current: Settings }) {
           save.mutate();
         }}
       >
+        {current.warnings.map((warning) => (
+          <p key={warning} role="alert" className="text-sm text-red-700">{t(warning)}</p>
+        ))}
         <Field label={t("Portal hostname")} hint={t("Leave blank to use this panel at /access.")}>
           <TextInput value={portal} placeholder="access.example.com" onChange={(event) => setPortal(event.target.value)} />
         </Field>
