@@ -2473,6 +2473,7 @@ pub(crate) const ROUTES: &[Route] = &[
     Route { path: "/api/v1/access/me", method: HttpMethod::Get, tag: "access", summary: "The signed-in Rudder Access person", request: None, response: Some("AccessMe"), status: 200 },
     Route { path: "/api/v1/access/apps", method: HttpMethod::Get, tag: "access", summary: "Internal apps the signed-in person may open", request: None, response: Some("[AccessApp]"), status: 200 },
     Route { path: "/api/v1/access/callback", method: HttpMethod::Get, tag: "access", summary: "Set the app session cookie after sign-in", request: None, response: None, status: 302 },
+    Route { path: "/_rudder/callback", method: HttpMethod::Get, tag: "access", summary: "Redeem a one-time Access code on its gated service hostname", request: None, response: None, status: 307 },
     Route { path: "/api/v1/access/introspect", method: HttpMethod::Post, tag: "access", summary: "Check an app session with the app's service token", request: Some("AccessIntrospectRequest"), response: Some("AccessIntrospect"), status: 200 },
     Route { path: "/api/v1/edge/gate", method: HttpMethod::Get, tag: "security", summary: "Traefik asks this before forwarding to an app", request: None, response: None, status: 200 },
     Route { path: "/api/v1/security/overview", method: HttpMethod::Get, tag: "security", summary: "Security center summary", request: None, response: Some("SecurityOverview"), status: 200 },

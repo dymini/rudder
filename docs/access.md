@@ -88,6 +88,8 @@ Save, then add a domain if the app does not have one. Rudder stands in front of 
 - `X-Rudder-Access-Departments` (comma-separated slugs)
 - `X-Rudder-Access-Ranks` (comma-separated slugs)
 
+The callback router takes priority over the app router, bypasses forward-auth only for the reserved `/_rudder` path, and uses the tunnel's HTTPS entrypoint. The callback exchanges a short-lived, single-use code bound to the actual request hostname, checks that the person can still access the service, and sets a Secure, HttpOnly, SameSite=Lax cookie without a Domain attribute. Wrong-host requests do not consume a valid code. Invalid, expired and replayed codes are rejected; unknown `/_rudder/*` paths return 404 rather than loading the panel SPA. `/api/v1/access/callback` remains available as a compatibility alias with the same host checks.
+
 Those headers are trustworthy when network isolation is on, because the app is not published on a host port and visitors cannot connect to it except through Traefik. If you turn isolation off, do not trust the headers. Use the introspect API instead.
 
 The panel hostname and the Access portal hostname are not gated, so a rate limit or a mistake cannot lock the operator out of Rudder.

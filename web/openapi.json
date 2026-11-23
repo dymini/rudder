@@ -66,6 +66,20 @@
         }
       }
     },
+    "/_rudder/callback": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "summary": "Redeem a one-time Access code on its gated service hostname",
+        "operationId": "get___rudder_callback",
+        "responses": {
+          "307": {
+            "description": "Redeem a one-time Access code on its gated service hostname"
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [

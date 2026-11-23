@@ -1283,6 +1283,169 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
                 .starts_with("https://panel.example.com/access?"));
         }
     }
+    sqlx::query("UPDATE access_settings SET portal_host='panel.example.com' WHERE id=TRUE")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE cloudflare_settings SET access_enforced=TRUE,access_aud='callback-test',team_domain='myteam.cloudflareaccess.com' WHERE id=TRUE").execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO access_identities(email) VALUES('admin@example.com') ON CONFLICT(email) DO UPDATE SET status='active'").execute(&pool).await.unwrap();
+    let callback_app = self::app(pool.clone(), &data_dir, &cloudflare);
+    let callback_route = routes
+        .lines()
+        .skip_while(|line| !line.contains("Host(`app.example.com`) && PathPrefix(`/_rudder`)"))
+        .take_while(|line| line.starts_with("      "))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        callback_route.contains("priority: 1000"),
+        "{callback_route}"
+    );
+    assert!(
+        callback_route.contains("service: rudder-panel"),
+        "{callback_route}"
+    );
+    assert!(callback_route.contains("- websecure"), "{callback_route}");
+    assert!(!callback_route.contains("rudder-gate"), "{callback_route}");
+    sqlx::query("INSERT INTO access_codes(email,code_hash,purpose,return_host,return_path,expires_at) VALUES('admin@example.com',encode(digest('tunnel-handoff','sha256'),'hex'),'handoff','app.example.com','/dashboard?view=files',now()+interval '2 minutes')").execute(&pool).await.unwrap();
+    let wrong = call_with(
+        &callback_app,
+        "GET",
+        "/_rudder/callback?code=tunnel-handoff",
+        None,
+        None,
+        Some("other.example.com"),
+    )
+    .await;
+    assert_eq!(wrong.status, StatusCode::FORBIDDEN, "{}", wrong.body);
+    let callback = callback_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/_rudder/callback?code=tunnel-handoff")
+                .header("host", "app.example.com")
+                .header("x-forwarded-proto", "http")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(callback.status(), StatusCode::TEMPORARY_REDIRECT);
+    assert_eq!(callback.headers()["location"], "/dashboard?view=files");
+    assert_eq!(callback.headers()["cache-control"], "no-store");
+    let cookie = callback.headers()["set-cookie"].to_str().unwrap();
+    for attribute in ["Secure", "HttpOnly", "SameSite=Lax", "Path=/"] {
+        assert!(cookie.contains(attribute), "{cookie}");
+    }
+    assert!(!cookie.contains("Domain="), "{cookie}");
+    let cookie = cookie.split(';').next().unwrap().to_owned();
+    let authorized = callback_app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/edge/gate?k={secret}"))
+                .header("x-forwarded-host", "app.example.com")
+                .header("x-forwarded-uri", "/dashboard?view=files")
+                .header("cookie", cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(authorized.status(), StatusCode::OK);
+    let replay = call_with(
+        &callback_app,
+        "GET",
+        "/_rudder/callback?code=tunnel-handoff",
+        None,
+        None,
+        Some("app.example.com"),
+    )
+    .await;
+    assert_eq!(replay.status, StatusCode::FORBIDDEN);
+    let missing = call_with(
+        &callback_app,
+        "GET",
+        "/_rudder/unknown",
+        None,
+        None,
+        Some("app.example.com"),
+    )
+    .await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND);
+    let invalid = call_with(
+        &callback_app,
+        "GET",
+        "/_rudder/callback?code=x",
+        None,
+        None,
+        Some("app.example.com"),
+    )
+    .await;
+    assert_eq!(invalid.status, StatusCode::FORBIDDEN);
+    for denied in ["expired", "revoked", "blocked"] {
+        sqlx::query("INSERT INTO access_codes(email,code_hash,purpose,return_host,return_path,expires_at) VALUES('admin@example.com',encode(digest($1,'sha256'),'hex'),'handoff','app.example.com','/',CASE WHEN $1='expired' THEN now()-interval '1 minute' ELSE now()+interval '2 minutes' END)").bind(denied).execute(&pool).await.unwrap();
+        if denied == "revoked" {
+            sqlx::query("UPDATE access_policies SET enabled=FALSE WHERE service_id=$1")
+                .bind(service_uuid)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        if denied == "blocked" {
+            sqlx::query(
+                "UPDATE access_identities SET status='blocked' WHERE email='admin@example.com'",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        let rejected = call_with(
+            &callback_app,
+            "GET",
+            &format!("/_rudder/callback?code={denied}"),
+            None,
+            None,
+            Some("app.example.com"),
+        )
+        .await;
+        assert_eq!(
+            rejected.status,
+            StatusCode::FORBIDDEN,
+            "{denied}: {}",
+            rejected.body
+        );
+        sqlx::query("UPDATE access_policies SET enabled=TRUE WHERE service_id=$1")
+            .bind(service_uuid)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE access_identities SET status='active' WHERE email='admin@example.com'")
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let sessions: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM access_sessions WHERE host='app.example.com'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(sessions, 1);
+    let panel_blocked = call_with(
+        &callback_app,
+        "GET",
+        "/api/v1/me",
+        Some(&session),
+        None,
+        Some("panel.example.com"),
+    )
+    .await;
+    assert_eq!(panel_blocked.status, StatusCode::FORBIDDEN);
+    sqlx::query("UPDATE access_settings SET portal_host=NULL WHERE id=TRUE")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE cloudflare_settings SET access_enforced=FALSE,access_aud=NULL,team_domain='' WHERE id=TRUE").execute(&pool).await.unwrap();
+
     let disabled = call(
         &app,
         "PUT",

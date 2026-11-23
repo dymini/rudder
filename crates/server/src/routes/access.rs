@@ -86,6 +86,7 @@ pub fn router() -> axum::Router<AppState> {
         .route("/api/v1/access/me", get(me))
         .route("/api/v1/access/apps", get(apps))
         .route("/api/v1/access/callback", get(handoff_callback))
+        .route("/_rudder/callback", get(handoff_callback))
         .route("/api/v1/access/introspect", post(introspect))
         .route("/api/v1/edge/gate", get(edge_gate))
 }
@@ -1286,7 +1287,7 @@ async fn email_verify(
     }
     consume_login_code(&state, &email, code).await?;
     let host = request_host(&headers);
-    let (jar, csrf) = issue_session(&state, jar, identity, &host, &ip, &headers).await?;
+    let (jar, csrf) = issue_session(&state, jar, identity, &host, &ip, &headers, false).await?;
     let redirect = handoff_url(
         &state,
         &email,
@@ -1459,7 +1460,7 @@ async fn google_finish(
     link_google(&state, identity, sub).await?;
     let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
     let host = request_host(&headers);
-    let (jar, _csrf) = issue_session(&state, jar, identity, &host, &ip, &headers).await?;
+    let (jar, _csrf) = issue_session(&state, jar, identity, &host, &ip, &headers, false).await?;
     let return_host = payload.get("host").and_then(Value::as_str);
     let return_path = payload.get("path").and_then(Value::as_str);
     let next = match handoff_url(&state, &email, return_host, return_path).await? {
@@ -1550,15 +1551,24 @@ async fn handoff_callback(
     jar: CookieJar,
     Query(query): Query<CallbackQuery>,
 ) -> Result<Response, ApiError> {
+    let host = headers
+        .get(axum::http::header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .map(strip_port)
+        .unwrap_or_default();
+    if host.is_empty() {
+        return Err(blocked());
+    }
     let hash = auth::sha256_hex(query.code.trim());
     let row = sqlx::query!(
         r#"
         UPDATE access_codes SET used_at = now()
         WHERE code_hash = $1 AND purpose = 'handoff'
-          AND used_at IS NULL AND expires_at > now()
-        RETURNING email, return_host, return_path
+          AND used_at IS NULL AND expires_at > now() AND return_host = $2
+        RETURNING email, return_path
         "#,
-        hash
+        hash,
+        host,
     )
     .fetch_optional(&state.pool)
     .await
@@ -1566,14 +1576,19 @@ async fn handoff_callback(
     let Some(row) = row else {
         return Err(blocked());
     };
-    let host = row.return_host.unwrap_or_default();
     let path =
         safe_return_path(row.return_path.as_deref().unwrap_or("/")).unwrap_or_else(|| "/".into());
     let Some(identity) = active_identity(&state, &row.email).await? else {
         return Err(blocked());
     };
+    let Some(service) = protected_service(&state, &host).await? else {
+        return Err(blocked());
+    };
+    if !person_allowed(&state, identity, &row.email, service).await? {
+        return Err(blocked());
+    }
     let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
-    let (jar, _csrf) = issue_session(&state, jar, identity, &host, &ip, &headers).await?;
+    let (jar, _csrf) = issue_session(&state, jar, identity, &host, &ip, &headers, true).await?;
     let mut response = Redirect::temporary(&path).into_response();
     if let Some(cookie) = jar.get(ACCESS_COOKIE) {
         if let Ok(value) = HeaderValue::from_str(&cookie.to_string()) {
@@ -1938,6 +1953,7 @@ async fn issue_session(
     host: &str,
     ip: &str,
     headers: &HeaderMap,
+    force_secure: bool,
 ) -> Result<(CookieJar, String), ApiError> {
     let token = hex::encode(rudder_core::random_bytes::<32>());
     let csrf = hex::encode(rudder_core::random_bytes::<16>());
@@ -1969,7 +1985,7 @@ async fn issue_session(
     let cookie = Cookie::build((ACCESS_COOKIE, token))
         .path("/")
         .http_only(true)
-        .secure(state.config.cookie_secure)
+        .secure(state.config.cookie_secure || force_secure)
         .same_site(cookie::SameSite::Lax)
         .max_age(cookie::time::Duration::hours(SESSION_HOURS))
         .build();

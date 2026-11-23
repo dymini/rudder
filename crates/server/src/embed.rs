@@ -14,7 +14,7 @@ pub async fn spa(uri: axum::http::Uri) -> Response {
 }
 
 pub fn spa_response(path: &str) -> Response {
-    if path.starts_with("/api/") || path == "/api" {
+    if path.starts_with("/api/") || path == "/api" || path.starts_with("/_rudder") {
         return StatusCode::NOT_FOUND.into_response_empty();
     }
     let relative = path.trim_start_matches('/');

@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Fixed
+- **Finish Access sign-in on app hostnames.** Service-host callbacks now exchange the one-time code instead of loading the panel, set a Secure host-only cookie, and return to the original path. Invalid, expired, replayed or wrong-host codes do not create a session.
+
 ## [0.12.1] - 2026-11-23
 
 ### Fixed

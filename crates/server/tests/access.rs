@@ -52,7 +52,22 @@ async fn call(
     csrf: Option<&str>,
     body: Option<Value>,
 ) -> Reply {
+    call_host(app, method, path, None, cookie, csrf, body).await
+}
+
+async fn call_host(
+    app: &axum::Router,
+    method: &str,
+    path: &str,
+    host: Option<&str>,
+    cookie: Option<&str>,
+    csrf: Option<&str>,
+    body: Option<Value>,
+) -> Reply {
     let mut builder = Request::builder().method(method).uri(path);
+    if let Some(host) = host {
+        builder = builder.header("host", host);
+    }
     if let Some(cookie) = cookie {
         builder = builder.header("cookie", cookie);
     }
@@ -387,16 +402,35 @@ async fn access_blocks_unknown_people_and_limits_a_host(pool: PgPool) {
     .await
     .unwrap();
     let callback = "/api/v1/access/callback?code=handoff-code";
-    let replies = futures_util::future::join_all(
-        (0..8).map(|_| call(&app, "GET", callback, None, None, None)),
-    )
+    sqlx::query("INSERT INTO domains(service_id,host,target_port,ssl_mode) VALUES($1,'invoices.example.com',80,'none')")
+        .bind(uuid::Uuid::parse_str(service_id).unwrap()).execute(&pool).await.unwrap();
+    let replies = futures_util::future::join_all((0..8).map(|_| {
+        call_host(
+            &app,
+            "GET",
+            callback,
+            Some("invoices.example.com"),
+            None,
+            None,
+            None,
+        )
+    }))
     .await;
     let redeemed = replies
         .iter()
         .filter(|reply| reply.status == StatusCode::TEMPORARY_REDIRECT && reply.cookie.is_some())
         .count();
     assert_eq!(redeemed, 1, "a handoff code must redeem exactly once");
-    let again = call(&app, "GET", callback, None, None, None).await;
+    let again = call_host(
+        &app,
+        "GET",
+        callback,
+        Some("invoices.example.com"),
+        None,
+        None,
+        None,
+    )
+    .await;
     assert_eq!(again.status, StatusCode::FORBIDDEN);
     assert!(again.cookie.is_none());
 }

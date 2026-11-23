@@ -43,6 +43,7 @@ pub(crate) fn skip_reason(route: &Route) -> Option<&'static str> {
             | "/api/v1/access/apps"
             | "/api/v1/access/public"
             | "/api/v1/access/callback"
+            | "/_rudder/callback"
             | "/api/v1/edge/gate",
         ) => Some("browser session"),
         ("POST", "/api/v1/access/introspect") => Some("service credential"),
