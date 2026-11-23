@@ -1070,7 +1070,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Save the Cloudflare account, zone, and API token after checking them (admin, write) */
+        /** Save the account and token, discover zones and optionally enable a legacy zone id (admin, write) */
         put: operations["put_v1_cloudflare_credentials"];
         post?: never;
         delete?: never;
@@ -1245,6 +1245,57 @@ export interface paths {
         put?: never;
         /** Roll tunnel connectors one at a time using a registered surge (admin, write) */
         post: operations["post_v1_cloudflare_tunnel_update"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/zones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List discovered zones, enablement and per-zone visibility errors (admin) */
+        get: operations["get_v1_cloudflare_zones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/zones/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh all pages of zones visible to the connected account token without deleting DNS records (admin, write) */
+        post: operations["post_v1_cloudflare_zones_refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/zones/{zone_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Enable or disable a discovered zone without deleting its records (admin, write) */
+        put: operations["put_v1_cloudflare_zones__zone_id_"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4633,6 +4684,18 @@ export interface components {
             zone_id: string;
             zone_name: string;
         };
+        CloudflareZone: {
+            accessible: boolean;
+            account_id: string;
+            enabled: boolean;
+            last_error?: string | null;
+            /** Format: date-time */
+            last_seen_at: string;
+            name: string;
+            published_hosts: string[];
+            status: string;
+            zone_id: string;
+        };
         CloudflaredRelease: {
             html_url?: string | null;
             published_at?: string | null;
@@ -4884,10 +4947,12 @@ export interface components {
             message: string;
         };
         DnsOutcome: {
-            /** @description `created`, `kept`, `replaced`, or `conflict`. */
+            /** @description `created`, `kept`, `replaced`, `conflict`, or `error`. */
             action: string;
             detail?: string | null;
             host: string;
+            zone_id: string;
+            zone_name: string;
         };
         DocHit: {
             name: string;
@@ -4934,6 +4999,7 @@ export interface components {
             cloudflare_reason?: string | null;
             cloudflare_reason_code?: string | null;
             direct_warning?: string | null;
+            zone_id?: string | null;
             zone_name: string;
         };
         DomainView: {
@@ -5106,6 +5172,9 @@ export interface components {
             service_kind?: string | null;
             service_name?: string | null;
             ssl_mode?: string | null;
+            zone_error?: string | null;
+            zone_id?: string | null;
+            zone_name?: string | null;
         };
         /**
          * @description How loaded the host is.
@@ -6223,8 +6292,8 @@ export interface components {
             account_id: string;
             /** @description API token. Leave out to keep the saved one. */
             api_token?: string | null;
-            /** @description 32-character id of the zone the hostnames live in. */
-            zone_id: string;
+            /** @description Optional legacy zone id. When supplied, this zone is enabled. */
+            zone_id?: string;
         };
         SaveDepartment: {
             description?: string | null;
@@ -6451,6 +6520,9 @@ export interface components {
         SetReplicas: {
             /** Format: int64 */
             replicas: number;
+        };
+        SetZone: {
+            enabled: boolean;
         };
         SetupAccess: {
             /**
@@ -6693,6 +6765,7 @@ export interface components {
             /** @description Hostnames whose DNS record Rudder did not change. */
             pending: number;
             skipped: components["schemas"]["SkippedHost"][];
+            zones: components["schemas"]["ZonePublishResult"][];
         };
         SystemInfo: {
             /**
@@ -7119,6 +7192,12 @@ export interface components {
         VerifyPanelBackup: {
             /** Format: uuid */
             destination_id: string;
+        };
+        ZonePublishResult: {
+            errors: string[];
+            published_hosts: string[];
+            zone_id: string;
+            zone_name: string;
         };
     };
     responses: never;
@@ -8872,7 +8951,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Save the Cloudflare account, zone, and API token after checking them (admin, write) */
+            /** @description Save the account and token, discover zones and optionally enable a legacy zone id (admin, write) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9141,6 +9220,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TunnelUpdateProgress"];
+                };
+            };
+        };
+    };
+    get_v1_cloudflare_zones: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List discovered zones, enablement and per-zone visibility errors (admin) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareZone"][];
+                };
+            };
+        };
+    };
+    post_v1_cloudflare_zones_refresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Refresh all pages of zones visible to the connected account token without deleting DNS records (admin, write) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareZone"][];
+                };
+            };
+        };
+    };
+    put_v1_cloudflare_zones__zone_id_: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SetZone"];
+            };
+        };
+        responses: {
+            /** @description Enable or disable a discovered zone without deleting its records (admin, write) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareZone"][];
                 };
             };
         };

@@ -8,6 +8,13 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Added
+- **Manage multiple Cloudflare zones in one account.** Discover zones with the connected token and enable only the zones Rudder should manage. Cloudflare settings now lists zone status and controls; Domains shows and filters by zone. The existing zone stays enabled on upgrade; other discovered zones start disabled. Tokens need Zone Read plus DNS Edit for each enabled zone.
+
+### Changed
+- **Use Access across enabled Cloudflare zones.** The login portal and panel Access application can use any enabled zone in the connected account, with hostname-specific readiness diagnostics before closing public ports.
+- **Publish DNS safely across zones.** Domains resolve to their most-specific known zone, with no fallback past a disabled or inaccessible child zone. DNS errors are reported per zone and hostname; working tunnel routes and DNS records survive discovery loss or disabled zones, and cleanup uses the zone where each record was written.
+
 ### Fixed
 - **Finish Access sign-in on app hostnames.** Service-host callbacks now exchange the one-time code instead of loading the panel, set a Secure host-only cookie, and return to the original path. Invalid, expired, replayed or wrong-host codes do not create a session.
 - **Explain Cloudflare-protected shared login portals.** Access settings and tunnel readiness warn when the portal shares the panel hostname protected by Cloudflare Access. Use a dedicated portal hostname and update its DNS/tunnel route, Turnstile allowlist and Google callback; no administrative routes are automatically bypassed.
