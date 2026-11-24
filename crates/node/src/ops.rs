@@ -12,9 +12,86 @@ use rudder_core::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// Upload tracked files to `builder/workspaces/<job_id>/src` before starting.
+/// Keys are opaque, filesystem-safe identifiers (hash branch names on the panel).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildRequest {
+    pub job_id: String,
+    pub service_id: String,
+    pub plan: rudder_core::BuildPlan,
+    pub cache_key: String,
+    /// Ordered: current branch, then default branch. Duplicate keys are ignored.
+    pub cache_fallback_keys: Vec<String>,
+    pub cache_limit_bytes: u64,
+    pub timeout_secs: u64,
+    pub test_command: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BuildCacheEntry {
+    pub service_id: String,
+    pub cache_key: String,
+    pub size_bytes: u64,
+    /// Unix milliseconds, matching agent telemetry timestamps.
+    pub last_used_at: i64,
+    pub created_at: i64,
+}
+
+/// One JSON event per output frame; only `finished` means the build succeeded/failed.
+/// The initial command reply acknowledges start, not build completion.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum BuildEvent {
+    Log {
+        stderr: bool,
+        text: String,
+    },
+    Finished {
+        status: BuildStatus,
+        error: Option<String>,
+        cache: Vec<BuildCacheEntry>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BuildStatus {
+    Succeeded,
+    Failed,
+    Cancelled,
+    TimedOut,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BuildCachePrune {
+    pub service_id: Option<String>,
+    pub cache_key: Option<String>,
+    /// None deletes all matching entries; Some evicts LRU until matching bytes <= limit.
+    pub limit_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildCachePruned {
+    pub reclaimed_bytes: u64,
+    pub remaining_bytes: u64,
+    pub entries: Vec<BuildCacheEntry>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Request {
+    BuildStart {
+        request: BuildRequest,
+    },
+    BuildCancel {
+        job_id: String,
+    },
+    BuildCacheUsage {
+        service_id: Option<String>,
+    },
+    BuildCachePrune {
+        request: BuildCachePrune,
+    },
     DockerInfo,
     PullImage {
         image: String,
@@ -158,6 +235,10 @@ pub enum Streaming {
 impl Request {
     pub fn name(&self) -> &'static str {
         match self {
+            Self::BuildStart { .. } => "build_start",
+            Self::BuildCancel { .. } => "build_cancel",
+            Self::BuildCacheUsage { .. } => "build_cache_usage",
+            Self::BuildCachePrune { .. } => "build_cache_prune",
             Self::DockerInfo => "docker_info",
             Self::PullImage { .. } => "pull_image",
             Self::CreateContainer { .. } => "create_container",
@@ -200,7 +281,8 @@ impl Request {
 
     pub fn streaming(&self) -> Streaming {
         match self {
-            Self::ExecRead { .. }
+            Self::BuildStart { .. }
+            | Self::ExecRead { .. }
             | Self::ArchiveRead { .. }
             | Self::FollowLogs { .. }
             | Self::SaveImage { .. } => Streaming::Output,
@@ -312,6 +394,46 @@ mod hex_bytes {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn builder_contracts_use_existing_command_and_channel_envelopes() {
+        let start: Request = serde_json::from_value(serde_json::json!({
+            "op": "build_start", "request": {
+                "job_id": "job", "service_id": "service", "cache_key": "branch",
+                "cache_fallback_keys": ["main"], "cache_limit_bytes": 1024,
+                "timeout_secs": 3600, "test_command": null,
+                "plan": { "strategy": "dockerfile", "context": ".", "dockerfile": "Dockerfile",
+                    "publish_dir": "dist", "image": "app:test", "build_args": [] }
+            }
+        }))
+        .unwrap();
+        assert_eq!(start.name(), "build_start");
+        assert_eq!(start.streaming(), Streaming::Output);
+        let roundtrip: Request =
+            serde_json::from_slice(&serde_json::to_vec(&start).unwrap()).unwrap();
+        assert_eq!(roundtrip.name(), start.name());
+        for request in [
+            Request::BuildCancel {
+                job_id: "job".into(),
+            },
+            Request::BuildCacheUsage { service_id: None },
+            Request::BuildCachePrune {
+                request: BuildCachePrune::default(),
+            },
+        ] {
+            assert_eq!(request.streaming(), Streaming::None);
+            let value = serde_json::to_value(&request).unwrap();
+            assert_eq!(value["op"], request.name());
+        }
+        let finished = BuildEvent::Finished {
+            status: BuildStatus::Succeeded,
+            error: None,
+            cache: vec![],
+        };
+        let value = serde_json::to_value(finished).unwrap();
+        assert_eq!(value["event"], "finished");
+        assert_eq!(value["status"], "succeeded");
+    }
 
     #[test]
     fn requests_round_trip_with_their_op_tag() {

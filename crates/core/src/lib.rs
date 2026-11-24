@@ -49,8 +49,9 @@ pub use backup::{
 };
 pub mod redact;
 pub use buildspec::{
-    can_start, docker_build_argv, git_clone_argv, nixpacks_argv, static_dockerfile,
-    validate_branch, validate_git_url, validate_rel_path, BuildPlan, BuildStrategy,
+    buildx_argv, can_start, docker_build_argv, git_clone_argv, nixpacks_argv,
+    nixpacks_generate_argv, static_dockerfile, validate_branch, validate_git_url,
+    validate_rel_path, BuildPlan, BuildStrategy,
 };
 pub use cache::{
     cache_path, cache_preset, effective_cache_budget, encoding_class, validate_upstream,
