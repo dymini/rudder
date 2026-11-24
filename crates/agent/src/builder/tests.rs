@@ -426,6 +426,29 @@ fn rejects_unsafe_paths_and_missing_workspaces_without_running_commands() {
     assert!(fixture.builder.usage(None).is_err());
 }
 
+#[tokio::test]
+async fn workspace_cleanup_cancels_an_active_job_and_is_idempotent() {
+    let fixture = Fixture::new("echo ready\nsleep 300");
+    let mut stream = fixture
+        .builder
+        .start(fixture.request("cleanup", BuildStrategy::Dockerfile))
+        .unwrap();
+    assert!(stream.next().await.unwrap().is_ok());
+    fixture.builder.cleanup_workspace("cleanup").await.unwrap();
+    assert!(!fixture.builder.root.join("workspaces/cleanup").exists());
+    fixture.builder.cleanup_workspace("cleanup").await.unwrap();
+    assert!(fixture
+        .builder
+        .cleanup_workspace("../escape")
+        .await
+        .is_err());
+    let events: Vec<_> = stream
+        .map(|e| serde_json::from_slice::<BuildEvent>(&e.unwrap()).unwrap())
+        .collect()
+        .await;
+    assert_eq!(status(&events), BuildStatus::Cancelled);
+}
+
 #[test]
 fn redactor_protects_short_embedded_and_split_secrets_and_streams_lines() {
     let mut redactor = Redactor::new(&["s3cret-value", "x"]);

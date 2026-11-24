@@ -86,6 +86,12 @@ pub enum Request {
     BuildCancel {
         job_id: String,
     },
+    BuildWorkspaceRemove {
+        job_id: String,
+    },
+    RemoveImage {
+        image: String,
+    },
     BuildCacheUsage {
         service_id: Option<String>,
     },
@@ -237,6 +243,8 @@ impl Request {
         match self {
             Self::BuildStart { .. } => "build_start",
             Self::BuildCancel { .. } => "build_cancel",
+            Self::BuildWorkspaceRemove { .. } => "build_workspace_remove",
+            Self::RemoveImage { .. } => "remove_image",
             Self::BuildCacheUsage { .. } => "build_cache_usage",
             Self::BuildCachePrune { .. } => "build_cache_prune",
             Self::DockerInfo => "docker_info",
@@ -325,6 +333,7 @@ pub async fn call(driver: &dyn NodeDriver, request: Request) -> Result<Value, Er
     match request {
         Request::DockerInfo => json(driver.docker_info().await?),
         Request::PullImage { image, auth } => json(driver.pull_image(&image, auth).await?),
+        Request::RemoveImage { image } => json(driver.remove_image(&image).await?),
         Request::CreateContainer { spec } => json(driver.create_container(&spec).await?),
         Request::StartContainer { id } => json(driver.start_container(&id).await?),
         Request::StopContainer { id, timeout_secs } => {

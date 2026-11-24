@@ -619,6 +619,19 @@ impl NodeDriver for LocalDriver {
             .ok_or_else(|| Error::Node("image has no digest".into()))
     }
 
+    async fn remove_image(&self, image: &str) -> Result<(), Error> {
+        validate_image_ref(image)?;
+        self.docker()?
+            .remove_image(
+                image,
+                None::<bollard::query_parameters::RemoveImageOptions>,
+                None,
+            )
+            .await
+            .map_err(Self::node)?;
+        Ok(())
+    }
+
     async fn save_image(&self, image: &str) -> Result<ByteStream, Error> {
         validate_image_ref(image)?;
         let docker = self.docker()?;

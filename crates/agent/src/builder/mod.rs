@@ -75,6 +75,25 @@ impl Builder {
             .is_some_and(|cancel| cancel.send(true).is_ok()))
     }
 
+    pub async fn cleanup_workspace(&self, job_id: &str) -> Result<(), Error> {
+        self.cancel(job_id)?;
+        for _ in 0..100 {
+            {
+                let state = self.state()?;
+                if !state.jobs.contains_key(job_id) {
+                    let path = checked(&self.root, &format!("workspaces/{job_id}"))?;
+                    return match std::fs::remove_dir_all(path) {
+                        Ok(()) => Ok(()),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                        Err(_) => Err(node("could not remove build workspace")),
+                    };
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        Err(node("builder job did not stop before workspace cleanup"))
+    }
+
     pub fn usage(&self, service_id: Option<&str>) -> Result<Vec<BuildCacheEntry>, Error> {
         if let Some(service) = service_id {
             identifier(service)?;

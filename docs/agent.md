@@ -40,12 +40,12 @@ Routing changes made while an agent is offline are stored and written to the ser
 
 Git-sourced compose stacks are cloned on the panel, then the tracked files are copied to the server (the `.git` directory stays on the panel). Build contexts and files the compose file mounts from the repository are included. Files already on the server that are not part of the repository are kept. A checkout larger than 512 MiB is refused.
 
-## Build-host foundation (not yet scheduled by the panel)
+## Build hosts
 
 Migration 0028 adds opt-in builder settings to servers, independent build placement
 to services, builder attribution to queued jobs, and a build-cache inventory. All
-existing services keep `panel` placement; this foundation does not move builds or
-enable builders automatically. Builder enrollment flags, scheduling, HTTP/OpenAPI/MCP
+existing services keep `panel` placement; this does not move builds or
+enable builders automatically. Builder enrollment flags, HTTP/OpenAPI/MCP
 management, UI and its translations follow in later slices.
 
 Agents report architecture (`x86_64`/`aarch64`) and whether `docker buildx version`
@@ -84,7 +84,36 @@ Concurrent builds of different services are supported; overlapping builds of the
 same service are rejected to protect cache imports/exports. Global pruning skips
 active services, so a byte limit can be temporarily exceeded until those jobs finish.
 The configured default limit is 20 GiB. Cache storage is separate from Rudder's HTTP
-cache. Image return and deployment integration are part of the later scheduler slice.
+cache.
+
+The panel dispatches jobs concurrently. Panel builds share the configured panel
+build-concurrency limit and load guard; builders have independent `builder_max_jobs`
+limits. Pausing all builds still holds every new job. A draining builder accepts no
+new jobs, but running jobs finish. Claims reserve slots transactionally across workers.
+
+Placement is recorded in deployment logs. `builder` uses only the chosen builder;
+`auto` considers enabled, connected builders that are not paused/draining, have a free
+slot, match the deploy target's architecture and support Buildx (and Nixpacks when
+needed). Local deploys use the panel's architecture. Cache affinity for the service
+ranks first, then fewer active jobs, then builder name. No eligible builder either
+falls back to panel execution or stays queued with a visible waiting reason, according
+to the service fallback. Queued jobs remain cancellable.
+
+The panel holds Git credentials, clones the source, discovers its default branch and
+sends only tracked files, preserving executable scripts without special permission
+bits. Builds restore opaque branch/default-branch cache keys and run the configured
+image test on either panel or builder. Builder logs are redacted and flushed to
+deployment logs about once a second. Cancellation sends `build_cancel`; timeout also
+cancels the remote job. `build_workspace_remove` cleans interrupted uploads and stale
+workspaces before a retry. Migration 0029 records the single allowed disconnect retry;
+a second disconnect fails clearly, while the retry re-runs placement.
+
+After a successful builder run the panel refreshes its cache inventory, relays the
+image save/load streams directly into the deploy target, and uses the existing
+health-checked rollout. It does not load remote-target images into the panel's Docker
+daemon. Builder-only image tags are removed afterwards without force; cleanup failures
+are logged. When builder and deploy target are the same server, the image stays there
+for the application instead of being copied or removed.
 
 ## Security
 

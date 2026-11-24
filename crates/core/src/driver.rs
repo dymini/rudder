@@ -329,6 +329,11 @@ pub trait NodeDriver: Send + Sync {
         Err(unsupported("extract_tree"))
     }
 
+    /// Remove an image tag without forcing removal of images used by containers.
+    async fn remove_image(&self, _image: &str) -> Result<(), Error> {
+        Err(unsupported("remove_image"))
+    }
+
     /// `docker save` of one image, as a tar stream.
     async fn save_image(&self, _image: &str) -> Result<ByteStream, Error> {
         Err(unsupported("save_image"))

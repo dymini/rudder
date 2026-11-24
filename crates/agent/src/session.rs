@@ -204,6 +204,13 @@ impl Session {
         let driver = self.driver.as_ref();
         let stream_id = command.stream_id;
         match request {
+            Request::BuildWorkspaceRemove { job_id } => {
+                let result = match &self.builder {
+                    Some(builder) => builder.cleanup_workspace(&job_id).await.and_then(json),
+                    None => Err(Error::Node("builder unavailable".into())),
+                };
+                return reply(&outbox, id, result).await;
+            }
             Request::BuildCancel { job_id } => {
                 let result = self
                     .builder
