@@ -42,11 +42,14 @@ Git-sourced compose stacks are cloned on the panel, then the tracked files are c
 
 ## Build hosts
 
+For the setup and panel workflow, see the [build host operator guide](build-hosts.md).
+
 Migration 0028 adds opt-in builder settings to servers, independent build placement
 to services, builder attribution to queued jobs, and a build-cache inventory. All
 existing services keep `panel` placement; this does not move builds or
 enable builders automatically. Builder enrollment, HTTP/OpenAPI/MCP management and
-local status are available; the Builders UI and its translations follow separately.
+local status are available, together with the Builders page and translated service
+build controls.
 
 Agents report architecture (`x86_64`/`aarch64`) and whether `docker buildx version`
 and `nixpacks --version` succeed in Hello. Build commands use the existing outbound

@@ -11,6 +11,7 @@ Operating and product documentation for this repository.
 | `TEST_MATRIX.md` | Behavior-to-proof map |
 | `panel-https.md` | Warning and steps for a panel opened over plain HTTP |
 | `mcp.md` | Connecting an AI agent and the permission templates |
+| `build-hosts.md` | Installing trusted build hosts, placement, caching and troubleshooting |
 | `plugins.md` | Installing and updating release-backed plugins, including Dockside |
 | `domains.md` | Domain inventory, direct and Cloudflare routing, and DNS checks |
 | `names.md` | Naming rules and understanding validation errors |

@@ -70,6 +70,9 @@ const S3DestinationsPage = lazy(() =>
 const ServersPage = lazy(() =>
   import("./pages/ServersPage").then((m) => ({ default: m.ServersPage })),
 );
+const BuildersPage = lazy(() =>
+  import("./pages/BuildersPage").then((m) => ({ default: m.BuildersPage })),
+);
 const ServicePage = lazy(() =>
   import("./pages/ServicePage").then((m) => ({ default: m.ServicePage })),
 );
@@ -131,6 +134,7 @@ function AppRoutes() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="servers" element={<ServersPage />} />
+        <Route path="builders" element={<BuildersPage />} />
         <Route path="projects" element={<ProjectsPage />} />
         <Route path="services/:id" element={<ServicePage />} />
         <Route path="templates" element={<TemplatesPage />} />

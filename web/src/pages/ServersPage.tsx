@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { api, ApiError } from "../api";
 import { Badge, Button, Card, Field, NameInput, PickField, QuickPick, TextInput } from "../components/ui";
@@ -79,6 +80,23 @@ export function ServersPage() {
     queryKey: ["servers"],
     queryFn: () => api<Server[]>("/api/v1/servers"),
   });
+  const builders = useQuery({
+    queryKey: ["builders"],
+    queryFn: () => api<Schemas["BuilderInventory"]>("/api/v1/builders"),
+    refetchInterval: 5000,
+  });
+  const enableBuilder = useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/v1/builders/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: true }),
+      }),
+    onSuccess: async () => {
+      toast.success(t("Builder mode enabled. Re-run the installer with --builder --no-edge on this server."));
+      await queryClient.invalidateQueries({ queryKey: ["builders"] });
+    },
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : t("Could not enable builder mode")),
+  });
   const [name, setName] = useState("");
   const [kind, setKind] = useState("remote");
   const [publicIp, setPublicIp] = useState("");
@@ -117,7 +135,16 @@ export function ServersPage() {
     mutationFn: (server: Server) =>
       api<Schemas["JoinToken"]>(`/api/v1/servers/${server.id}/join-token`, { method: "POST" }),
     onSuccess: (token, server) => {
-      setJoin({ server: server.name, command: token.join_command, expiresAt: token.expires_at });
+      const builderFlags =
+        builders.data?.builders.find((item) => item.id === server.id)?.enabled &&
+        !token.join_command.includes("--builder")
+          ? " --builder --no-edge"
+          : "";
+      setJoin({
+        server: server.name,
+        command: token.join_command + builderFlags,
+        expiresAt: token.expires_at,
+      });
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
     onError: (error) =>
@@ -237,6 +264,16 @@ export function ServersPage() {
                   </Button>
                 ) : (
                   <>
+                    {builders.data?.builders.find((item) => item.id === server.id)?.enabled ? (
+                      <Link className="text-sm underline" to="/builders">
+                        {t("Manage build host")}
+                      </Link>
+                    ) : (
+                      <Button quiet disabled={enableBuilder.isPending || !builders.data}
+                        onClick={() => enableBuilder.mutate(server.id)}>
+                        {t("Enable builder mode")}
+                      </Button>
+                    )}
                     <Button
                       quiet
                       disabled={rotate.isPending}

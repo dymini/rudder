@@ -9,9 +9,10 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Added
+- **Manage build hosts from the panel.** The new Builders page shows live connection, jobs and cache usage, provides copyable setup commands, and lets operators control capacity, draining and confirmed cache cleanup. Existing remote servers can enable builder mode from Servers.
 - **Manage enrolled build hosts through the API and MCP.** Create builders without workloads, enable builder mode on existing remote servers, control capacity and draining, inspect jobs and caches, and clear or prune caches. Git source settings now expose placement, fallback, image tests and deadlines. Assigning a workload to a builder also makes it a deploy target.
 - **Install and inspect builder agents.** `install-agent.sh --builder --no-edge` can install Docker and Buildx on Debian/Ubuntu, with optional pinned Nixpacks. Builder storage stays below the agent data directory, and `rudder-agent status [--json]` reports enrollment, connection, capabilities, jobs and cache usage without exposing credentials.
-- **Build Git apps on enrolled build hosts.** The panel can schedule concurrent, architecture-compatible builder jobs, stream their logs and relay tested images into normal health-checked deployment. Builder slots, draining, cache affinity, waiting/panel fallback and one disconnect retry are enforced; existing services still build on the panel. The Builders UI follows in a later slice.
+- **Build Git apps on enrolled build hosts.** The panel can schedule concurrent, architecture-compatible builder jobs, stream their logs and relay tested images into normal health-checked deployment. Builder slots, draining, cache affinity, waiting/panel fallback and one disconnect retry are enforced; existing services still build on the panel.
 - **Prepare agents for off-panel builds.** The build-host foundation adds opt-in builder settings and agent operations for tested builds, streaming logs and bounded local build caches. Existing services still build on the panel; the panel UI follows in a later update.
 
 ### Fixed
