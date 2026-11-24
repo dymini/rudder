@@ -96,6 +96,7 @@ pub async fn install(
                 .await
                 .map_err(io("write the new agent"))?;
         }
+        file.flush().await.map_err(io("write the new agent"))?;
         file.sync_all().await.map_err(io("write the new agent"))?;
         Ok(())
     }
@@ -118,13 +119,18 @@ pub async fn install(
     std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755))
         .map_err(io("mark the new agent executable"))
         .map_err(cleanup)?;
-    let output = tokio::time::timeout(
-        Duration::from_secs(15),
-        tokio::process::Command::new(&staged)
+    let output = tokio::time::timeout(Duration::from_secs(15), async {
+        let mut command = tokio::process::Command::new(&staged);
+        command
             .arg("--version")
             .stdin(std::process::Stdio::null())
-            .output(),
-    )
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        spawn_with_retry(|| command.spawn())
+            .await?
+            .wait_with_output()
+            .await
+    })
     .await
     .map_err(|_| cleanup(Error::Node("the new agent did not answer --version".into())))?
     .map_err(|error| cleanup(Error::Node(format!("the new agent does not run: {error}"))))?;
@@ -148,6 +154,21 @@ pub async fn install(
     write_marker(&update.data_dir, version).map_err(io("record the pending update"))?;
     tracing::info!(%version, binary = %update.binary.display(), "agent binary replaced; restarting");
     Ok(())
+}
+
+async fn spawn_with_retry(
+    mut spawn: impl FnMut() -> std::io::Result<tokio::process::Child>,
+) -> std::io::Result<tokio::process::Child> {
+    let mut retries = 0;
+    loop {
+        match spawn() {
+            Err(error) if error.raw_os_error() == Some(26) && retries < 9 => {
+                retries += 1;
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            result => return result,
+        }
+    }
 }
 
 fn write_marker(data_dir: &Path, version: &str) -> std::io::Result<()> {
@@ -234,6 +255,45 @@ mod tests {
             grace,
         };
         (dir, update, restarts)
+    }
+
+    #[tokio::test]
+    async fn spawn_retries_only_text_file_busy_and_stops_at_the_limit() {
+        let mut attempts = 0;
+        let mut child = spawn_with_retry(|| {
+            attempts += 1;
+            if attempts < 3 {
+                Err(std::io::Error::from_raw_os_error(26))
+            } else {
+                tokio::process::Command::new("/bin/sh")
+                    .args(["-c", "exit 0"])
+                    .spawn()
+            }
+        })
+        .await
+        .unwrap();
+        assert!(child.wait().await.unwrap().success());
+        assert_eq!(attempts, 3);
+
+        let mut attempts = 0;
+        let error = spawn_with_retry(|| {
+            attempts += 1;
+            Err(std::io::Error::from_raw_os_error(26))
+        })
+        .await
+        .unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(26));
+        assert_eq!(attempts, 10);
+
+        let mut attempts = 0;
+        let error = spawn_with_retry(|| {
+            attempts += 1;
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+        })
+        .await
+        .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+        assert_eq!(attempts, 1);
     }
 
     #[tokio::test]

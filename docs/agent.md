@@ -28,6 +28,10 @@ panel :7443 (gRPC, mTLS)  ◀── dial out ──  rudder-agent ── Docker 
 
 Options: `--version v1.2.3` pins the GitHub release, `--email` sets the Let's Encrypt account email, and `--no-edge` skips Traefik and the cache. Running the installer again upgrades the binary and keeps the existing identity. To move a server to a new identity, use **Join command** on the server row to get a fresh token, delete `/var/lib/rudder-agent` on the server, and rerun the command. The old certificate stops working as soon as the new one is issued.
 
+## Agent update verification
+
+Before checking a downloaded agent's version, the agent flushes and syncs the staged binary and closes its writable handle. If another starting process briefly inherited that handle, Linux can still report `Text file busy`. The version check retries only that spawn error, at most 10 attempts with 100 ms between attempts (900 ms of backoff), within the existing 15-second check timeout. Other execution errors fail immediately.
+
 ## What works on a remote server
 
 Everything the local server supports goes through the agent: image deploys and rollbacks, Git builds (built on the panel host, then streamed to the server with `docker save`/`docker load`), databases, backups and restores, compose stacks, domains and certificates, the HTTP cache, logs and the live tail, the web terminal, metrics and alerts, and Docker prune.
