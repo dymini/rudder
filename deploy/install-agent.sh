@@ -182,9 +182,21 @@ verify() {
 }
 
 info "downloading $asset"
-if fetch "$server/downloads/$asset" "$tmp/agent" && fetch "$server/downloads/$asset.sha256" "$tmp/agent.sha256"; then
-	verify "$tmp/agent" "$tmp/agent.sha256" || die "checksum mismatch for the panel's agent binary"
-else
+# /mcp is the machine-client prefix: the only route family that survives a
+# Cloudflare Access agent bypass. A login page can still answer a download
+# request with HTML, so only a response that looks like a checksum file
+# (a 64-hex digest) counts as the panel's binary; anything else falls
+# through to the plain path and then to GitHub.
+downloaded=""
+for prefix in "$server/mcp/downloads" "$server/downloads"; do
+	if fetch "$prefix/$asset" "$tmp/agent" && fetch "$prefix/$asset.sha256" "$tmp/agent.sha256" &&
+		grep -qiE '^[0-9a-f]{64}' "$tmp/agent.sha256"; then
+		verify "$tmp/agent" "$tmp/agent.sha256" || die "checksum mismatch for the panel's agent binary"
+		downloaded=1
+		break
+	fi
+done
+if [ -z "$downloaded" ]; then
 	if [ "$version" = "latest" ]; then
 		base="https://github.com/$REPO/releases/latest/download"
 	else
