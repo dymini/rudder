@@ -9,8 +9,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Added
-- **Build Git apps on enrolled build hosts.** The panel can schedule concurrent, architecture-compatible builder jobs, stream their logs and relay tested images into normal health-checked deployment. Builder slots, draining, cache affinity, waiting/panel fallback and one disconnect retry are enforced; existing services still build on the panel. Builder management controls follow in a later slice.
-- **Prepare agents for off-panel builds.** The build-host foundation adds opt-in builder settings and agent operations for tested builds, streaming logs and bounded local build caches. Existing services still build on the panel; builder setup and panel controls follow in a later update.
+- **Install and inspect builder agents.** `install-agent.sh --builder --no-edge` can install Docker and Buildx on Debian/Ubuntu, with optional pinned Nixpacks. Builder storage stays below the agent data directory, and `rudder-agent status [--json]` reports enrollment, connection, capabilities, jobs and cache usage without exposing credentials.
+- **Build Git apps on enrolled build hosts.** The panel can schedule concurrent, architecture-compatible builder jobs, stream their logs and relay tested images into normal health-checked deployment. Builder slots, draining, cache affinity, waiting/panel fallback and one disconnect retry are enforced; existing services still build on the panel. The Builders UI follows in a later slice.
+- **Prepare agents for off-panel builds.** The build-host foundation adds opt-in builder settings and agent operations for tested builds, streaming logs and bounded local build caches. Existing services still build on the panel; the panel UI follows in a later update.
 
 ### Fixed
 - **Keep agent updates reliable during builds.** Agents finish syncing and closing the downloaded binary, then briefly retry if another starting process temporarily keeps it busy. Other execution failures still stop the update.

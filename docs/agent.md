@@ -45,15 +45,16 @@ Git-sourced compose stacks are cloned on the panel, then the tracked files are c
 Migration 0028 adds opt-in builder settings to servers, independent build placement
 to services, builder attribution to queued jobs, and a build-cache inventory. All
 existing services keep `panel` placement; this does not move builds or
-enable builders automatically. Builder enrollment flags, HTTP/OpenAPI/MCP
-management, UI and its translations follow in later slices.
+enable builders automatically. Builder enrollment and local status are available; HTTP/OpenAPI/MCP
+management, UI and its translations follow separately.
 
 Agents report architecture (`x86_64`/`aarch64`) and whether `docker buildx version`
 and `nixpacks --version` succeed in Hello. Build commands use the existing outbound
 mTLS Session/Channel, not a new inbound listener:
 
 - `build_start`: upload tracked files with ExtractTree to
-  `builder/workspaces/<job_id>/src` under the node directory first. Supply the shared
+  logical path `builder/workspaces/<job_id>/src` first. Builder uploads are routed
+  below the agent data directory, not the deployment node directory. Supply the shared
   build plan, service/job IDs, opaque branch cache key, up to two fallback keys
   (branch then default branch), cache byte limit, timeout and optional image test.
 - The start reply only acknowledges acceptance. The output Channel carries one JSON
@@ -140,10 +141,43 @@ The agent reconnects with backoff from 1 to 30 seconds. The panel marks the serv
 
 ## Agent files and commands
 
+### Install a build host
+
+Create a builder with `POST /api/v1/builders` and run its returned command. It uses
+the usual one-use enrollment token and CA fingerprint plus `--builder --no-edge`.
+Builder mode implies no edge containers: no Traefik/cache containers are started.
+The server initially has **no services assigned**; explicitly assigning a workload
+to it later makes it a deployment target too. There is no separate deploy-role flag.
+
+On Debian/Ubuntu, `--builder` installs missing Docker from Docker's official apt
+repository and installs `docker-buildx-plugin` if Buildx is missing. Existing Docker
+must be running. Other distributions need Docker and Buildx installed manually
+before running the installer. `--with-nixpacks` additionally runs the official
+Nixpacks installation script with `NIXPACKS_VERSION=1.41.0` pinned and verifies it.
+These installation paths require network access; package conflicts stop with an
+actionable error rather than removing an existing container runtime.
+
+The installer writes `{"builder":true}` to `/var/lib/rudder-agent/config.json`.
+Alternatively set it there or run `rudder-agent run --builder`. Restart the service
+after changing config. Ordinary agents do not advertise builder capabilities or
+accept builder workspace uploads unless builder mode is enabled. Build workspaces
+and caches live in `/var/lib/rudder-agent/builder/`; deployment files remain under
+`/var/lib/rudder/`. The installer prints status and fails clearly if connection
+has not succeeded within 30 seconds. An existing enrollment is preserved on reruns.
+
+`rudder-agent status --json` reads the local credential-free `status.json`, maintained
+with atomic replacement and mode 0600. It includes panel/server identity, enrollment,
+connection, last connect/error, builder mode, Buildx/Nixpacks, architecture, active
+job IDs and aggregate cache bytes. A heartbeat updates it every five seconds;
+connection changes are recorded immediately. A snapshot older than 30 seconds is
+disconnected, so a killed service cannot remain online indefinitely. Both text and
+JSON status exit nonzero when unenrolled or disconnected. Use `--data-dir` when
+running a custom installation. Reading status does not probe the panel or run Docker.
+
 | Path | Content |
 | --- | --- |
 | `/usr/local/bin/rudder-agent` | The binary |
-| `/var/lib/rudder-agent/` | `key.pem`, `cert.pem`, `ca.pem`, `agent.json`, `log-cursors.json` (mode 0600, directory 0700) |
+| `/var/lib/rudder-agent/` | Identity files, `config.json`, `status.json`, `log-cursors.json` (mode 0600, directory 0700), and `builder/` workspaces/caches |
 | `/var/lib/rudder/` | Files the panel writes: Traefik routes and certificates, cache rules, compose stacks |
 | `/etc/systemd/system/rudder-agent.service` | The unit |
 
@@ -151,7 +185,8 @@ The agent reconnects with backoff from 1 to 30 seconds. The panel marks the serv
 rudder-agent enroll --server <panel URL> --token <token> [--ca-sha256 <hex>]
                     [--data-dir /var/lib/rudder-agent]
 rudder-agent run [--data-dir /var/lib/rudder-agent] [--node-dir /var/lib/rudder]
-                 [--docker-socket <path>] [--cache-admin-url <url>]
+                 [--docker-socket <path>] [--cache-admin-url <url>] [--builder]
+rudder-agent status [--data-dir /var/lib/rudder-agent] [--json]
 rudder-agent --version
 ```
 

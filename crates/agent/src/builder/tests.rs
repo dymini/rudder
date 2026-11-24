@@ -449,6 +449,61 @@ async fn workspace_cleanup_cancels_an_active_job_and_is_idempotent() {
     assert_eq!(status(&events), BuildStatus::Cancelled);
 }
 
+#[tokio::test]
+async fn uploads_are_confined_to_agent_builder_storage_and_running_jobs_are_visible() {
+    let fixture = Fixture::new("echo ready\nsleep 300");
+    let src = fixture.dir.path().join("upload");
+    fs::create_dir_all(&src).unwrap();
+    fs::write(src.join("Dockerfile"), "FROM scratch\n").unwrap();
+    let archive = rudder_node::tree::pack_files(&src, &["Dockerfile".into()]).unwrap();
+    let input = || {
+        Box::pin(futures_util::stream::iter(vec![Ok(bytes::Bytes::from(
+            archive.clone(),
+        ))])) as rudder_core::ByteStream
+    };
+    fixture
+        .builder
+        .upload_tree("builder/workspaces/upload/src", input())
+        .await
+        .unwrap();
+    let manifest = fixture
+        .builder
+        .root
+        .join("workspaces/upload")
+        .join(rudder_node::tree::manifest_relative("src"));
+    assert!(manifest.is_file());
+    fixture.builder.cleanup_workspace("upload").await.unwrap();
+    assert!(!manifest.exists());
+    fixture
+        .builder
+        .upload_tree("builder/workspaces/upload/src", input())
+        .await
+        .unwrap();
+    assert!(fixture
+        .builder
+        .root
+        .join("workspaces/upload/src/Dockerfile")
+        .is_file());
+    assert!(fixture
+        .builder
+        .upload_tree("builder/workspaces/../../outside/src", input())
+        .await
+        .is_err());
+    let mut stream = fixture
+        .builder
+        .start(fixture.request("active", BuildStrategy::Dockerfile))
+        .unwrap();
+    stream.next().await.unwrap().unwrap();
+    assert_eq!(fixture.builder.running_jobs().unwrap(), vec!["active"]);
+    assert!(fixture
+        .builder
+        .upload_tree("builder/workspaces/active/src", input())
+        .await
+        .is_err());
+    fixture.builder.cleanup_workspace("active").await.unwrap();
+    assert!(fixture.builder.running_jobs().unwrap().is_empty());
+}
+
 #[test]
 fn redactor_protects_short_embedded_and_split_secrets_and_streams_lines() {
     let mut redactor = Redactor::new(&["s3cret-value", "x"]);

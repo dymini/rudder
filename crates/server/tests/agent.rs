@@ -354,6 +354,19 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
         .await
         .unwrap();
     assert_eq!(stored_arch, std::env::consts::ARCH);
+    let status = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let status = rudder_agent::status::read(&data_dir).unwrap();
+            if status.connected {
+                break status;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(status.enrolled && status.connected);
+    assert_eq!(status.server_id.as_deref(), Some(server_id.as_str()));
     assert!(online["cpu_count"].as_i64().unwrap() > 0, "{online}");
     assert!(online["memory_bytes"].as_i64().unwrap() > 0, "{online}");
 

@@ -16,7 +16,7 @@ use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
 use rudder_core::{
     buildx_argv, docker_build_argv, nixpacks_generate_argv, static_dockerfile, validate_rel_path,
-    BuildStrategy, ByteStream, Error,
+    BuildStrategy, ByteStream, Error, NodeDriver,
 };
 use rudder_node::ops::{
     BuildCacheEntry, BuildCachePrune, BuildCachePruned, BuildEvent, BuildRequest, BuildStatus,
@@ -41,7 +41,7 @@ pub struct Builder {
 }
 
 impl Builder {
-    /// `root` is `node_dir/builder`; uploads go to `builder/workspaces/<job>/src`.
+    /// Builder storage is rooted under the agent's data directory.
     pub fn new(root: PathBuf, socket: Option<PathBuf>) -> Result<Self, Error> {
         Ok(Self {
             root: std::path::absolute(root)
@@ -57,6 +57,29 @@ impl Builder {
         self.state
             .lock()
             .map_err(|_| node("builder state unavailable"))
+    }
+
+    pub fn running_jobs(&self) -> Result<Vec<String>, Error> {
+        let mut jobs: Vec<_> = self.state()?.jobs.keys().cloned().collect();
+        jobs.sort();
+        Ok(jobs)
+    }
+
+    pub async fn upload_tree(&self, path: &str, input: ByteStream) -> Result<(), Error> {
+        let job = path
+            .strip_prefix("builder/workspaces/")
+            .and_then(|s| s.strip_suffix("/src"))
+            .ok_or_else(|| invalid("builder upload must name a per-job source workspace"))?;
+        identifier(job)?;
+        if self.state()?.jobs.contains_key(job) {
+            return Err(node("cannot replace a running build workspace"));
+        }
+        let workspace = checked(&self.root, &format!("workspaces/{job}"))?;
+        std::fs::create_dir_all(&workspace)
+            .map_err(|_| node("could not create builder directory"))?;
+        rudder_node::LocalDriver::connect(&workspace, self.socket.as_deref())
+            .extract_tree("src", input)
+            .await
     }
 
     pub async fn capabilities(&self) -> (bool, bool) {

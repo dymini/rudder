@@ -39,6 +39,7 @@ pub struct Session {
     /// Set once the panel welcomes a session; the update watchdog waits on it.
     pub connected: watch::Sender<bool>,
     pub builder: Option<Arc<Builder>>,
+    pub status: Option<Arc<crate::status::StatusFile>>,
 }
 
 impl Session {
@@ -48,14 +49,23 @@ impl Session {
         loop {
             match self.connect_once().await {
                 Ok(()) => {
+                    if let Some(status) = &self.status {
+                        status.connection(false, Some("panel closed the agent session".into()));
+                    }
                     tracing::warn!("panel closed the agent session");
                     backoff = Duration::from_secs(1);
                 }
                 Err(SessionError::AfterWelcome(error)) => {
+                    if let Some(status) = &self.status {
+                        status.connection(false, Some(format!("{error:#}")));
+                    }
                     tracing::warn!(error = %format!("{error:#}"), "agent session lost");
                     backoff = Duration::from_secs(1);
                 }
                 Err(SessionError::Connect(error)) => {
+                    if let Some(status) = &self.status {
+                        status.connection(false, Some(format!("{error:#}")));
+                    }
                     tracing::warn!(
                         error = %format!("{error:#}"),
                         retry_in_secs = backoff.as_secs(),
@@ -119,6 +129,9 @@ impl Session {
         }
         tracing::info!(panel = %self.identity.meta.grpc_url, "connected to the panel");
         self.connected.send_replace(true);
+        if let Some(status) = &self.status {
+            status.connection(true, None);
+        }
 
         let mut flush = tokio::time::interval(FLUSH_EVERY);
         loop {
@@ -315,7 +328,14 @@ impl Session {
                         driver.archive_write(&target, input).await.and_then(json)
                     }
                     Request::ExtractTree { path } => {
-                        driver.extract_tree(&path, input).await.and_then(json)
+                        if path.starts_with("builder/") {
+                            match &self.builder {
+                                Some(builder) => builder.upload_tree(&path, input).await.and_then(json),
+                                None => Err(Error::Node("builder mode is disabled; configure builder=true and restart the agent".into())),
+                            }
+                        } else {
+                            driver.extract_tree(&path, input).await.and_then(json)
+                        }
                     }
                     Request::LoadImage => driver.load_image(input).await.and_then(json),
                     _ => Err(Error::Validation("not an upload".into())),
