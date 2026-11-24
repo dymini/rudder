@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Added
+- **Prepare agents for off-panel builds.** The build-host foundation adds opt-in builder settings and agent operations for tested builds, streaming logs and bounded local build caches. Existing services still build on the panel; builder setup, scheduling and panel controls follow in a later update.
+
 ## [0.13.0] - 2026-11-24
 
 ### Added
