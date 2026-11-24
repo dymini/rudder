@@ -8,6 +8,8 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-24
+
 ### Added
 - **Choose where each Git app builds.** Source settings now expose panel, automatic or specific-host placement, fallback, image tests and deadlines, with Vietnamese guidance. Queued deployments display their waiting reason without opening the logs.
 - **Manage build hosts from the panel.** The new Builders page shows live connection, jobs and cache usage, provides copyable setup commands, and lets operators control capacity, draining and confirmed cache cleanup. Existing remote servers can enable builder mode from Servers.
