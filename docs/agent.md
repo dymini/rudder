@@ -119,6 +119,27 @@ daemon. Builder-only image tags are removed afterwards without force; cleanup fa
 are logged. When builder and deploy target are the same server, the image stays there
 for the application instead of being copied or removed.
 
+### Real-Docker executor smoke
+
+On Linux with Docker and Buildx, run this opt-in test before releasing builder
+changes. It pulls BusyBox and BuildKit images and starts a private BuildKit
+instance. It does not prune the default/shared Docker build cache.
+
+```sh
+stamp=$(date +%s)
+BUILDX_BUILDER="rudder-builder-smoke-$stamp" \
+RUDDER_BUILDER_SMOKE_DIR="$HOME/rudder-builder-smoke-$stamp" \
+cargo test -p rudder-agent --test builder_docker -- --ignored --nocapture
+```
+
+The evidence directory must not exist. JSON event logs persist there, while test
+images and the dedicated BuildKit instance are removed at completion. The smoke
+checks loaded images, atomic cache replacement, cold-BuildKit local cache imports,
+default-branch fallback, passing/failing image tests, cancellation/timeout of both
+Dockerfile RUNs and image tests, workspace cleanup and exact byte-accounted pruning.
+RUN/test liveness is measured using host PIDs and HTTP heartbeats to an ephemeral
+listener bound only to the Docker bridge gateway, not a public interface.
+
 ## Security
 
 - Enrollment only runs over `https://` (plain `http://` only to the same machine), and the agent checks the returned CA against the `--ca-sha256` fingerprint from the join command before saving it.
