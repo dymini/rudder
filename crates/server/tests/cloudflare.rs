@@ -2377,7 +2377,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     {
         let fake = fake.lock().unwrap();
         // The panel plus one bypass application for each agent path.
-        assert_eq!(fake.apps.len(), 5);
+        assert_eq!(fake.apps.len(), 6);
         let panel = fake
             .apps
             .values()

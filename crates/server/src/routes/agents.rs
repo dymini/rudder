@@ -1,13 +1,19 @@
 //! Agent enrollment, join tokens, and the agent installer.
 
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Json;
+use bytes::Bytes;
 use chrono::{DateTime, Duration, Utc};
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -52,6 +58,7 @@ pub struct JoinToken {
 pub fn router() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/api/v1/agent/enroll", post(enroll))
+        .route("/api/v1/agent/tunnel", get(tunnel))
         .route("/api/v1/servers/{id}/join-token", post(rotate_join_token))
         .route("/install-agent.sh", get(install_script))
         .route("/downloads/{file}", get(download))
@@ -101,8 +108,10 @@ pub async fn join_command(
         .map_err(ca_unavailable)?;
     let ca_sha256 = pki::pem_fingerprint(&ca.cert_pem)
         .ok_or_else(|| ca_unavailable("the agent CA certificate is unreadable"))?;
+    // /mcp is the machine-client path prefix: it stays reachable through
+    // Cloudflare Access's agent bypass when the panel is Zero Trust locked.
     Ok(format!(
-        "curl -fsSL {panel}/install-agent.sh | sudo sh -s -- --server {panel} --ca-sha256 {ca_sha256} --token {token}"
+        "curl -fsSL {panel}/mcp/install-agent.sh | sudo sh -s -- --server {panel} --ca-sha256 {ca_sha256} --token {token}"
     ))
 }
 
@@ -242,6 +251,106 @@ async fn rotate_join_token(
         join_token: token,
         expires_at,
     }))
+}
+
+/// A byte pipe to the agent gRPC listener over a WebSocket upgrade. The
+/// client still performs the mTLS handshake inside the socket, so enrollment
+/// and sessions work when only the panel's HTTPS port is reachable — for
+/// example behind a Cloudflare Tunnel with no inbound agent port. Upgrading
+/// needs no panel login because the inner mTLS is the credential, just like a
+/// direct connection to the listener.
+async fn tunnel(
+    State(state): State<AppState>,
+    auth::OptionalPeer(peer): auth::OptionalPeer,
+    headers: HeaderMap,
+    upgrade: WebSocketUpgrade,
+) -> Response {
+    let Some(bind) = state.config.agent_bind else {
+        return ApiError::new(
+            StatusCode::NOT_FOUND,
+            "agent_listener_off",
+            "the agent listener is disabled",
+        )
+        .into_response();
+    };
+    if !crate::security::ws_same_origin(&headers) {
+        return ApiError::new(
+            StatusCode::FORBIDDEN,
+            "bad_origin",
+            "cross-origin WebSocket requests are not allowed",
+        )
+        .into_response();
+    }
+    let ip = auth::client_ip(&headers, peer, &state.config.trusted_proxies);
+    if state
+        .login_limiter
+        .check_key(&format!("agent-tunnel:{ip}"))
+        .is_err()
+    {
+        return ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+            "too many connection attempts",
+        )
+        .into_response();
+    }
+    upgrade.on_upgrade(move |socket| pipe_to_listener(socket, bind))
+}
+
+/// An unspecified bind address means the listener sits on this machine's
+/// loopback as well, which is the only side this pipe may reach.
+fn listener_target(bind: SocketAddr) -> SocketAddr {
+    if !bind.ip().is_unspecified() {
+        return bind;
+    }
+    let localhost = if bind.is_ipv4() {
+        IpAddr::V4(Ipv4Addr::LOCALHOST)
+    } else {
+        IpAddr::V6(Ipv6Addr::LOCALHOST)
+    };
+    SocketAddr::new(localhost, bind.port())
+}
+
+/// Copy bytes between the WebSocket and the agent listener until either side
+/// closes. Binary messages carry the opaque inner TLS stream.
+async fn pipe_to_listener(socket: WebSocket, bind: SocketAddr) {
+    let target = listener_target(bind);
+    let tcp = match TcpStream::connect(target).await {
+        Ok(tcp) => tcp,
+        Err(error) => {
+            tracing::warn!(%target, %error, "agent tunnel could not reach the listener");
+            return;
+        }
+    };
+    let _ = tcp.set_nodelay(true);
+    let (mut tcp_read, mut tcp_write) = tcp.into_split();
+    let (mut sink, mut incoming) = socket.split();
+    let mut buf = [0u8; 16 * 1024];
+    loop {
+        tokio::select! {
+            message = incoming.next() => match message {
+                Some(Ok(Message::Binary(bytes))) => {
+                    if tcp_write.write_all(&bytes).await.is_err() {
+                        break;
+                    }
+                }
+                Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                Some(Ok(_)) => {}
+            },
+            read = tcp_read.read(&mut buf) => match read {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    if sink
+                        .send(Message::Binary(Bytes::copy_from_slice(&buf[..n])))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            },
+        }
+    }
 }
 
 async fn install_script() -> Response {

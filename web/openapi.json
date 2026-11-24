@@ -822,6 +822,20 @@
         }
       }
     },
+    "/api/v1/agent/tunnel": {
+      "get": {
+        "tags": [
+          "agent"
+        ],
+        "summary": "Pipe a WebSocket to the mTLS agent listener, for panels reachable only through HTTPS (for example a Cloudflare Tunnel)",
+        "operationId": "get_v1_agent_tunnel",
+        "responses": {
+          "101": {
+            "description": "Pipe a WebSocket to the mTLS agent listener, for panels reachable only through HTTPS (for example a Cloudflare Tunnel)"
+          }
+        }
+      }
+    },
     "/api/v1/alert-kinds": {
       "get": {
         "tags": [

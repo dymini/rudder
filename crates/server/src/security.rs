@@ -50,3 +50,19 @@ fn insert(headers: &mut axum::http::HeaderMap, name: impl Into<HeaderName>, valu
         headers.insert(name.into(), value);
     }
 }
+
+/// Browsers send `Origin` on WebSocket upgrades; it must match the panel host.
+/// Clients that send none (agents, the CLI) are not cross-site pages.
+pub(crate) fn ws_same_origin(headers: &axum::http::HeaderMap) -> bool {
+    let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) else {
+        return true;
+    };
+    let Some(host) = headers.get(header::HOST).and_then(|v| v.to_str().ok()) else {
+        return false;
+    };
+    let origin_host = origin
+        .split_once("://")
+        .map_or(origin, |(_, rest)| rest)
+        .trim_end_matches('/');
+    origin_host.eq_ignore_ascii_case(host)
+}
