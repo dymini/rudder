@@ -1345,9 +1345,19 @@ impl Default for Runtime {
     }
 }
 
-/// Paths an AI agent or API client uses with its own bearer token. They skip
-/// Access only when the operator turned the agent bypass on.
-pub const BYPASS_PATHS: &[&str] = &["/mcp", "/.well-known", "/oauth", "/api/health"];
+/// Paths an AI agent, node agent, or API client uses with its own credential:
+/// an `rdr_` bearer token, a one-time join token (`/api/v1/agent/enroll`), or
+/// the agent client certificate inside the session tunnel
+/// (`/api/v1/agent/tunnel`). They skip Access only when the operator turned
+/// the agent bypass on; at the Cloudflare edge only the `/mcp` prefix is
+/// bypassed, so machine traffic reaches these routes as `/mcp/api/v1/...`.
+pub const BYPASS_PATHS: &[&str] = &[
+    "/mcp",
+    "/.well-known",
+    "/oauth",
+    "/api/health",
+    "/api/v1/agent",
+];
 
 pub fn bypassed(path: &str) -> bool {
     BYPASS_PATHS.iter().any(|prefix| {
@@ -1622,8 +1632,11 @@ mod tests {
         assert!(bypassed("/mcp/"));
         assert!(bypassed("/oauth/token"));
         assert!(bypassed("/.well-known/oauth-authorization-server"));
+        assert!(bypassed("/api/v1/agent/enroll"));
+        assert!(bypassed("/api/v1/agent/tunnel"));
         assert!(!bypassed("/mcpx"));
         assert!(!bypassed("/api/v1/users"));
+        assert!(!bypassed("/api/v1/agentsettings"));
         assert!(!bypassed("/oauthish"));
     }
 

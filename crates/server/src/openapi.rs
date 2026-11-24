@@ -904,6 +904,15 @@ pub(crate) const ROUTES: &[Route] = &[
         status: 200,
     },
     Route {
+        path: "/api/v1/agent/tunnel",
+        method: HttpMethod::Get,
+        tag: "agent",
+        summary: "Pipe a WebSocket to the mTLS agent listener, for panels reachable only through HTTPS (for example a Cloudflare Tunnel)",
+        request: None,
+        response: None,
+        status: 101,
+    },
+    Route {
         path: "/api/v1/projects",
         method: HttpMethod::Post,
         tag: "catalog",

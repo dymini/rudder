@@ -71,6 +71,10 @@ impl Panel {
                 "RUDDER_AGENT_URL".into(),
                 format!("https://127.0.0.1:{agent_port}"),
             ),
+            (
+                "RUDDER_AGENT_BIND".into(),
+                format!("127.0.0.1:{agent_port}"),
+            ),
         ]);
         let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
         let state = rudder_server::AppState::new(pool, config);
@@ -286,7 +290,7 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
     let token = created["join_token"].as_str().unwrap().to_owned();
     let command = created["join_command"].as_str().unwrap();
     assert!(
-        command.contains(&format!("{}/install-agent.sh", panel.http)),
+        command.contains(&format!("{}/mcp/install-agent.sh", panel.http)),
         "{command}"
     );
     assert!(command.ends_with(&format!("--token {token}")), "{command}");
@@ -558,6 +562,52 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
         "{wrong_ca:#}"
     );
     assert!(!pinned_dir.join("agent.json").exists(), "nothing is saved");
+}
+
+/// When the direct gRPC port is unreachable — a Cloudflare Tunnel panel with
+/// no inbound ports — the agent runs the same mTLS session through the
+/// WebSocket tunnel on the panel's HTTPS endpoint.
+#[sqlx::test(migrations = "./migrations")]
+async fn agent_session_survives_over_the_websocket_tunnel(pool: PgPool) {
+    let panel = Panel::start(pool.clone()).await;
+    let created = panel
+        .ok(
+            "POST",
+            "/api/v1/servers",
+            Some(json!({ "name": "tunneled", "kind": "remote" })),
+        )
+        .await;
+    let server_id = created["id"].as_str().unwrap().to_owned();
+    let token = created["join_token"].as_str().unwrap().to_owned();
+
+    let agent_dir = TempDir::new();
+    let data_dir = agent_dir.path().join("agent");
+    let node_dir = agent_dir.path().join("node");
+    std::fs::create_dir_all(&node_dir).unwrap();
+
+    let mut identity = rudder_agent::enroll(&panel.http, &token, None, &data_dir)
+        .await
+        .unwrap();
+    // Enrollment said where the listener is, but nothing can reach that port.
+    identity.meta.grpc_url = "https://127.0.0.1:1".into();
+
+    let agent = start_agent(
+        identity.clone(),
+        &data_dir,
+        node_driver(&node_dir),
+        Arc::new(Buffer::default()),
+    );
+    panel.wait_for_status(&server_id, "online").await;
+    let driver = panel.driver(&server_id).await;
+    driver
+        .write_file("through/tunnel.txt", b"ok\n")
+        .await
+        .unwrap();
+    assert_eq!(
+        std::fs::read(node_dir.join("through/tunnel.txt")).unwrap(),
+        b"ok\n"
+    );
+    agent.abort();
 }
 
 #[sqlx::test(migrations = "./migrations")]

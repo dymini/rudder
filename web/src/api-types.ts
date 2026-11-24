@@ -489,6 +489,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent/tunnel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pipe a WebSocket to the mTLS agent listener, for panels reachable only through HTTPS (for example a Cloudflare Tunnel) */
+        get: operations["get_v1_agent_tunnel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alert-kinds": {
         parameters: {
             query?: never;
@@ -8194,6 +8211,24 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EnrollResponse"];
                 };
+            };
+        };
+    };
+    get_v1_agent_tunnel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pipe a WebSocket to the mTLS agent listener, for panels reachable only through HTTPS (for example a Cloudflare Tunnel) */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

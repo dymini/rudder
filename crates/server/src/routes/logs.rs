@@ -26,6 +26,7 @@ use crate::error::ApiError;
 use crate::logs::retention::{self, MetricsRetention, RetentionSettings, MAX_LOG_DAYS};
 use crate::logs::{insert_batch, search, LogFilter, LogView, NewLog, Page};
 use crate::nodes::driver_for;
+use crate::security::ws_same_origin;
 use crate::state::AppState;
 
 use super::catalog::{bad, core_error, not_found};
@@ -421,21 +422,6 @@ async fn export(
         .into_response())
 }
 
-/// Browsers send `Origin` on WebSocket upgrades; it must match the panel host.
-fn same_origin(headers: &HeaderMap) -> bool {
-    let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) else {
-        return true;
-    };
-    let Some(host) = headers.get(header::HOST).and_then(|v| v.to_str().ok()) else {
-        return false;
-    };
-    let origin_host = origin
-        .split_once("://")
-        .map_or(origin, |(_, rest)| rest)
-        .trim_end_matches('/');
-    origin_host.eq_ignore_ascii_case(host)
-}
-
 fn forbidden_origin() -> ApiError {
     ApiError::new(
         StatusCode::FORBIDDEN,
@@ -451,7 +437,7 @@ async fn tail(
     Query(query): Query<LogQuery>,
     upgrade: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
-    if !same_origin(&headers) {
+    if !ws_same_origin(&headers) {
         return Err(forbidden_origin());
     }
     let filter = parse_filter(&query)?;
@@ -600,7 +586,7 @@ async fn terminal(
     upgrade: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
     auth.require_write()?;
-    if !same_origin(&headers) {
+    if !ws_same_origin(&headers) {
         return Err(forbidden_origin());
     }
     let (server_id, container) = terminal_container(&state, id, query.container.as_deref()).await?;
@@ -691,11 +677,11 @@ mod tests {
     fn origin_must_match_host() {
         let mut headers = HeaderMap::new();
         headers.insert(header::HOST, "panel.test".parse().unwrap());
-        assert!(same_origin(&headers));
+        assert!(ws_same_origin(&headers));
         headers.insert(header::ORIGIN, "https://panel.test".parse().unwrap());
-        assert!(same_origin(&headers));
+        assert!(ws_same_origin(&headers));
         headers.insert(header::ORIGIN, "https://evil.test".parse().unwrap());
-        assert!(!same_origin(&headers));
+        assert!(!ws_same_origin(&headers));
     }
 
     #[test]

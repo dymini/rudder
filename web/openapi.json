@@ -7,7 +7,7 @@
       "name": "MIT",
       "identifier": "MIT"
     },
-    "version": "0.14.0"
+    "version": "0.15.0"
   },
   "paths": {
     "/.well-known/oauth-authorization-server": {
@@ -818,6 +818,20 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/agent/tunnel": {
+      "get": {
+        "tags": [
+          "agent"
+        ],
+        "summary": "Pipe a WebSocket to the mTLS agent listener, for panels reachable only through HTTPS (for example a Cloudflare Tunnel)",
+        "operationId": "get_v1_agent_tunnel",
+        "responses": {
+          "101": {
+            "description": "Pipe a WebSocket to the mTLS agent listener, for panels reachable only through HTTPS (for example a Cloudflare Tunnel)"
           }
         }
       }

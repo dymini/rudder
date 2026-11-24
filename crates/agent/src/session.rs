@@ -1,6 +1,7 @@
 //! The dial-out gRPC session: greeting, command dispatch, and telemetry upload.
 
 use std::future::Future;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -40,6 +41,8 @@ pub struct Session {
     pub connected: watch::Sender<bool>,
     pub builder: Option<Arc<Builder>>,
     pub status: Option<Arc<crate::status::StatusFile>>,
+    /// Set when the WebSocket tunnel reached the panel, so reconnects try it first.
+    pub prefer_tunnel: AtomicBool,
 }
 
 impl Session {
@@ -98,13 +101,42 @@ impl Session {
             .tls_config(tls)?)
     }
 
+    /// Dial the listener directly; when that fails, dial through the
+    /// WebSocket tunnel on the panel's HTTPS port. Both run the same mTLS
+    /// handshake, so a panel reachable only through a Cloudflare Tunnel or
+    /// another HTTPS reverse proxy still gets an authenticated session.
+    async fn channel(&self) -> Result<Channel, SessionError> {
+        let endpoint = self.endpoint().map_err(SessionError::Connect)?;
+        if self.prefer_tunnel.load(Ordering::Relaxed) {
+            if let Ok(channel) = self.tunnel_channel(&endpoint).await {
+                return Ok(channel);
+            }
+            return endpoint
+                .connect()
+                .await
+                .map_err(|e| SessionError::Connect(e.into()));
+        }
+        match endpoint.connect().await {
+            Ok(channel) => Ok(channel),
+            Err(direct) => match self.tunnel_channel(&endpoint).await {
+                Ok(channel) => {
+                    self.prefer_tunnel.store(true, Ordering::Relaxed);
+                    Ok(channel)
+                }
+                Err(tunnel) => Err(SessionError::Connect(anyhow::anyhow!(
+                    "{direct:#}; tunnel: {tunnel:#}"
+                ))),
+            },
+        }
+    }
+
+    async fn tunnel_channel(&self, endpoint: &Endpoint) -> anyhow::Result<Channel> {
+        let url = crate::tunnel::url(&self.identity.meta.panel_url)?;
+        crate::tunnel::connect(endpoint, &url).await
+    }
+
     async fn connect_once(self: &Arc<Self>) -> Result<(), SessionError> {
-        let channel = self
-            .endpoint()
-            .map_err(SessionError::Connect)?
-            .connect()
-            .await
-            .map_err(|e| SessionError::Connect(e.into()))?;
+        let channel = self.channel().await?;
         let client = NodeAgentClient::new(channel);
         let (outbox, rx) = mpsc::channel(64);
         let hello = AgentMessage {

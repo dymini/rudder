@@ -12,6 +12,7 @@ pub mod identity;
 mod session;
 pub mod status;
 pub mod telemetry;
+pub mod tunnel;
 pub mod update;
 
 use std::future::Future;
@@ -163,6 +164,7 @@ pub async fn run_with(
                 connected,
                 builder: options.builder,
                 status: status.clone(),
+                prefer_tunnel: std::sync::atomic::AtomicBool::new(false),
             })
             .run(),
         ),

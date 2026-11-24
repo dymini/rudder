@@ -118,7 +118,10 @@ pub async fn enroll(
     let response = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()?
-        .post(format!("{panel_url}/api/v1/agent/enroll"))
+        // /mcp/api/v1 is the machine-client prefix: it is routed to the API
+        // and stays reachable when Cloudflare Access protects the panel and
+        // the operator allowed agents through.
+        .post(format!("{panel_url}/mcp/api/v1/agent/enroll"))
         .json(&EnrollRequest {
             join_token: token.trim(),
             csr_pem: &csr,

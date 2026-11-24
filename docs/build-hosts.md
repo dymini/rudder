@@ -12,10 +12,15 @@ Existing services keep building on the panel until their placement is changed.
 2. Enter a server name and copy the enrollment command. Run it as root on the host:
 
    ```sh
-   curl -fsSL https://panel.example/install-agent.sh | sudo sh -s -- \
+   curl -fsSL https://panel.example/mcp/install-agent.sh | sudo sh -s -- \
      --server https://panel.example --ca-sha256 <fingerprint> --token <one-use-token> \
      --builder --no-edge
    ```
+
+   The command also works when the panel is only reachable through a
+   Cloudflare Tunnel with all inbound ports closed: `/mcp` is the path family
+   the agent bypass keeps open, and the agent session falls back to a
+   WebSocket on the panel's HTTPS address when the agent port is unreachable.
 
    Use the exact command Rudder issues, including its CA fingerprint. The token is
    secret, works once and expires in one hour. Do not paste it into tickets or logs.
@@ -108,8 +113,10 @@ last reported catalog; cache mutations require a connected builder.
   Treat the Docker socket as root-equivalent. Image tests use the default network,
   not an isolated sandbox; consider the host's network access and firewall rules.
 - The agent connects **outbound only**, using the existing mTLS gRPC session and
-  channels (usually the panel's port 7443). No inbound builder listener or public
-  registry is required. Image save/load streams are relayed through the panel.
+  channels (usually the panel's port 7443, or the WebSocket tunnel on the
+  panel's HTTPS address when no agent port is open). No inbound builder
+  listener or public registry is required. Image save/load streams are relayed
+  through the panel.
 - Repository credentials remain on the panel, which clones and transfers tracked
   files. Build arguments still reach the builder. Log redaction is defense in
   depth, not a guarantee against malicious build commands printing secrets.
