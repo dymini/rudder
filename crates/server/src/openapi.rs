@@ -38,6 +38,10 @@ use crate::routes::backups::{
     BackupJobView, BackupRunView, DestinationView, EventView, RunAccepted, SaveBackupJob,
     SaveDestination, TestResult,
 };
+use crate::routes::builders::{
+    BuilderCacheEntry, BuilderCacheFilter, BuilderCachePruned, BuilderInventory, BuilderJob,
+    BuilderView, CreateBuilder, CreatedBuilder, UpdateBuilder,
+};
 use crate::routes::cache::{
     CachePoint, CachePolicyView, CachePresetView, CacheServerHistory, CacheSettingsView,
     DomainCacheView, SaveCachePolicy, ServiceCachePurge, ServiceCacheView, UpdateCacheSettings,
@@ -63,7 +67,8 @@ use crate::routes::edge::{
     PreviewDomain, RegistryView, RollbackBody, UpdateDomain, UpdatePanel, UploadCertificate,
 };
 use crate::routes::git::{
-    BuildAccepted, BuildQueueView, CreateGitProvider, GitProviderView, SourceView, UpdateSource,
+    BuildAccepted, BuildQueueView, CreateGitProvider, GitProviderView, ServiceBuildSettings,
+    SourceView, UpdateSource,
 };
 use crate::routes::github_app::{
     CompleteGithubApp, GithubAppCreated, GithubAppInstalled, GithubAppManifest, InstallLink,
@@ -216,6 +221,16 @@ use crate::routes::mfa::{
         GithubAppInstalled,
         InstallLink,
         SourceView,
+        ServiceBuildSettings,
+        BuilderView,
+        BuilderInventory,
+        BuilderJob,
+        BuilderCacheEntry,
+        BuilderCacheFilter,
+        BuilderCachePruned,
+        CreateBuilder,
+        CreatedBuilder,
+        UpdateBuilder,
         UpdateSource,
         BuildAccepted,
         BuildQueueView,
@@ -493,6 +508,13 @@ pub fn document() -> OpenApi {
 }
 
 pub(crate) const ROUTES: &[Route] = &[
+    Route { path: "/api/v1/builders", method: HttpMethod::Get, tag: "catalog", summary: "List remote builder candidates, including disabled servers, and unclaimed waiting jobs", request: None, response: Some("BuilderInventory"), status: 200 },
+    Route { path: "/api/v1/builders", method: HttpMethod::Post, tag: "catalog", summary: "Create a builder with no workloads; assigning a workload later also makes it a deploy target. Installer uses --builder --no-edge", request: Some("CreateBuilder"), response: Some("CreatedBuilder"), status: 201 },
+    Route { path: "/api/v1/builders/{id}", method: HttpMethod::Patch, tag: "catalog", summary: "Configure builder mode on an existing remote server; max_jobs is 1 to 32, cache_limit_bytes is non-negative", request: Some("UpdateBuilder"), response: Some("BuilderView"), status: 200 },
+    Route { path: "/api/v1/builders/{id}/cache", method: HttpMethod::Get, tag: "catalog", summary: "List the last reported builder cache catalog, including while offline", request: None, response: Some("[BuilderCacheEntry]"), status: 200 },
+    Route { path: "/api/v1/builders/{id}/cache", method: HttpMethod::Delete, tag: "catalog", summary: "Clear builder caches. Query: service_id (optional UUID), key (optional); no filters clears all inactive caches. Builder must be connected", request: None, response: Some("BuilderCachePruned"), status: 200 },
+    Route { path: "/api/v1/builders/{id}/cache/prune", method: HttpMethod::Post, tag: "catalog", summary: "Evict builder caches by LRU down to its configured limit; active service caches are protected", request: None, response: Some("BuilderCachePruned"), status: 200 },
+    Route { path: "/api/v1/builders/{id}/jobs", method: HttpMethod::Get, tag: "catalog", summary: "List running and recent builder jobs (up to 100), including jobs waiting for this selected builder", request: None, response: Some("[BuilderJob]"), status: 200 },
     Route {path:"/api/v1/system/panel-backups",method:HttpMethod::Get,tag:"backups",summary:"List managed panel backup jobs and remote copies (limit 1-200 runs)",request:None,response:Some("PanelBackupInventory"),status:200},
     Route {path:"/api/v1/system/panel-backups/health",method:HttpMethod::Get,tag:"backups",summary:"Check scheduled full-panel backup freshness and failing streak",request:None,response:Some("PanelBackupHealth"),status:200},
     Route {path:"/api/v1/system/panel-backups/{id}/verify",method:HttpMethod::Post,tag:"backups",summary:"Verify a destination copy without executing SQL or changing live data",request:Some("VerifyPanelBackup"),response:Some("PanelBackupVerification"),status:202},

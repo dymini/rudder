@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use axum::body::Body;
+use http_body_util::BodyExt;
 use rudder_proto::agent::{server_message, CommandResult, ServerMessage};
 use serde_json::json;
 use sqlx::PgPool;
 use tokio::sync::mpsc;
+use tower::ServiceExt;
 
 use super::*;
 use crate::driver::remote::RemoteDriver;
@@ -626,6 +629,13 @@ async fn fake_agent(
                         created_at: 1700000000000
                     }]);
                 }
+                rudder_node::ops::Request::BuildCachePrune { .. } => {
+                    payload = json!(rudder_node::ops::BuildCachePruned {
+                        reclaimed_bytes: 42,
+                        remaining_bytes: 0,
+                        entries: Vec::new()
+                    });
+                }
                 rudder_node::ops::Request::BuildCancel { .. } => payload = json!(true),
                 rudder_node::ops::Request::BuildStart { request } => {
                     service = request.service_id.clone()
@@ -860,6 +870,101 @@ async fn fake_agents_relay_images_and_stream_builder_logs_before_finish(pool: Pg
     .await
     .unwrap();
     assert_eq!(cached, 42);
+    f.queued("builder", "wait", Some(builder)).await;
+    let app = crate::router(f.state.clone());
+    let setup = app.clone().oneshot(axum::http::Request::builder().method("POST").uri("/api/v1/setup")
+        .header("content-type", "application/json").body(Body::from(json!({"setup_token":"test-setup-token","email":"owner@example.com","password":"correct-horse-battery","display_name":"Owner"}).to_string())).unwrap()).await.unwrap();
+    assert_eq!(setup.status(), axum::http::StatusCode::OK);
+    let cookie = setup.headers()["set-cookie"]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned();
+    let owner: serde_json::Value =
+        serde_json::from_slice(&setup.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    for suffix in [
+        format!("builders/{builder}/cache"),
+        format!("builders/{builder}/jobs"),
+        "builders".into(),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri(format!("/api/v1/{suffix}"))
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let result: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        if suffix.ends_with("cache") {
+            assert_eq!(result[0]["size_bytes"], 42);
+            assert_eq!(result[0]["service_id"], service.to_string());
+            assert!(result[0]["last_used_at"].is_string());
+        } else if suffix.ends_with("jobs") {
+            assert_eq!(result.as_array().unwrap().len(), 2);
+            assert_eq!(result[0]["status"], "running");
+        } else {
+            let view = result["builders"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["id"] == builder.to_string())
+                .unwrap();
+            assert_eq!(view["online"], true);
+            assert_eq!(view["active_jobs"], 1);
+            assert_eq!(view["queued_jobs"], 1);
+            assert_eq!(view["cache_bytes"], 42);
+            assert_eq!(result["waiting_jobs"].as_array().unwrap().len(), 1);
+        }
+    }
+    for (method, suffix) in [
+        ("POST", "cache/prune"),
+        ("DELETE", "cache?key=branch"),
+        ("DELETE", "cache"),
+        ("DELETE", "cache?service_id=SERVICE&key=branch"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(method)
+                    .uri(format!(
+                        "/api/v1/builders/{builder}/{}",
+                        suffix.replace("SERVICE", &service.to_string())
+                    ))
+                    .header("cookie", &cookie)
+                    .header("x-csrf-token", owner["csrf_token"].as_str().unwrap())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let result: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        assert_eq!(result["entries"], json!([]));
+    }
+    {
+        let requests = from.requests.lock().unwrap();
+        assert!(requests.iter().any(|r| matches!(r, rudder_node::ops::Request::BuildCachePrune { request } if request.limit_bytes == Some(20 * 1024 * 1024 * 1024))));
+        assert!(requests.iter().any(|r| matches!(r, rudder_node::ops::Request::BuildCachePrune { request } if request.service_id.as_deref() == Some(&service.to_string()) && request.cache_key.as_deref() == Some("branch"))));
+    }
+    let cache_count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM build_cache_entries WHERE builder_id = $1")
+            .bind(builder)
+            .fetch_one(&f.state.pool)
+            .await
+            .unwrap();
+    assert_eq!(cache_count, 0);
     let _ = driver.remove_image("app:built").await;
     from.task.abort();
     to.task.abort();

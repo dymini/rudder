@@ -330,6 +330,7 @@ pub fn router(state: AppState) -> axum::Router {
         .merge(routes::security::router())
         .merge(routes::cloudflare::router())
         .merge(routes::catalog::router())
+        .merge(routes::builders::router())
         .merge(routes::edge::router())
         .merge(routes::panel_ssl::router())
         .merge(routes::git::router())

@@ -119,6 +119,252 @@ fn hmac_sha256(key: &[u8], message: &[u8]) -> String {
     hex::encode(outer.finalize())
 }
 
+#[sqlx::test(migrations = "./migrations")]
+async fn builders_inventory_creation_validation_offline_cache_and_permissions(pool: PgPool) {
+    let state = state(pool.clone());
+    let app = rudder_server::router(state.clone());
+    let (cookie, csrf) = owner(&app).await;
+    let empty = call(&app, "GET", "/api/v1/builders", Some(&cookie), None, None).await;
+    assert_eq!(empty.status, StatusCode::OK);
+    assert_eq!(empty.body["builders"], json!([]));
+    assert_eq!(empty.body["waiting_jobs"], json!([]));
+    let created = call(
+        &app,
+        "POST",
+        "/api/v1/builders",
+        Some(&cookie),
+        Some(&csrf),
+        Some(json!({"name":"home"})),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.body);
+    let id = created.body["server"]["id"].as_str().unwrap();
+    assert_eq!(created.body["server"]["enabled"], true);
+    assert_eq!(created.body["server"]["online"], false);
+    assert_eq!(created.body["server"]["max_jobs"], 1);
+    assert_eq!(created.body["server"]["cache_bytes"], 0);
+    let command = created.body["join_command"].as_str().unwrap();
+    assert!(command.contains("--ca-sha256"));
+    assert!(command.ends_with("--builder --no-edge"));
+    let services: i64 = sqlx::query_scalar("SELECT count(*) FROM services WHERE server_id = $1")
+        .bind(id.parse::<uuid::Uuid>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(services, 0);
+    let duplicate = call(
+        &app,
+        "POST",
+        "/api/v1/builders",
+        Some(&cookie),
+        Some(&csrf),
+        Some(json!({"name":"home"})),
+    )
+    .await;
+    assert_eq!(duplicate.status, StatusCode::CONFLICT);
+    for (body, rule) in [
+        (json!({"max_jobs":0}), "1 to 32"),
+        (json!({"max_jobs":33}), "1 to 32"),
+        (json!({"cache_limit_bytes":-1}), "non-negative"),
+    ] {
+        let reply = call(
+            &app,
+            "PATCH",
+            &format!("/api/v1/builders/{id}"),
+            Some(&cookie),
+            Some(&csrf),
+            Some(body),
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::BAD_REQUEST);
+        assert!(reply.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains(rule));
+    }
+    let update = call(&app, "PATCH", &format!("/api/v1/builders/{id}"), Some(&cookie), Some(&csrf), Some(json!({"enabled":false,"paused":true,"draining":true,"max_jobs":32,"cache_limit_bytes":0}))).await;
+    assert_eq!(update.status, StatusCode::OK);
+    assert_eq!(update.body["max_jobs"], 32);
+    let list = call(&app, "GET", "/api/v1/builders", Some(&cookie), None, None).await;
+    assert_eq!(list.body["builders"][0]["enabled"], false);
+    assert!(!list
+        .body
+        .to_string()
+        .contains(created.body["join_token"].as_str().unwrap()));
+    for suffix in ["cache", "jobs"] {
+        let reply = call(
+            &app,
+            "GET",
+            &format!("/api/v1/builders/{id}/{suffix}"),
+            Some(&cookie),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::OK);
+        assert_eq!(reply.body, json!([]));
+    }
+    let invalid = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/builders/{id}/cache?key=../main"),
+        Some(&cookie),
+        Some(&csrf),
+        None,
+    )
+    .await;
+    assert_eq!(invalid.status, StatusCode::BAD_REQUEST);
+    for (method, suffix) in [("DELETE", "cache"), ("POST", "cache/prune")] {
+        let reply = call(
+            &app,
+            method,
+            &format!("/api/v1/builders/{id}/{suffix}"),
+            Some(&cookie),
+            Some(&csrf),
+            None,
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::CONFLICT);
+        assert_eq!(reply.body["error"]["code"], "builder_offline");
+    }
+    let missing = call(
+        &app,
+        "GET",
+        &format!("/api/v1/builders/{}/jobs", uuid::Uuid::new_v4()),
+        Some(&cookie),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND);
+    call(
+        &app,
+        "POST",
+        "/api/v1/users",
+        Some(&cookie),
+        Some(&csrf),
+        Some(json!({"email":"viewer@example.com","password":"viewer-password-ok","role":"viewer"})),
+    )
+    .await;
+    let viewer = call(
+        &app,
+        "POST",
+        "/api/v1/login",
+        None,
+        None,
+        Some(json!({"email":"viewer@example.com","password":"viewer-password-ok"})),
+    )
+    .await;
+    let forbidden = call(
+        &app,
+        "PATCH",
+        &format!("/api/v1/builders/{id}"),
+        viewer.cookie.as_deref(),
+        viewer.body["csrf_token"].as_str(),
+        Some(json!({"enabled":true})),
+    )
+    .await;
+    assert_eq!(forbidden.status, StatusCode::FORBIDDEN);
+    let allowed = call(
+        &app,
+        "GET",
+        "/api/v1/builders",
+        viewer.cookie.as_deref(),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(allowed.status, StatusCode::OK);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn source_build_settings_validate_builder_and_preserve_settings_when_omitted(pool: PgPool) {
+    let app = rudder_server::router(state(pool.clone()));
+    let (cookie, csrf) = owner(&app).await;
+    let server: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO servers (name,kind) VALUES ('remote','remote') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let project: uuid::Uuid =
+        sqlx::query_scalar("INSERT INTO projects (name) VALUES ('builds') RETURNING id")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let environment: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO environments (name,project_id) VALUES ('prod',$1) RETURNING id",
+    )
+    .bind(project)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let service: uuid::Uuid = sqlx::query_scalar("INSERT INTO services (name,kind,server_id,environment_id) VALUES ('app','application',$1,$2) RETURNING id").bind(server).bind(environment).fetch_one(&pool).await.unwrap();
+    let provider = call(
+        &app,
+        "POST",
+        "/api/v1/git-providers",
+        Some(&cookie),
+        Some(&csrf),
+        Some(json!({"name":"github","kind":"github_pat","token":"fake-test-token"})),
+    )
+    .await;
+    let path = format!("/api/v1/services/{service}/source");
+    let mut source = json!({"provider_id":provider.body["id"],"repo":"https://github.com/example/app.git","branch":"main","strategy":"dockerfile"});
+    for (build, rule) in [
+        (json!({"placement":"bad"}), "placement"),
+        (json!({"fallback":"bad"}), "fallback"),
+        (json!({"timeout_secs":0}), "positive"),
+        (json!({"placement":"builder"}), "required"),
+        (json!({"builder_id":uuid::Uuid::new_v4()}), "does not exist"),
+        (json!({"builder_id":server}), "enable builder mode"),
+    ] {
+        source["build"] = build;
+        let reply = call(
+            &app,
+            "PUT",
+            &path,
+            Some(&cookie),
+            Some(&csrf),
+            Some(source.clone()),
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{}", reply.body);
+        assert!(reply.body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains(rule));
+    }
+    let enabled = call(
+        &app,
+        "PATCH",
+        &format!("/api/v1/builders/{server}"),
+        Some(&cookie),
+        Some(&csrf),
+        Some(json!({"enabled":true})),
+    )
+    .await;
+    assert_eq!(enabled.status, StatusCode::OK);
+    let build = json!({"placement":"builder","builder_id":server,"fallback":"wait","timeout_secs":120,"test_command":"test -f /app/ready"});
+    source["build"] = build.clone();
+    let saved = call(
+        &app,
+        "PUT",
+        &path,
+        Some(&cookie),
+        Some(&csrf),
+        Some(source.clone()),
+    )
+    .await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+    assert_eq!(saved.body["build"], build);
+    source.as_object_mut().unwrap().remove("build");
+    let saved = call(&app, "PUT", &path, Some(&cookie), Some(&csrf), Some(source)).await;
+    assert_eq!(saved.body["build"], build);
+    let fetched = call(&app, "GET", &path, Some(&cookie), None, None).await;
+    assert_eq!(fetched.body["build"], build);
+}
+
 async fn owner(app: &axum::Router) -> (String, String) {
     let created = call(
         app,

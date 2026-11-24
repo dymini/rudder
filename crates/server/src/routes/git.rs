@@ -86,6 +86,7 @@ pub struct CreateGitProvider {
 
 #[derive(Serialize, ToSchema)]
 pub struct SourceView {
+    pub build: ServiceBuildSettings,
     pub provider_id: Uuid,
     pub repo: String,
     pub branch: String,
@@ -102,6 +103,8 @@ pub struct SourceView {
 
 #[derive(Deserialize, ToSchema)]
 pub struct UpdateSource {
+    /// Omit to preserve build settings; supplying this object replaces them.
+    pub build: Option<ServiceBuildSettings>,
     pub provider_id: Uuid,
     pub repo: String,
     pub branch: String,
@@ -111,6 +114,100 @@ pub struct UpdateSource {
     pub publish_dir: Option<String>,
     /// Open pull requests against this branch get their own copy of the service.
     pub preview_pull_requests: Option<bool>,
+}
+
+#[derive(Clone, Deserialize, Serialize, sqlx::FromRow, ToSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ServiceBuildSettings {
+    /// panel, auto, or builder (requires builder_id).
+    pub placement: String,
+    pub builder_id: Option<Uuid>,
+    /// panel or wait when no eligible builder is available.
+    pub fallback: String,
+    /// Shell command run inside the built image with Docker's default network.
+    pub test_command: Option<String>,
+    pub timeout_secs: i32,
+}
+
+impl Default for ServiceBuildSettings {
+    fn default() -> Self {
+        Self {
+            placement: "panel".into(),
+            builder_id: None,
+            fallback: "panel".into(),
+            test_command: None,
+            timeout_secs: 3600,
+        }
+    }
+}
+
+async fn build_settings(state: &AppState, id: Uuid) -> Result<ServiceBuildSettings, ApiError> {
+    sqlx::query_as("SELECT build_placement AS placement, build_builder_id AS builder_id, build_fallback AS fallback, build_test_command AS test_command, build_timeout_secs AS timeout_secs FROM services WHERE id = $1")
+        .bind(id).fetch_one(&state.pool).await.map_err(ApiError::database)
+}
+
+async fn validate_build_settings(
+    state: &AppState,
+    settings: &ServiceBuildSettings,
+) -> Result<(), ApiError> {
+    if !matches!(settings.placement.as_str(), "panel" | "auto" | "builder") {
+        return Err(bad(
+            "invalid_placement",
+            "build.placement must be panel, auto or builder",
+        ));
+    }
+    if !matches!(settings.fallback.as_str(), "panel" | "wait") {
+        return Err(bad(
+            "invalid_fallback",
+            "build.fallback must be panel or wait",
+        ));
+    }
+    if settings.timeout_secs <= 0 {
+        return Err(bad(
+            "invalid_timeout",
+            "build.timeout_secs must be a positive integer number of seconds",
+        ));
+    }
+    if settings
+        .test_command
+        .as_ref()
+        .is_some_and(|command| command.len() > 8192 || command.contains('\0'))
+    {
+        return Err(bad(
+            "invalid_test_command",
+            "build.test_command must be at most 8192 UTF-8 bytes and must not contain NUL",
+        ));
+    }
+    if settings.placement == "builder" && settings.builder_id.is_none() {
+        return Err(bad(
+            "builder_required",
+            "build.builder_id is required when placement is builder",
+        ));
+    }
+    if let Some(id) = settings.builder_id {
+        let enabled: Option<bool> =
+            sqlx::query_scalar("SELECT builder_enabled FROM servers WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&state.pool)
+                .await
+                .map_err(ApiError::database)?;
+        match enabled {
+            None => {
+                return Err(bad(
+                    "builder_not_found",
+                    "the chosen builder does not exist",
+                ))
+            }
+            Some(false) => {
+                return Err(bad(
+                    "builder_disabled",
+                    "enable builder mode on the chosen server before selecting it",
+                ))
+            }
+            Some(true) => {}
+        }
+    }
+    Ok(())
 }
 
 #[derive(Serialize, ToSchema)]
@@ -321,6 +418,7 @@ async fn get_source(
 ) -> Result<Json<SourceView>, ApiError> {
     let row = load_service(&state, id).await?;
     let mut view = source_view(&row.spec, row.webhook_secret_enc.is_some())?;
+    view.build = build_settings(&state, id).await?;
     view.public_key = deploy_public_key(&state, id).await?;
     Ok(Json(view))
 }
@@ -332,6 +430,9 @@ async fn put_source(
     Json(body): Json<UpdateSource>,
 ) -> Result<Json<SourceView>, ApiError> {
     auth.require_write()?;
+    if let Some(settings) = &body.build {
+        validate_build_settings(&state, settings).await?;
+    }
     validate_git_url(&body.repo).map_err(core_error)?;
     validate_branch(&body.branch).map_err(core_error)?;
     let strategy = BuildStrategy::parse(&body.strategy).map_err(core_error)?;
@@ -406,6 +507,11 @@ async fn put_source(
     if let Some(enabled) = body.preview_pull_requests {
         row.spec["preview_pull_requests"] = json!(enabled);
     }
+    let mut tx = state.pool.begin().await.map_err(ApiError::database)?;
+    if let Some(settings) = &body.build {
+        sqlx::query("UPDATE services SET build_placement = $2, build_builder_id = $3, build_fallback = $4, build_test_command = $5, build_timeout_secs = $6 WHERE id = $1")
+            .bind(id).bind(&settings.placement).bind(settings.builder_id).bind(&settings.fallback).bind(&settings.test_command).bind(settings.timeout_secs).execute(&mut *tx).await.map_err(ApiError::database)?;
+    }
     sqlx::query!(
         r#"
         UPDATE services
@@ -416,9 +522,10 @@ async fn put_source(
         row.spec,
         secret_enc
     )
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await
     .map_err(ApiError::database)?;
+    tx.commit().await.map_err(ApiError::database)?;
     let public_key = if ssh {
         Some(ensure_deploy_key(&state, id).await?)
     } else {
@@ -440,6 +547,7 @@ async fn put_source(
     )
     .await;
     let mut view = source_view(&row.spec, true)?;
+    view.build = build_settings(&state, id).await?;
     view.public_key = public_key;
     view.webhook_secret = Some(secret);
     Ok(Json(view))
@@ -668,6 +776,7 @@ fn source_view(spec: &Value, has_webhook_secret: bool) -> Result<SourceView, Api
         .and_then(|value| Uuid::parse_str(value).ok())
         .ok_or_else(|| bad("invalid", "git provider is missing"))?;
     Ok(SourceView {
+        build: ServiceBuildSettings::default(),
         provider_id,
         repo: text_field(git, "repo"),
         branch: text_field(git, "branch"),

@@ -17,7 +17,7 @@ use tokio::process::Command;
 use uuid::Uuid;
 
 mod placement;
-mod remote;
+pub(crate) mod remote;
 #[cfg(test)]
 mod tests;
 

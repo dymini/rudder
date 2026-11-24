@@ -2,6 +2,7 @@ pub mod access;
 pub mod account;
 pub mod agents;
 pub mod backups;
+pub mod builders;
 pub mod cache;
 pub mod catalog;
 pub mod cloudflare;

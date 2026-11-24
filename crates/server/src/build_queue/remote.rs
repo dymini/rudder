@@ -9,7 +9,7 @@ use super::*;
 use crate::driver::remote::{RemoteDriver, RemoteHandle};
 
 #[derive(Debug)]
-pub(super) enum BuildFailure {
+pub(crate) enum BuildFailure {
     Failed(String),
     Disconnected,
 }
@@ -259,7 +259,7 @@ pub(super) async fn refresh_catalog(
     Ok(())
 }
 
-async fn persist_catalog(
+pub(crate) async fn persist_catalog(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     builder: Uuid,
     entries: Vec<BuildCacheEntry>,

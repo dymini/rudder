@@ -45,8 +45,8 @@ Git-sourced compose stacks are cloned on the panel, then the tracked files are c
 Migration 0028 adds opt-in builder settings to servers, independent build placement
 to services, builder attribution to queued jobs, and a build-cache inventory. All
 existing services keep `panel` placement; this does not move builds or
-enable builders automatically. Builder enrollment and local status are available; HTTP/OpenAPI/MCP
-management, UI and its translations follow separately.
+enable builders automatically. Builder enrollment, HTTP/OpenAPI/MCP management and
+local status are available; the Builders UI and its translations follow separately.
 
 Agents report architecture (`x86_64`/`aarch64`) and whether `docker buildx version`
 and `nixpacks --version` succeed in Hello. Build commands use the existing outbound
@@ -173,6 +173,42 @@ connection changes are recorded immediately. A snapshot older than 30 seconds is
 disconnected, so a killed service cannot remain online indefinitely. Both text and
 JSON status exit nonzero when unenrolled or disconnected. Use `--data-dir` when
 running a custom installation. Reading status does not probe the panel or run Docker.
+
+### Manage builders through HTTP or MCP
+
+Builder management uses `catalog:read`/`catalog:write`, not a new MCP scope:
+
+- `GET /api/v1/builders` returns `builders` (all remote server candidates, including
+  disabled ones so existing servers can be enabled) and up to 200 unclaimed
+  `waiting_jobs`. Each builder includes live session state, last seen/version/arch,
+  capabilities, settings, active jobs, explicitly targeted queued jobs, and last
+  reported cache bytes versus its limit. Auto jobs are not reserved until claim.
+- `POST /api/v1/builders` accepts `name` and optional `description` and returns
+  `server`, `join_token`, `join_command` and `expires_at`. Treat tokens as secrets.
+- `PATCH /api/v1/builders/{id}` accepts optional `enabled`, `max_jobs` (1–32),
+  `paused`, `draining`, and `cache_limit_bytes` (non-negative). It can enable builder
+  mode on an existing remote server, but the agent must also be installed/configured
+  with builder mode. Disabling or draining stops new claims, not active jobs.
+- `GET /api/v1/builders/{id}/cache` reads the last reported per-service/key catalog,
+  including while offline. `DELETE` on the same path clears caches, optionally
+  filtered by `service_id` and/or `key`. Omit both to clear all inactive caches.
+  `POST /api/v1/builders/{id}/cache/prune` applies LRU down to the configured limit.
+  Mutations require a connected agent; active-service caches are protected. Cache
+  catalog replacement shares the build-completion lock so stale refreshes cannot
+  resurrect deleted entries. The result reports reclaimed/remaining bytes and entries.
+- `GET /api/v1/builders/{id}/jobs` returns up to 100 recent jobs, prioritizing all
+  running jobs, including unclaimed jobs targeting this builder. Deployment IDs link
+  to deployment logs and waiting reasons. Standard build cancellation still applies.
+
+`GET/PUT /api/v1/services/{id}/source` uses the existing `source` MCP scope and now
+includes a `build` object: `placement` (`panel`, `auto`, `builder`), `builder_id`,
+`fallback` (`panel`, `wait`), nullable `test_command`, and positive `timeout_secs`.
+Omitting `build` in PUT preserves settings. Supplying it replaces the object;
+omitted fields default to panel placement/fallback, no builder/test, and 3600 seconds.
+Builder placement requires an existing, builder-enabled `builder_id`; any selected
+builder ID is validated even with other placement modes. Null clears the optional
+test command or builder ID within a supplied object. Buildx is required; Nixpacks
+also requires the Nixpacks capability. Settings do not cause a build automatically.
 
 | Path | Content |
 | --- | --- |
