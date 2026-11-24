@@ -9,6 +9,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Added
+- **Choose where each Git app builds.** Source settings now expose panel, automatic or specific-host placement, fallback, image tests and deadlines, with Vietnamese guidance. Queued deployments display their waiting reason without opening the logs.
 - **Manage build hosts from the panel.** The new Builders page shows live connection, jobs and cache usage, provides copyable setup commands, and lets operators control capacity, draining and confirmed cache cleanup. Existing remote servers can enable builder mode from Servers.
 - **Manage enrolled build hosts through the API and MCP.** Create builders without workloads, enable builder mode on existing remote servers, control capacity and draining, inspect jobs and caches, and clear or prune caches. Git source settings now expose placement, fallback, image tests and deadlines. Assigning a workload to a builder also makes it a deploy target.
 - **Install and inspect builder agents.** `install-agent.sh --builder --no-edge` can install Docker and Buildx on Debian/Ubuntu, with optional pinned Nixpacks. Builder storage stays below the agent data directory, and `rudder-agent status [--json]` reports enrollment, connection, capabilities, jobs and cache usage without exposing credentials.
