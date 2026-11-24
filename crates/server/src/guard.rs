@@ -472,7 +472,7 @@ pub async fn stop_builds(state: &AppState, error: &str) -> usize {
         r#"
         UPDATE build_queue
         SET cancel_requested = TRUE
-        WHERE status = 'running' AND NOT cancel_requested
+        WHERE status = 'running' AND builder_id IS NULL AND NOT cancel_requested
         RETURNING id
         "#
     )

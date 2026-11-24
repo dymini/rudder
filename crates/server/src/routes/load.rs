@@ -249,9 +249,21 @@ async fn cancel_builds(
     .await
     .map_err(ApiError::database)?;
     let running = guard::stop_builds(&state, &reason).await;
+    let builders: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM build_queue WHERE status = 'running' AND builder_id IS NOT NULL AND NOT cancel_requested",
+    ).fetch_all(&state.pool).await.map_err(ApiError::database)?;
+    let cancelled_builders = futures_util::future::join_all(
+        builders
+            .into_iter()
+            .map(|id| crate::build_queue::cancel(&state, id)),
+    )
+    .await
+    .into_iter()
+    .filter(Result::is_ok)
+    .count();
     let cancelled = BuildsCancelled {
         queued: deployments.len() as i64,
-        running: running as i64,
+        running: (running + cancelled_builders) as i64,
     };
     audit::record(
         &state.pool,

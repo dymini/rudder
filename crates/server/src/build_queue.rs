@@ -1,6 +1,6 @@
-//! Per-server build queue.
+//! Concurrent application builds, placed on the panel or an enrolled builder.
 //!
-//! A job is claimed only when that server is under the panel concurrency limit.
+//! A claim reserves a panel slot or a compatible connected builder's slot.
 //! Git, Docker, and Nixpacks are started with argument vectors. Tokens stay in
 //! a mode `0600` credential file or an environment value and are stripped from
 //! stored logs.
@@ -10,11 +10,16 @@ use std::time::Duration;
 
 use rudder_core::{
     can_start, docker_build_argv, git_clone_argv, github_app_jwt, nixpacks_argv, redact,
-    static_dockerfile, validate_env_key, BuildPlan, BuildStrategy,
+    static_dockerfile, validate_env_key, BuildPlan, BuildStrategy, NodeDriver,
 };
 use serde_json::Value;
 use tokio::process::Command;
 use uuid::Uuid;
+
+mod placement;
+mod remote;
+#[cfg(test)]
+mod tests;
 
 use crate::deploy::{roll_built_image, BuiltRollout};
 use crate::error::ApiError;
@@ -50,6 +55,19 @@ pub async fn build_once(state: &AppState) -> Result<bool, ApiError> {
         return Ok(false);
     };
     run_claimed(state, queue_id, deployment_id).await?;
+    Ok(true)
+}
+
+pub(crate) async fn dispatch_once(state: &AppState) -> Result<bool, ApiError> {
+    let Some((queue, deployment)) = claim(state).await? else {
+        return Ok(false);
+    };
+    let state = state.clone();
+    tokio::spawn(async move {
+        if let Err(error) = run_claimed(&state, queue, deployment).await {
+            tracing::error!(%queue, message = %error.public_message(), "claimed build failed");
+        }
+    });
     Ok(true)
 }
 
@@ -121,15 +139,16 @@ pub async fn enqueue(
 }
 
 pub async fn cancel(state: &AppState, queue_id: Uuid) -> Result<(), ApiError> {
+    let mut tx = state.pool.begin().await.map_err(ApiError::database)?;
     let row = sqlx::query!(
         r#"
-        SELECT status, deployment_id, cancel_requested
+        SELECT status, deployment_id, cancel_requested, builder_id
         FROM build_queue
-        WHERE id = $1
+        WHERE id = $1 FOR UPDATE
         "#,
         queue_id
     )
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(ApiError::database)?
     .ok_or_else(|| not_found("build not found"))?;
@@ -142,7 +161,7 @@ pub async fn cancel(state: &AppState, queue_id: Uuid) -> Result<(), ApiError> {
             "#,
             queue_id
         )
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await
         .map_err(ApiError::database)?;
         sqlx::query!(
@@ -153,9 +172,10 @@ pub async fn cancel(state: &AppState, queue_id: Uuid) -> Result<(), ApiError> {
             "#,
             row.deployment_id
         )
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await
         .map_err(ApiError::database)?;
+        tx.commit().await.map_err(ApiError::database)?;
         return Ok(());
     }
     if row.status == "running" {
@@ -163,125 +183,23 @@ pub async fn cancel(state: &AppState, queue_id: Uuid) -> Result<(), ApiError> {
             r#"UPDATE build_queue SET cancel_requested = TRUE WHERE id = $1"#,
             queue_id
         )
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await
         .map_err(ApiError::database)?;
+        tx.commit().await.map_err(ApiError::database)?;
+        if let Some(builder) = row.builder_id.and_then(|id| state.agents.session(id)) {
+            let _ = builder
+                .call::<bool>(rudder_node::ops::Request::BuildCancel {
+                    job_id: queue_id.to_string(),
+                })
+                .await;
+        }
         return Ok(());
     }
     Err(bad("not_running", "that build is already finished"))
 }
 
-async fn claim(state: &AppState) -> Result<Option<(Uuid, Uuid)>, ApiError> {
-    // Builds run on the panel host: they wait while it is busy or builds are paused.
-    if let Some(waited) = oldest_queued_wait(state).await? {
-        if let Some(reason) = state.guard.hold(waited) {
-            tracing::debug!(reason, "build queue held by the load guard");
-            return Ok(None);
-        }
-    }
-    let limit = sqlx::query_scalar!(
-        r#"
-        SELECT build_concurrency_default AS "limit!"
-        FROM panel_settings
-        WHERE id = TRUE
-        "#
-    )
-    .fetch_one(&state.pool)
-    .await
-    .map_err(ApiError::database)?;
-    let servers = sqlx::query_scalar!(
-        r#"SELECT DISTINCT server_id FROM build_queue WHERE status = 'queued'"#
-    )
-    .fetch_all(&state.pool)
-    .await
-    .map_err(ApiError::database)?;
-    for server_id in servers {
-        let running = sqlx::query_scalar!(
-            r#"
-            SELECT COUNT(*) AS "count!"
-            FROM build_queue
-            WHERE server_id = $1 AND status = 'running'
-            "#,
-            server_id
-        )
-        .fetch_one(&state.pool)
-        .await
-        .map_err(ApiError::database)?;
-        if !can_start(running, i64::from(limit)) {
-            continue;
-        }
-        let mut tx = state.pool.begin().await.map_err(ApiError::database)?;
-        let row = sqlx::query!(
-            r#"
-            SELECT id, deployment_id, cancel_requested
-            FROM build_queue
-            WHERE server_id = $1 AND status = 'queued'
-            ORDER BY created_at
-            FOR UPDATE SKIP LOCKED
-            LIMIT 1
-            "#,
-            server_id
-        )
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(ApiError::database)?;
-        let Some(row) = row else {
-            tx.commit().await.map_err(ApiError::database)?;
-            continue;
-        };
-        if row.cancel_requested {
-            sqlx::query!(
-                r#"
-                UPDATE build_queue
-                SET status = 'cancelled', finished_at = now()
-                WHERE id = $1
-                "#,
-                row.id
-            )
-            .execute(&mut *tx)
-            .await
-            .map_err(ApiError::database)?;
-            sqlx::query!(
-                r#"
-                UPDATE deployments
-                SET status = 'cancelled', error = 'build cancelled', finished_at = now()
-                WHERE id = $1
-                "#,
-                row.deployment_id
-            )
-            .execute(&mut *tx)
-            .await
-            .map_err(ApiError::database)?;
-            tx.commit().await.map_err(ApiError::database)?;
-            continue;
-        }
-        sqlx::query!(
-            r#"
-            UPDATE build_queue
-            SET status = 'running', started_at = now()
-            WHERE id = $1
-            "#,
-            row.id
-        )
-        .execute(&mut *tx)
-        .await
-        .map_err(ApiError::database)?;
-        sqlx::query!(
-            r#"
-            UPDATE deployments
-            SET status = 'running', started_at = COALESCE(started_at, now())
-            WHERE id = $1
-            "#,
-            row.deployment_id
-        )
-        .execute(&mut *tx)
-        .await
-        .map_err(ApiError::database)?;
-        tx.commit().await.map_err(ApiError::database)?;
-        return Ok(Some((row.id, row.deployment_id)));
-    }
-    Ok(None)
-}
+use placement::claim;
 
 async fn run_claimed(
     state: &AppState,
@@ -336,7 +254,12 @@ async fn run_claimed(
             return Ok(());
         }
     };
-    let mut logs = String::from("build queued\n");
+    let mut logs: String =
+        sqlx::query_scalar("SELECT COALESCE(logs, '') FROM deployments WHERE id = $1")
+            .bind(deployment_id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(ApiError::database)?;
     if let Err(message) = execute_local(
         state,
         queue_id,
@@ -349,7 +272,7 @@ async fn run_claimed(
     .await
     {
         let _ = write_logs(state, deployment_id, &logs).await;
-        if message == "build cancelled" {
+        if cancelled(state, queue_id).await || message.text() == "build cancelled" {
             cancel_running(
                 state,
                 queue_id,
@@ -359,6 +282,18 @@ async fn run_claimed(
                 &logs,
             )
             .await?;
+        } else if matches!(message, remote::BuildFailure::Disconnected)
+            && remote::requeue_once(
+                state,
+                queue_id,
+                deployment_id,
+                job.service_id,
+                job.current_container_id.is_some(),
+                &logs,
+            )
+            .await?
+        {
+            return Ok(());
         } else {
             fail_job(
                 state,
@@ -366,7 +301,7 @@ async fn run_claimed(
                 deployment_id,
                 job.service_id,
                 job.current_container_id.is_some(),
-                &message,
+                message.text(),
             )
             .await?;
         }
@@ -382,7 +317,8 @@ async fn execute_local(
     service_name: &str,
     source: &GitSource,
     logs: &mut String,
-) -> Result<(), String> {
+) -> Result<(), remote::BuildFailure> {
+    let settings = remote::settings(state, queue_id).await?;
     if cancelled(state, queue_id).await {
         return Err("build cancelled".into());
     }
@@ -417,6 +353,7 @@ async fn execute_local(
         &mut secrets,
     )
     .await?;
+    secrets.extend(build_args.iter().map(|(_, value)| value.clone()));
     let secret_refs: Vec<&str> = secrets.iter().map(String::as_str).collect();
     let clone_log = run_cancellable(
         state,
@@ -442,38 +379,64 @@ async fn execute_local(
         image: image.clone(),
         build_args,
     };
-    if source.strategy == BuildStrategy::Static {
-        let dockerfile =
-            static_dockerfile(&source.publish_dir).map_err(|error| error.to_string())?;
-        let dockerfile_dir = if source.context == "." {
-            repo_dir.clone()
-        } else {
-            repo_dir.join(&source.context)
-        };
-        std::fs::create_dir_all(&dockerfile_dir)
-            .map_err(|_| "could not write the static dockerfile")?;
-        let path = dockerfile_dir.join("Dockerfile.rudder");
-        std::fs::write(&path, dockerfile).map_err(|_| "could not write the static dockerfile")?;
-    }
-    let build_argv = match source.strategy {
-        BuildStrategy::Nixpacks => nixpacks_argv(&plan).map_err(|error| error.to_string())?,
-        BuildStrategy::Dockerfile | BuildStrategy::Static => {
-            docker_build_argv(&plan).map_err(|error| error.to_string())?
+    if settings.builder_id.is_some() {
+        remote::execute(
+            state,
+            remote::RemoteBuild {
+                queue: queue_id,
+                deployment: deployment_id,
+                service: service_id,
+                source,
+                repo: &repo_dir,
+                env: &env,
+                plan: &plan,
+                settings: &settings,
+                secrets: &secret_refs,
+            },
+            logs,
+        )
+        .await?;
+    } else {
+        if source.strategy == BuildStrategy::Static {
+            let dockerfile =
+                static_dockerfile(&source.publish_dir).map_err(|error| error.to_string())?;
+            let dockerfile_dir = if source.context == "." {
+                repo_dir.clone()
+            } else {
+                repo_dir.join(&source.context)
+            };
+            std::fs::create_dir_all(&dockerfile_dir)
+                .map_err(|_| "could not write the static dockerfile")?;
+            let path = dockerfile_dir.join("Dockerfile.rudder");
+            std::fs::write(&path, dockerfile)
+                .map_err(|_| "could not write the static dockerfile")?;
         }
-    };
-    logs.push_str("building\n");
-    write_logs(state, deployment_id, logs).await.ok();
-    let build_log = run_cancellable(
-        state,
-        queue_id,
-        &build_argv,
-        &repo_dir,
-        &[],
-        &secret_refs,
-        Duration::from_secs(600),
-    )
-    .await?;
-    logs.push_str(&build_log);
+        let commands = panel_commands(&plan, queue_id, settings.test_command.as_deref())?;
+        let ticket = BuildTicket {
+            queue_id,
+            deployment_id,
+        };
+        let built = run_panel_commands(
+            state,
+            &ticket,
+            &repo_dir,
+            &commands,
+            &secret_refs,
+            Duration::from_secs(settings.timeout_secs as u64),
+            logs,
+        )
+        .await;
+        if settings.test_command.is_some() {
+            let _ = tokio::time::timeout(
+                Duration::from_secs(5),
+                state
+                    .local_driver
+                    .remove_container(&format!("rudder-build-test-{queue_id}"), true),
+            )
+            .await;
+        }
+        built?;
+    }
     if cancelled(state, queue_id).await {
         return Err("build cancelled".into());
     }
@@ -481,6 +444,7 @@ async fn execute_local(
     roll_built_image(
         state,
         BuiltRollout {
+            already_on_target: settings.builder_id.is_some(),
             service_id,
             deployment_id,
             image,
@@ -504,6 +468,61 @@ async fn execute_local(
     // The guard may have asked to stop it after the build step; it finished anyway.
     state.guard.take_stop_reason(queue_id);
     Ok(())
+}
+
+fn panel_commands(
+    plan: &BuildPlan,
+    queue: Uuid,
+    test: Option<&str>,
+) -> Result<Vec<Vec<String>>, String> {
+    let build = match plan.strategy {
+        BuildStrategy::Nixpacks => nixpacks_argv(plan),
+        BuildStrategy::Dockerfile | BuildStrategy::Static => docker_build_argv(plan),
+    }
+    .map_err(|error| error.to_string())?;
+    let mut commands = vec![build];
+    if let Some(command) = test {
+        commands.push(vec![
+            "docker".into(),
+            "run".into(),
+            "--rm".into(),
+            "--name".into(),
+            format!("rudder-build-test-{queue}"),
+            plan.image.clone(),
+            "sh".into(),
+            "-c".into(),
+            command.into(),
+        ]);
+    }
+    Ok(commands)
+}
+
+async fn run_panel_commands(
+    state: &AppState,
+    ticket: &BuildTicket,
+    cwd: &Path,
+    commands: &[Vec<String>],
+    secrets: &[&str],
+    timeout: Duration,
+    logs: &mut String,
+) -> Result<(), String> {
+    tokio::time::timeout(timeout, async {
+        for (index, command) in commands.iter().enumerate() {
+            logs.push_str(if index == 0 {
+                "building\n"
+            } else {
+                "testing image\n"
+            });
+            write_logs(state, ticket.deployment_id, logs).await.ok();
+            let output =
+                run_cancellable(state, ticket.queue_id, command, cwd, &[], secrets, timeout)
+                    .await?;
+            logs.push_str(&output);
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|_| "build timed out".to_owned())?
 }
 
 /// Clone `repo` into `dest`, or fast-forward an existing checkout with
@@ -1094,17 +1113,6 @@ async fn cancel_running(
     .await
     .map_err(ApiError::database)?;
     Ok(())
-}
-
-/// How long the oldest queued build has waited, or `None` when nothing is queued.
-async fn oldest_queued_wait(state: &AppState) -> Result<Option<Duration>, ApiError> {
-    let oldest = sqlx::query_scalar!(
-        r#"SELECT MIN(created_at) FROM build_queue WHERE status = 'queued' AND NOT cancel_requested"#
-    )
-    .fetch_one(&state.pool)
-    .await
-    .map_err(ApiError::database)?;
-    Ok(oldest.map(|at| (chrono::Utc::now() - at).to_std().unwrap_or(Duration::ZERO)))
 }
 
 struct CleanDir(PathBuf);

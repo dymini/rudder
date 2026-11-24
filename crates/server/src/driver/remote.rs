@@ -168,7 +168,7 @@ impl RemoteDriver {
         }
     }
 
-    async fn call<T: DeserializeOwned>(&self, request: Request) -> Result<T, Error> {
+    pub(crate) async fn call<T: DeserializeOwned>(&self, request: Request) -> Result<T, Error> {
         let value = self.call_value(request, "").await?;
         serde_json::from_value(value).map_err(|e| Error::Node(format!("agent reply: {e}")))
     }
@@ -189,7 +189,7 @@ impl RemoteDriver {
             .map_err(|e| Error::Node(format!("agent reply: {e}")))
     }
 
-    async fn output_stream(
+    pub(crate) async fn output_stream(
         self: &std::sync::Arc<Self>,
         request: Request,
     ) -> Result<ReceiverStream<Result<Bytes, Error>>, Error> {
@@ -492,6 +492,14 @@ impl NodeDriver for RemoteHandle {
             .call(Request::TcpReady {
                 id: id.into(),
                 port,
+            })
+            .await
+    }
+
+    async fn remove_image(&self, image: &str) -> Result<(), Error> {
+        self.0
+            .call(Request::RemoveImage {
+                image: image.into(),
             })
             .await
     }
