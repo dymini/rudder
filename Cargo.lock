@@ -4005,6 +4005,7 @@ dependencies = [
  "rudder-core",
  "rudder-node",
  "rudder-proto",
+ "rustix",
  "rustls",
  "serde",
  "serde_json",

@@ -5,6 +5,7 @@
 //! container logs and metrics. Collection keeps running while the panel is
 //! unreachable; see [`telemetry`] for the buffering rules.
 
+pub mod builder;
 mod collect;
 mod host;
 pub mod identity;
@@ -53,6 +54,8 @@ pub struct RunOptions {
     pub stats_interval: Duration,
     /// `None` refuses binary updates from the panel.
     pub self_update: Option<SelfUpdate>,
+    /// None disables build operations for embedded agents without a filesystem.
+    pub builder: Option<Arc<builder::Builder>>,
 }
 
 /// Run the agent with the local Docker driver until SIGINT or SIGTERM.
@@ -98,6 +101,10 @@ pub async fn run(config: AgentConfig) -> anyhow::Result<()> {
             data_dir: config.data_dir,
             stats_interval: STATS_INTERVAL,
             self_update: Some(self_update),
+            builder: Some(Arc::new(builder::Builder::new(
+                config.node_dir.join("builder"),
+                config.docker_socket,
+            )?)),
         },
         Arc::new(driver),
         buffer,
@@ -135,6 +142,7 @@ pub async fn run_with(
                 buffer,
                 self_update: options.self_update.clone(),
                 connected,
+                builder: options.builder,
             })
             .run(),
         ),

@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE servers s\n        SET status = 'online', agent_version = $2, docker_version = NULLIF($3, ''),\n            os_info = NULLIF($4, ''), hostname = NULLIF($5, ''), cpu_count = $6,\n            memory_bytes = $7, last_heartbeat_at = now(), updated_at = now(),\n            arch = NULLIF($8, ''), builder_buildx = $9, builder_nixpacks = $10\n        FROM (SELECT status FROM servers WHERE id = $1) old\n        WHERE s.id = $1\n        RETURNING old.status\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Int8",
+        "Text",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "11d66dc8ea4619fdd2dbfef2591569b151618a8c207976397c8db326f4a52a92"
+}

@@ -36,6 +36,52 @@ Routing changes made while an agent is offline are stored and written to the ser
 
 Git-sourced compose stacks are cloned on the panel, then the tracked files are copied to the server (the `.git` directory stays on the panel). Build contexts and files the compose file mounts from the repository are included. Files already on the server that are not part of the repository are kept. A checkout larger than 512 MiB is refused.
 
+## Build-host foundation (not yet scheduled by the panel)
+
+Migration 0028 adds opt-in builder settings to servers, independent build placement
+to services, builder attribution to queued jobs, and a build-cache inventory. All
+existing services keep `panel` placement; this foundation does not move builds or
+enable builders automatically. Builder enrollment flags, scheduling, HTTP/OpenAPI/MCP
+management, UI and its translations follow in later slices.
+
+Agents report architecture (`x86_64`/`aarch64`) and whether `docker buildx version`
+and `nixpacks --version` succeed in Hello. Build commands use the existing outbound
+mTLS Session/Channel, not a new inbound listener:
+
+- `build_start`: upload tracked files with ExtractTree to
+  `builder/workspaces/<job_id>/src` under the node directory first. Supply the shared
+  build plan, service/job IDs, opaque branch cache key, up to two fallback keys
+  (branch then default branch), cache byte limit, timeout and optional image test.
+- The start reply only acknowledges acceptance. The output Channel carries one JSON
+  `log` event per frame and a final `finished` event (`succeeded`, `failed`,
+  `cancelled`, `timed_out`). A stream ending without `finished` is not success.
+- `build_cancel` cancels an active job, returning false for an unknown/completed job.
+  Dropping the log Channel also cancels. Accepted jobs clean up their workspace;
+  cancellation and timeout kill the process group and remove any image-test container.
+- `build_cache_usage` optionally filters by service. `build_cache_prune` deletes
+  all matching caches or evicts least-recently-used entries to a byte limit. Key
+  pruning requires a service. Active services are protected; explicit pruning of an
+  active service returns busy. Timestamps in agent cache records are Unix milliseconds.
+
+Linux builders need Docker Buildx with a local image store. Dockerfile/static builds
+use the same core arguments as panel builds plus `buildx build --load`. Nixpacks
+generates its `.nixpacks` Dockerfile/assets with `--out`, then the same Buildx path
+builds the image. The optional test runs `docker run --rm <image> sh -c <command>`
+with Docker's default networking; nonzero exit fails the build. It is not sandboxed
+from networks. Build hosts must be trusted with the source, build arguments and Docker
+daemon; raw build-argument values are redacted even across output chunks, but—as with
+panel builds—Dockerfile/Nixpacks authors must avoid persisting secrets in image layers.
+
+Local cache imports try the requested key, branch and default branch in order,
+deduplicated. Exports go to staging and atomically replace the key only after the
+build and image test succeed. The node's configured Docker socket is honored. Linux
+atomic directory exchange keeps the old cache on failure; LRU runs after every job.
+Concurrent builds of different services are supported; overlapping builds of the
+same service are rejected to protect cache imports/exports. Global pruning skips
+active services, so a byte limit can be temporarily exceeded until those jobs finish.
+The configured default limit is 20 GiB. Cache storage is separate from Rudder's HTTP
+cache. Image return and deployment integration are part of the later scheduler slice.
+
 ## Security
 
 - Enrollment only runs over `https://` (plain `http://` only to the same machine), and the agent checks the returned CA against the `--ca-sha256` fingerprint from the join command before saving it.

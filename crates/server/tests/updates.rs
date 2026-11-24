@@ -603,6 +603,7 @@ async fn outdated_agents_receive_the_bundled_binary_and_reconnect(pool: PgPool) 
     let start = |identity: rudder_agent::Identity| {
         let restart = restart_tx.clone();
         let options = rudder_agent::RunOptions {
+            builder: None,
             identity,
             data_dir: data_dir.clone(),
             stats_interval: Duration::from_secs(60),

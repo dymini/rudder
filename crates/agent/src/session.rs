@@ -17,6 +17,7 @@ use tokio::sync::{mpsc, watch};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint};
 
+use crate::builder::Builder;
 use crate::identity::Identity;
 use crate::telemetry::Buffer;
 use crate::update::{self, SelfUpdate};
@@ -37,6 +38,7 @@ pub struct Session {
     pub self_update: Option<SelfUpdate>,
     /// Set once the panel welcomes a session; the update watchdog waits on it.
     pub connected: watch::Sender<bool>,
+    pub builder: Option<Arc<Builder>>,
 }
 
 impl Session {
@@ -148,6 +150,10 @@ impl Session {
     }
 
     async fn hello(&self) -> Hello {
+        let (builder_buildx, builder_nixpacks) = match &self.builder {
+            Some(builder) => builder.capabilities().await,
+            None => (false, false),
+        };
         let docker = tokio::time::timeout(Duration::from_secs(5), self.driver.docker_info())
             .await
             .ok()
@@ -157,6 +163,9 @@ impl Session {
             .ok()
             .and_then(Result::ok);
         Hello {
+            arch: std::env::consts::ARCH.into(),
+            builder_buildx,
+            builder_nixpacks,
             agent_version: rudder_core::VERSION.to_owned(),
             hostname: crate::host::hostname(),
             docker_version: docker
@@ -195,6 +204,61 @@ impl Session {
         let driver = self.driver.as_ref();
         let stream_id = command.stream_id;
         match request {
+            Request::BuildCancel { job_id } => {
+                let result = self
+                    .builder
+                    .as_ref()
+                    .ok_or_else(|| Error::Node("builder unavailable".into()))
+                    .and_then(|builder| builder.cancel(&job_id))
+                    .and_then(json);
+                return reply(&outbox, id, result).await;
+            }
+            Request::BuildCacheUsage { service_id } => {
+                let result = self
+                    .builder
+                    .as_ref()
+                    .ok_or_else(|| Error::Node("builder unavailable".into()))
+                    .and_then(|builder| builder.usage(service_id.as_deref()))
+                    .and_then(json);
+                return reply(&outbox, id, result).await;
+            }
+            Request::BuildCachePrune { request } => {
+                let result = self
+                    .builder
+                    .as_ref()
+                    .ok_or_else(|| Error::Node("builder unavailable".into()))
+                    .and_then(|builder| builder.prune(request))
+                    .and_then(json);
+                return reply(&outbox, id, result).await;
+            }
+            Request::BuildStart { request } => {
+                if stream_id.is_empty() {
+                    return reply(
+                        &outbox,
+                        id,
+                        Err(Error::Validation(
+                            "build logs require a stream channel".into(),
+                        )),
+                    )
+                    .await;
+                }
+                let data = match self
+                    .builder
+                    .as_ref()
+                    .ok_or_else(|| Error::Node("builder unavailable".into()))
+                    .and_then(|builder| builder.start(request))
+                {
+                    Ok(data) => data,
+                    Err(error) => return reply(&outbox, id, Err(error)).await,
+                };
+                reply(&outbox, id, Ok(Value::Null)).await;
+                if let Ok((frames, mut responses)) = open_channel(client, &stream_id).await {
+                    let finished =
+                        async move { while let Ok(Some(_)) = responses.message().await {} };
+                    pump(frames, &stream_id, data, finished).await;
+                }
+                return;
+            }
             Request::AgentInfo => {
                 let info = serde_json::json!({
                     "version": rudder_core::VERSION,
