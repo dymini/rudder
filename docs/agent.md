@@ -7,20 +7,31 @@ panel :7443 (gRPC, mTLS)  ◀── dial out ──  rudder-agent ── Docker 
                                              └─ rudder-traefik, rudder-cache, apps
 ```
 
+When the panel's agent port is unreachable — for example the panel sits behind a
+Cloudflare Tunnel with every inbound port closed — the agent carries the same
+mTLS session inside a WebSocket on the panel's HTTPS address
+(`/mcp/api/v1/agent/tunnel`). The fallback is automatic: the agent dials the
+agent port first and uses the tunnel when that fails, then remembers the
+working transport for reconnects. Cloudflare only ever relays WebSocket bytes;
+the end-to-end mTLS handshake is unchanged.
+
 ## Add a server
 
 1. In **Servers**, add a server with kind `remote`. The panel shows a one-line command with a one-time join token that expires in an hour.
 2. Run the command on the server as root:
 
    ```bash
-   curl -fsSL https://panel.example.com/install-agent.sh | sudo sh -s -- \
+   curl -fsSL https://panel.example.com/mcp/install-agent.sh | sudo sh -s -- \
      --server https://panel.example.com --ca-sha256 3f6c... --token join_...
    ```
+
+   The `/mcp` prefix is the machine-client path family; the plain
+   `/install-agent.sh` URL keeps working too.
 
    The panel URL must use `https://`; `http://` is refused unless it points at `localhost`, `127.0.0.1`, or `[::1]`, because enrollment receives the certificate authority the agent trusts from then on. `--ca-sha256` is the SHA-256 fingerprint of the panel's agent CA, and the panel puts it in the command it shows. If the CA the panel returns has a different fingerprint, enrollment stops and nothing is saved.
 
    The installer needs Docker, systemd, `curl`, and `sha256sum`. It:
-   - downloads `rudder-agent` for the machine's architecture from the panel (`/downloads/...`), or from the GitHub release when the panel has no bundled copy, and checks its SHA-256;
+   - downloads `rudder-agent` for the machine's architecture from the panel (`/mcp/downloads/...`, then `/downloads/...`), or from the GitHub release when the panel has no bundled copy or a login page answers instead, and checks its SHA-256;
    - runs `rudder-agent enroll`, which creates a private key on the server and exchanges the token and a certificate request for a client certificate;
    - creates the `rudder-proxy` network and starts `rudder-traefik` (ports 80 and 443, JSON access log) and `rudder-cache` (admin port on `127.0.0.1:9090` only);
    - installs and starts the `rudder-agent` systemd unit.
@@ -154,6 +165,25 @@ listener bound only to the Docker bridge gateway, not a public interface.
 The agent samples host and container stats every 10 seconds and follows the output of Rudder-managed containers, `rudder-traefik`, and `rudder-cache`. It keeps doing this while the panel is unreachable and holds up to 20,000 log lines (4 MiB) and one hour of stats in memory. When the buffer is full the oldest items are dropped; the server row counts them (`telemetry_dropped`). Batches are resent until the panel acknowledges them. Log positions are saved only after acknowledgement, so restarting the agent re-reads missed lines from Docker.
 
 The agent reconnects with backoff from 1 to 30 seconds. The panel marks the server offline when the session ends and records `server.online` and `server.offline` events, which the alert rules can notify on.
+
+## Panels reachable only over HTTPS
+
+A panel behind a Cloudflare Tunnel (see [cloudflare.md](cloudflare.md)) or
+another HTTPS-only reverse proxy cannot offer the raw agent port. Everything
+the agent needs then runs on the panel's HTTPS address under `/mcp`, the path
+family that Cloudflare Access's agent bypass keeps open:
+
+- enrollment posts to `/mcp/api/v1/agent/enroll`,
+- the installer and agent binary download from `/mcp/install-agent.sh` and
+  `/mcp/downloads/...`,
+- the session dials a WebSocket at `/mcp/api/v1/agent/tunnel`, which the panel
+  pipes to its internal agent listener. The mTLS handshake happens inside the
+  socket, so the tunnel never sees credentials and `RUDDER_AGENT_BIND` can stay
+  bound to the panel host (or a private interface) only.
+
+Agents enrolled before the panel closed its ports keep using the direct
+connection; they pick up the tunnel automatically the first time the direct
+dial fails. No flag is needed on either side.
 
 ## Panel settings
 
