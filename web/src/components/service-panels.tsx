@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { api, ApiError } from "../api";
 import { parseAnsi } from "../ansi";
+import { waitingReason } from "../build-hosts";
 import { errorMessage, formatDuration, formatRelative, formatTime } from "../format";
 import { providerLabel, providerReady } from "../git";
 import { useT } from "../i18n";
@@ -12,6 +13,7 @@ import { useConfirmSecret } from "../insecure";
 import { useStack } from "./stacks";
 import { DomainRouting } from "./domain-routing";
 import { BranchField, RepositoryField } from "./git-pickers";
+import { BuildSettingsFields, DEFAULT_BUILD_SETTINGS } from "./build-settings";
 import { Icon, type IconName } from "./icons";
 import {
   Alert,
@@ -166,6 +168,13 @@ export function GitSourceCard({ service }: { service: ServiceDetail }) {
     queryFn: () => api<GitProvider[]>("/api/v1/git-providers"),
   });
   const saved = service.spec.git;
+  const sourceSettings = useQuery({
+    queryKey: ["source-settings", service.id],
+    queryFn: () => api<SavedSource>(`/api/v1/services/${service.id}/source`),
+    enabled: !!saved?.repo,
+    retry: false,
+  });
+  const [buildSettings, setBuildSettings] = useState<Schemas["ServiceBuildSettings"] | null>(null);
   const [providerId, setProviderId] = useState(saved?.provider_id ?? "");
   const [repo, setRepo] = useState(saved?.repo ?? "");
   const [branch, setBranch] = useState(saved?.branch ?? "main");
@@ -184,9 +193,15 @@ export function GitSourceCard({ service }: { service: ServiceDetail }) {
           branch,
           strategy,
           preview_pull_requests: previews,
+          build: buildSettings ?? sourceSettings.data?.build ?? DEFAULT_BUILD_SETTINGS,
+          dockerfile: sourceSettings.data?.dockerfile,
+          context: sourceSettings.data?.context,
+          publish_dir: sourceSettings.data?.publish_dir,
         }),
       }),
     onSuccess: async (result) => {
+      setBuildSettings(result.build);
+      queryClient.setQueryData(["source-settings", service.id], result);
       setWebhookSecret(result.webhook_secret ?? null);
       setPublicKey(result.public_key ?? null);
       toast.success(t("Source saved. Copy the webhook secret now."));
@@ -256,6 +271,15 @@ export function GitSourceCard({ service }: { service: ServiceDetail }) {
             value={strategy}
             onPick={setStrategy}
           />
+          {sourceSettings.isError ? (
+            <p role="alert" className="text-danger md:col-span-2">
+              {errorMessage(sourceSettings.error, t("Could not load build settings"))}
+            </p>
+          ) : null}
+          <BuildSettingsFields
+            value={buildSettings ?? sourceSettings.data?.build ?? DEFAULT_BUILD_SETTINGS}
+            onChange={setBuildSettings}
+          />
           <label className="flex items-start gap-2.5 text-sm md:col-span-2">
             <input
               type="checkbox"
@@ -273,7 +297,8 @@ export function GitSourceCard({ service }: { service: ServiceDetail }) {
             </span>
           </label>
           <div className="flex flex-wrap gap-2 md:col-span-2">
-            <Button type="submit" disabled={save.isPending}>
+            <Button type="submit"
+              disabled={save.isPending || sourceSettings.isLoading || sourceSettings.isError}>
               {t("Save source")}
             </Button>
             <Button
@@ -1031,10 +1056,16 @@ export function DeploymentsPanel({ serviceId, isStack }: { serviceId: string; is
                     ) : null}
                   </div>
                   <p className="mt-1.5 truncate font-mono text-[13px] text-ink-soft">
-                    {live && deployment.logs
+                    {(live || deployment.status === "queued") && deployment.logs
                       ? currentStep(deployment.logs)
                       : (deployment.image_ref ?? t("no image"))}
                   </p>
+                  {waitingReason(deployment.status, deployment.logs) ? (
+                    <p role="status" className="mt-2 whitespace-pre-wrap break-words text-sm text-muted">
+                      <span className="font-medium">{t("Waiting for build placement")}: </span>
+                      {waitingReason(deployment.status, deployment.logs)}
+                    </p>
+                  ) : null}
                   <p className="mt-0.5 text-xs text-muted">
                     <time dateTime={deployment.created_at} title={formatTime(deployment.created_at)}>
                       {formatRelative(deployment.created_at)}

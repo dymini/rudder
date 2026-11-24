@@ -49,8 +49,30 @@ fn main() -> anyhow::Result<()> {
             );
             Ok(())
         }
+        "status" => {
+            let mut data_dir = PathBuf::from(DEFAULT_DATA_DIR);
+            let mut json = false;
+            while let Some(arg) = args.next() {
+                match arg.as_str() {
+                    "--data-dir" => data_dir = PathBuf::from(value(&mut args, "--data-dir")?),
+                    "--json" => json = true,
+                    other => anyhow::bail!("unknown argument {other}"),
+                }
+            }
+            let status = rudder_agent::status::read(&data_dir)?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&status)?);
+            } else {
+                print!("{}", status.render());
+            }
+            if !status.healthy() {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
         "run" => {
             let mut config = AgentConfig {
+                builder: false,
                 data_dir: PathBuf::from(DEFAULT_DATA_DIR),
                 node_dir: PathBuf::from(DEFAULT_NODE_DIR),
                 docker_socket: None,
@@ -66,6 +88,7 @@ fn main() -> anyhow::Result<()> {
             };
             while let Some(arg) = args.next() {
                 match arg.as_str() {
+                    "--builder" => config.builder = true,
                     "--data-dir" => {
                         config.data_dir = PathBuf::from(value(&mut args, "--data-dir")?)
                     }
@@ -82,6 +105,7 @@ fn main() -> anyhow::Result<()> {
                     other => anyhow::bail!("unknown argument {other}"),
                 }
             }
+            config.builder |= rudder_agent::status::AgentSettings::load(&config.data_dir)?.builder;
             tracing_subscriber::fmt()
                 .with_env_filter(
                     tracing_subscriber::EnvFilter::try_from_default_env()
@@ -118,7 +142,8 @@ Usage:
   rudder-agent enroll --server <panel URL> --token <join token> [--ca-sha256 <hex>]
                       [--data-dir {data}]
   rudder-agent run [--data-dir {data}] [--node-dir {node}] [--docker-socket <path>]
-                   [--cache-admin-url <url>]
+                   [--cache-admin-url <url>] [--builder]
+  rudder-agent status [--data-dir {data}] [--json]
   rudder-agent --version
 
 `enroll` creates a private key, exchanges the one-time join token for a client

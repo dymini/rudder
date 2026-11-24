@@ -334,3 +334,29 @@ async fn viewers_can_look_but_not_act(pool: PgPool) {
         .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn cancel_all_includes_running_builder_jobs(pool: PgPool) {
+    let state = state(pool.clone());
+    let client = Client::owner(rudder_server::router(state.clone())).await;
+    let (_, queue) = queued_build(&pool).await;
+    let builder: Uuid = sqlx::query_scalar("INSERT INTO servers (name, kind, builder_enabled) VALUES ('builder', 'remote', TRUE) RETURNING id").fetch_one(&pool).await.unwrap();
+    sqlx::query("UPDATE build_queue SET status = 'running', builder_id = $2 WHERE id = $1")
+        .bind(queue)
+        .bind(builder)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, body) = client
+        .call("POST", "/api/v1/load/cancel-builds", None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["running"], 1);
+    let requested: bool =
+        sqlx::query_scalar("SELECT cancel_requested FROM build_queue WHERE id = $1")
+            .bind(queue)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(requested);
+}

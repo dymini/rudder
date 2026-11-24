@@ -156,7 +156,8 @@ async fn mark_online(state: &AppState, server_id: Uuid, hello: &Hello) -> Result
         UPDATE servers s
         SET status = 'online', agent_version = $2, docker_version = NULLIF($3, ''),
             os_info = NULLIF($4, ''), hostname = NULLIF($5, ''), cpu_count = $6,
-            memory_bytes = $7, last_heartbeat_at = now(), updated_at = now()
+            memory_bytes = $7, last_heartbeat_at = now(), updated_at = now(),
+            arch = NULLIF($8, ''), builder_buildx = $9, builder_nixpacks = $10
         FROM (SELECT status FROM servers WHERE id = $1) old
         WHERE s.id = $1
         RETURNING old.status
@@ -168,6 +169,9 @@ async fn mark_online(state: &AppState, server_id: Uuid, hello: &Hello) -> Result
         clip(&hello.hostname, 253),
         i32::try_from(hello.cpu_count).unwrap_or(i32::MAX),
         i64::try_from(hello.memory_bytes).unwrap_or(i64::MAX),
+        clip(&hello.arch, 64),
+        hello.builder_buildx,
+        hello.builder_nixpacks,
     )
     .fetch_optional(&state.pool)
     .await?;

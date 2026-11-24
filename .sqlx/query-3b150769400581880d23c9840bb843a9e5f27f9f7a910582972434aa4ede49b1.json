@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE build_queue\n        SET cancel_requested = TRUE\n        WHERE status = 'running' AND builder_id IS NULL AND NOT cancel_requested\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3b150769400581880d23c9840bb843a9e5f27f9f7a910582972434aa4ede49b1"
+}

@@ -4,8 +4,10 @@
 //! is joined into a shell string.
 
 use crate::{validate_env_key, validate_image_ref, Error};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum BuildStrategy {
     Dockerfile,
     Nixpacks,
@@ -33,6 +35,7 @@ impl BuildStrategy {
     }
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BuildPlan {
     pub strategy: BuildStrategy,
     pub context: String,
@@ -40,6 +43,26 @@ pub struct BuildPlan {
     pub publish_dir: String,
     pub image: String,
     pub build_args: Vec<(String, String)>,
+}
+
+impl std::fmt::Debug for BuildPlan {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BuildPlan")
+            .field("strategy", &self.strategy)
+            .field("context", &self.context)
+            .field("dockerfile", &self.dockerfile)
+            .field("publish_dir", &self.publish_dir)
+            .field("image", &self.image)
+            .field(
+                "build_arg_keys",
+                &self
+                    .build_args
+                    .iter()
+                    .map(|(key, _)| key)
+                    .collect::<Vec<_>>(),
+            )
+            .finish()
+    }
 }
 
 pub fn can_start(running: i64, limit: i64) -> bool {
@@ -164,6 +187,43 @@ pub fn nixpacks_argv(plan: &BuildPlan) -> Result<Vec<String>, Error> {
     Ok(argv)
 }
 
+/// Render Nixpacks' Dockerfile and assets without running its Docker builder.
+pub fn nixpacks_generate_argv(plan: &BuildPlan) -> Result<Vec<String>, Error> {
+    let mut argv = nixpacks_argv(plan)?;
+    argv.extend(["--out".into(), plan.context.clone()]);
+    Ok(argv)
+}
+
+/// Use the same Dockerfile, tag and arguments as a panel build, with BuildKit exports.
+pub fn buildx_argv(
+    plan: &BuildPlan,
+    cache_from: &[String],
+    cache_to: &str,
+) -> Result<Vec<String>, Error> {
+    let mut argv = docker_build_argv(plan)?;
+    argv.splice(1..2, ["buildx".into(), "build".into(), "--load".into()]);
+    argv.pop();
+    for path in cache_from {
+        validate_cache_path(path)?;
+        argv.extend(["--cache-from".into(), format!("type=local,src={path}")]);
+    }
+    validate_cache_path(cache_to)?;
+    argv.extend([
+        "--cache-to".into(),
+        format!("type=local,dest={cache_to},mode=max"),
+        "--progress=plain".into(),
+        plan.context.clone(),
+    ]);
+    Ok(argv)
+}
+
+fn validate_cache_path(path: &str) -> Result<(), Error> {
+    if path.is_empty() || path.contains(',') || path.bytes().any(|b| b.is_ascii_control()) {
+        return Err(Error::Validation("invalid build cache path".into()));
+    }
+    Ok(())
+}
+
 pub fn static_dockerfile(publish_dir: &str) -> Result<String, Error> {
     validate_rel_path(publish_dir)?;
     Ok(format!(
@@ -172,6 +232,13 @@ pub fn static_dockerfile(publish_dir: &str) -> Result<String, Error> {
 }
 
 fn dockerfile_path(plan: &BuildPlan) -> Result<String, Error> {
+    if plan.strategy == BuildStrategy::Nixpacks {
+        return Ok(if plan.context == "." {
+            ".nixpacks/Dockerfile".into()
+        } else {
+            format!("{}/.nixpacks/Dockerfile", plan.context)
+        });
+    }
     if plan.strategy == BuildStrategy::Static {
         return Ok(if plan.context == "." {
             "Dockerfile.rudder".into()
@@ -248,6 +315,40 @@ mod tests {
         let file = static_dockerfile("dist").unwrap();
         assert!(file.contains("COPY dist /usr/share/nginx/html"));
         assert!(static_dockerfile("../public").is_err());
+    }
+
+    #[test]
+    fn builder_reuses_panel_arguments_and_exports_local_caches() {
+        for strategy in [
+            BuildStrategy::Dockerfile,
+            BuildStrategy::Static,
+            BuildStrategy::Nixpacks,
+        ] {
+            let mut plan = plan(strategy);
+            plan.context = "app".into();
+            let panel = docker_build_argv(&plan).unwrap();
+            let argv = buildx_argv(
+                &plan,
+                &["/cache/branch".into(), "/cache/main".into()],
+                "/cache/staging",
+            )
+            .unwrap();
+            assert_eq!(&argv[..4], ["docker", "buildx", "build", "--load"]);
+            assert_eq!(&argv[4..panel.len() + 1], &panel[2..panel.len() - 1]);
+            assert!(argv
+                .windows(2)
+                .any(|p| p == ["--cache-from", "type=local,src=/cache/branch"]));
+            assert!(argv
+                .windows(2)
+                .any(|p| p == ["--cache-to", "type=local,dest=/cache/staging,mode=max"]));
+            assert_eq!(argv.last().unwrap(), "app");
+        }
+        let plan = plan(BuildStrategy::Nixpacks);
+        assert!(nixpacks_generate_argv(&plan)
+            .unwrap()
+            .ends_with(&["--out".into(), ".".into()]));
+        assert!(buildx_argv(&plan, &[], "/cache/a,mode=min").is_err());
+        assert!(buildx_argv(&plan, &["/cache/\n".into()], "/cache/to").is_err());
     }
 
     #[test]

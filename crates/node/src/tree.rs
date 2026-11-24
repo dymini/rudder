@@ -80,10 +80,10 @@ pub fn pack_files(root: &Path, files: &[String]) -> Result<Vec<u8>, Error> {
         }
         let mut file =
             File::open(&canonical).map_err(|error| Error::Node(format!("read {rel}: {error}")))?;
-        let len = file
+        let metadata = file
             .metadata()
-            .map_err(|error| Error::Node(error.to_string()))?
-            .len();
+            .map_err(|error| Error::Node(error.to_string()))?;
+        let len = metadata.len();
         total = total.saturating_add(len);
         if total > MAX_TREE_BYTES {
             return Err(Error::Validation(
@@ -92,6 +92,13 @@ pub fn pack_files(root: &Path, files: &[String]) -> Result<Vec<u8>, Error> {
         }
         let mut header = tar::Header::new_gnu();
         header.set_mode(0o644);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if metadata.permissions().mode() & 0o111 != 0 {
+                header.set_mode(0o755);
+            }
+        }
         header.set_size(len);
         header.set_entry_type(tar::EntryType::Regular);
         header.set_cksum();
@@ -162,6 +169,17 @@ pub fn apply_tree(dest: &Path, manifest: &Path, archive: &[u8]) -> Result<(), Er
             return Err(Error::Validation(
                 "the checkout archive is larger than it claims".into(),
             ));
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let executable = entry.header().mode().unwrap_or(0) & 0o111 != 0;
+            file.set_permissions(fs::Permissions::from_mode(if executable {
+                0o755
+            } else {
+                0o644
+            }))
+            .map_err(|error| Error::Node(format!("checkout permissions: {error}")))?;
         }
         written.insert(normalize(&rel));
     }
@@ -640,6 +658,28 @@ mod tests {
         assert_eq!(
             files,
             ["compose.yml".to_owned(), "web/index.html".to_owned()]
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn executable_build_scripts_survive_tree_transfer_without_special_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch("rudder-tree-executable");
+        let src = dir.0.join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("build.sh"), "#!/bin/sh\nexit 0\n").unwrap();
+        fs::set_permissions(src.join("build.sh"), fs::Permissions::from_mode(0o4755)).unwrap();
+        let archive = pack_files(&src, &["build.sh".into()]).unwrap();
+        let dest = dir.0.join("dest");
+        apply_tree(&dest, &dir.0.join("manifest"), &archive).unwrap();
+        assert_eq!(
+            fs::metadata(dest.join("build.sh"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o7777,
+            0o755
         );
     }
 }

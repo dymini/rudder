@@ -28,6 +28,10 @@ panel :7443 (gRPC, mTLS)  ◀── dial out ──  rudder-agent ── Docker 
 
 Options: `--version v1.2.3` pins the GitHub release, `--email` sets the Let's Encrypt account email, and `--no-edge` skips Traefik and the cache. Running the installer again upgrades the binary and keeps the existing identity. To move a server to a new identity, use **Join command** on the server row to get a fresh token, delete `/var/lib/rudder-agent` on the server, and rerun the command. The old certificate stops working as soon as the new one is issued.
 
+## Agent update verification
+
+Before checking a downloaded agent's version, the agent flushes and syncs the staged binary and closes its writable handle. If another starting process briefly inherited that handle, Linux can still report `Text file busy`. The version check retries only that spawn error, at most 10 attempts with 100 ms between attempts (900 ms of backoff), within the existing 15-second check timeout. Other execution errors fail immediately.
+
 ## What works on a remote server
 
 Everything the local server supports goes through the agent: image deploys and rollbacks, Git builds (built on the panel host, then streamed to the server with `docker save`/`docker load`), databases, backups and restores, compose stacks, domains and certificates, the HTTP cache, logs and the live tail, the web terminal, metrics and alerts, and Docker prune.
@@ -35,6 +39,106 @@ Everything the local server supports goes through the agent: image deploys and r
 Routing changes made while an agent is offline are stored and written to the server when it reconnects. Deploys to a server whose agent is offline fail immediately with `remote_unavailable`.
 
 Git-sourced compose stacks are cloned on the panel, then the tracked files are copied to the server (the `.git` directory stays on the panel). Build contexts and files the compose file mounts from the repository are included. Files already on the server that are not part of the repository are kept. A checkout larger than 512 MiB is refused.
+
+## Build hosts
+
+For the setup and panel workflow, see the [build host operator guide](build-hosts.md).
+
+Migration 0028 adds opt-in builder settings to servers, independent build placement
+to services, builder attribution to queued jobs, and a build-cache inventory. All
+existing services keep `panel` placement; this does not move builds or
+enable builders automatically. Builder enrollment, HTTP/OpenAPI/MCP management and
+local status are available, together with the Builders page and translated service
+build controls.
+
+Agents report architecture (`x86_64`/`aarch64`) and whether `docker buildx version`
+and `nixpacks --version` succeed in Hello. Build commands use the existing outbound
+mTLS Session/Channel, not a new inbound listener:
+
+- `build_start`: upload tracked files with ExtractTree to
+  logical path `builder/workspaces/<job_id>/src` first. Builder uploads are routed
+  below the agent data directory, not the deployment node directory. Supply the shared
+  build plan, service/job IDs, opaque branch cache key, up to two fallback keys
+  (branch then default branch), cache byte limit, timeout and optional image test.
+- The start reply only acknowledges acceptance. The output Channel carries one JSON
+  `log` event per frame and a final `finished` event (`succeeded`, `failed`,
+  `cancelled`, `timed_out`). A stream ending without `finished` is not success.
+- `build_cancel` cancels an active job, returning false for an unknown/completed job.
+  Dropping the log Channel also cancels. Accepted jobs clean up their workspace;
+  cancellation and timeout kill the process group and remove any image-test container.
+- `build_cache_usage` optionally filters by service. `build_cache_prune` deletes
+  all matching caches or evicts least-recently-used entries to a byte limit. Key
+  pruning requires a service. Active services are protected; explicit pruning of an
+  active service returns busy. Timestamps in agent cache records are Unix milliseconds.
+
+Linux builders need Docker Buildx with a local image store. Dockerfile/static builds
+use the same core arguments as panel builds plus `buildx build --load`. Nixpacks
+generates its `.nixpacks` Dockerfile/assets with `--out`, then the same Buildx path
+builds the image. The optional test runs `docker run --rm <image> sh -c <command>`
+with Docker's default networking; nonzero exit fails the build. It is not sandboxed
+from networks. Build hosts must be trusted with the source, build arguments and Docker
+daemon; raw build-argument values are redacted even across output chunks, but—as with
+panel builds—Dockerfile/Nixpacks authors must avoid persisting secrets in image layers.
+
+Local cache imports try the requested key, branch and default branch in order,
+deduplicated. Exports go to staging and atomically replace the key only after the
+build and image test succeed. The node's configured Docker socket is honored. Linux
+atomic directory exchange keeps the old cache on failure; LRU runs after every job.
+Concurrent builds of different services are supported; overlapping builds of the
+same service are rejected to protect cache imports/exports. Global pruning skips
+active services, so a byte limit can be temporarily exceeded until those jobs finish.
+The configured default limit is 20 GiB. Cache storage is separate from Rudder's HTTP
+cache.
+
+The panel dispatches jobs concurrently. Panel builds share the configured panel
+build-concurrency limit and load guard; builders have independent `builder_max_jobs`
+limits. Pausing all builds still holds every new job. A draining builder accepts no
+new jobs, but running jobs finish. Claims reserve slots transactionally across workers.
+
+Placement is recorded in deployment logs. `builder` uses only the chosen builder;
+`auto` considers enabled, connected builders that are not paused/draining, have a free
+slot, match the deploy target's architecture and support Buildx (and Nixpacks when
+needed). Local deploys use the panel's architecture. Cache affinity for the service
+ranks first, then fewer active jobs, then builder name. No eligible builder either
+falls back to panel execution or stays queued with a visible waiting reason, according
+to the service fallback. Queued jobs remain cancellable.
+
+The panel holds Git credentials, clones the source, discovers its default branch and
+sends only tracked files, preserving executable scripts without special permission
+bits. Builds restore opaque branch/default-branch cache keys and run the configured
+image test on either panel or builder. Builder logs are redacted and flushed to
+deployment logs about once a second. Cancellation sends `build_cancel`; timeout also
+cancels the remote job. `build_workspace_remove` cleans interrupted uploads and stale
+workspaces before a retry. Migration 0029 records the single allowed disconnect retry;
+a second disconnect fails clearly, while the retry re-runs placement.
+
+After a successful builder run the panel refreshes its cache inventory, relays the
+image save/load streams directly into the deploy target, and uses the existing
+health-checked rollout. It does not load remote-target images into the panel's Docker
+daemon. Builder-only image tags are removed afterwards without force; cleanup failures
+are logged. When builder and deploy target are the same server, the image stays there
+for the application instead of being copied or removed.
+
+### Real-Docker executor smoke
+
+On Linux with Docker and Buildx, run this opt-in test before releasing builder
+changes. It pulls BusyBox and BuildKit images and starts a private BuildKit
+instance. It does not prune the default/shared Docker build cache.
+
+```sh
+stamp=$(date +%s)
+BUILDX_BUILDER="rudder-builder-smoke-$stamp" \
+RUDDER_BUILDER_SMOKE_DIR="$HOME/rudder-builder-smoke-$stamp" \
+cargo test -p rudder-agent --test builder_docker -- --ignored --nocapture
+```
+
+The evidence directory must not exist. JSON event logs persist there, while test
+images and the dedicated BuildKit instance are removed at completion. The smoke
+checks loaded images, atomic cache replacement, cold-BuildKit local cache imports,
+default-branch fallback, passing/failing image tests, cancellation/timeout of both
+Dockerfile RUNs and image tests, workspace cleanup and exact byte-accounted pruning.
+RUN/test liveness is measured using host PIDs and HTTP heartbeats to an ephemeral
+listener bound only to the Docker bridge gateway, not a public interface.
 
 ## Security
 
@@ -61,10 +165,79 @@ The agent reconnects with backoff from 1 to 30 seconds. The panel marks the serv
 
 ## Agent files and commands
 
+### Install a build host
+
+Create a builder with `POST /api/v1/builders` and run its returned command. It uses
+the usual one-use enrollment token and CA fingerprint plus `--builder --no-edge`.
+Builder mode implies no edge containers: no Traefik/cache containers are started.
+The server initially has **no services assigned**; explicitly assigning a workload
+to it later makes it a deployment target too. There is no separate deploy-role flag.
+
+On Debian/Ubuntu, `--builder` installs missing Docker from Docker's official apt
+repository and installs `docker-buildx-plugin` if Buildx is missing. Existing Docker
+must be running. Other distributions need Docker and Buildx installed manually
+before running the installer. `--with-nixpacks` additionally runs the official
+Nixpacks installation script with `NIXPACKS_VERSION=1.41.0` pinned and verifies it.
+These installation paths require network access; package conflicts stop with an
+actionable error rather than removing an existing container runtime.
+
+The installer writes `{"builder":true}` to `/var/lib/rudder-agent/config.json`.
+Alternatively set it there or run `rudder-agent run --builder`. Restart the service
+after changing config. Ordinary agents do not advertise builder capabilities or
+accept builder workspace uploads unless builder mode is enabled. Build workspaces
+and caches live in `/var/lib/rudder-agent/builder/`; deployment files remain under
+`/var/lib/rudder/`. The installer prints status and fails clearly if connection
+has not succeeded within 30 seconds. An existing enrollment is preserved on reruns.
+
+`rudder-agent status --json` reads the local credential-free `status.json`, maintained
+with atomic replacement and mode 0600. It includes panel/server identity, enrollment,
+connection, last connect/error, builder mode, Buildx/Nixpacks, architecture, active
+job IDs and aggregate cache bytes. A heartbeat updates it every five seconds;
+connection changes are recorded immediately. A snapshot older than 30 seconds is
+disconnected, so a killed service cannot remain online indefinitely. Both text and
+JSON status exit nonzero when unenrolled or disconnected. Use `--data-dir` when
+running a custom installation. Reading status does not probe the panel or run Docker.
+
+### Manage builders through HTTP or MCP
+
+Builder management uses `catalog:read`/`catalog:write`, not a new MCP scope:
+
+- `GET /api/v1/builders` returns `builders` (all remote server candidates, including
+  disabled ones so existing servers can be enabled) and up to 200 unclaimed
+  `waiting_jobs`. Each builder includes live session state, last seen/version/arch,
+  capabilities, settings, active jobs, explicitly targeted queued jobs, and last
+  reported cache bytes versus its limit. Auto jobs are not reserved until claim.
+- `POST /api/v1/builders` accepts `name` and optional `description` and returns
+  `server`, `join_token`, `join_command` and `expires_at`. Treat tokens as secrets.
+- `PATCH /api/v1/builders/{id}` accepts optional `enabled`, `max_jobs` (1–32),
+  `paused`, `draining`, and `cache_limit_bytes` (non-negative). It can enable builder
+  mode on an existing remote server, but the agent must also be installed/configured
+  with builder mode. Disabling or draining stops new claims, not active jobs.
+- `GET /api/v1/builders/{id}/cache` reads the last reported per-service/key catalog,
+  including while offline. `DELETE` on the same path clears caches, optionally
+  filtered by `service_id` and/or `key`. Omit both to clear all inactive caches.
+  `POST /api/v1/builders/{id}/cache/prune` applies LRU down to the configured limit.
+  Mutations require a connected agent; active-service caches are protected. Cache
+  catalog replacement shares the build-completion lock so stale refreshes cannot
+  resurrect deleted entries. The result reports reclaimed/remaining bytes and entries.
+- `GET /api/v1/builders/{id}/jobs` returns up to 100 recent jobs, prioritizing all
+  running jobs, including unclaimed jobs targeting this builder. Deployment IDs link
+  to deployment logs and waiting reasons. Standard build cancellation still applies.
+
+`GET/PUT /api/v1/services/{id}/source` uses the existing `source` MCP scope and now
+includes a `build` object: `placement` (`panel`, `auto`, `builder`), `builder_id`,
+`fallback` (`panel`, `wait`), nullable `test_command`, and positive `timeout_secs`.
+Omitting `build` in PUT preserves settings. Supplying it replaces the object;
+omitted fields default to panel placement/fallback, no builder/test, and 3600 seconds.
+Builder placement requires an existing, builder-enabled `builder_id`; any selected
+builder ID is validated even with other placement modes. Null clears the optional
+test command or builder ID within a supplied object. Buildx is required; Nixpacks
+also requires the Nixpacks capability. Settings do not cause a build automatically.
+
 | Path | Content |
 | --- | --- |
 | `/usr/local/bin/rudder-agent` | The binary |
-| `/var/lib/rudder-agent/` | `key.pem`, `cert.pem`, `ca.pem`, `agent.json`, `log-cursors.json` (mode 0600, directory 0700) |
+| `/var/lib/rudder-agent/` | Identity files, `config.json`, `status.json`, `log-cursors.json` (mode 0600, directory 0700), and `builder/` workspaces/caches |
 | `/var/lib/rudder/` | Files the panel writes: Traefik routes and certificates, cache rules, compose stacks |
 | `/etc/systemd/system/rudder-agent.service` | The unit |
 
@@ -72,7 +245,8 @@ The agent reconnects with backoff from 1 to 30 seconds. The panel marks the serv
 rudder-agent enroll --server <panel URL> --token <token> [--ca-sha256 <hex>]
                     [--data-dir /var/lib/rudder-agent]
 rudder-agent run [--data-dir /var/lib/rudder-agent] [--node-dir /var/lib/rudder]
-                 [--docker-socket <path>] [--cache-admin-url <url>]
+                 [--docker-socket <path>] [--cache-admin-url <url>] [--builder]
+rudder-agent status [--data-dir /var/lib/rudder-agent] [--json]
 rudder-agent --version
 ```
 

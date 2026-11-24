@@ -1349,6 +1349,173 @@
         }
       }
     },
+    "/api/v1/builders": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "List remote builder candidates, including disabled servers, and unclaimed waiting jobs",
+        "operationId": "get_v1_builders",
+        "responses": {
+          "200": {
+            "description": "List remote builder candidates, including disabled servers, and unclaimed waiting jobs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuilderInventory"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Create a builder with no workloads; assigning a workload later also makes it a deploy target. Installer uses --builder --no-edge",
+        "operationId": "post_v1_builders",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBuilder"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Create a builder with no workloads; assigning a workload later also makes it a deploy target. Installer uses --builder --no-edge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedBuilder"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/builders/{id}": {
+      "patch": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Configure builder mode on an existing remote server; max_jobs is 1 to 32, cache_limit_bytes is non-negative",
+        "operationId": "patch_v1_builders__id_",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBuilder"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configure builder mode on an existing remote server; max_jobs is 1 to 32, cache_limit_bytes is non-negative",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuilderView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/builders/{id}/cache": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "List the last reported builder cache catalog, including while offline",
+        "operationId": "get_v1_builders__id__cache",
+        "responses": {
+          "200": {
+            "description": "List the last reported builder cache catalog, including while offline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BuilderCacheEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Clear builder caches. Query: service_id (optional UUID), key (optional); no filters clears all inactive caches. Builder must be connected",
+        "operationId": "delete_v1_builders__id__cache",
+        "responses": {
+          "200": {
+            "description": "Clear builder caches. Query: service_id (optional UUID), key (optional); no filters clears all inactive caches. Builder must be connected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuilderCachePruned"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/builders/{id}/cache/prune": {
+      "post": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Evict builder caches by LRU down to its configured limit; active service caches are protected",
+        "operationId": "post_v1_builders__id__cache_prune",
+        "responses": {
+          "200": {
+            "description": "Evict builder caches by LRU down to its configured limit; active service caches are protected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuilderCachePruned"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/builders/{id}/jobs": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "List running and recent builder jobs (up to 100), including jobs waiting for this selected builder",
+        "operationId": "get_v1_builders__id__jobs",
+        "responses": {
+          "200": {
+            "description": "List running and recent builder jobs (up to 100), including jobs waiting for this selected builder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BuilderJob"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/cache-policies": {
       "get": {
         "tags": [
@@ -7864,6 +8031,264 @@
           }
         }
       },
+      "BuilderCacheEntry": {
+        "type": "object",
+        "required": [
+          "service_id",
+          "service_name",
+          "cache_key",
+          "size_bytes",
+          "last_used_at",
+          "created_at"
+        ],
+        "properties": {
+          "cache_key": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_used_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "service_name": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "BuilderCacheFilter": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "service_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BuilderCachePruned": {
+        "type": "object",
+        "required": [
+          "reclaimed_bytes",
+          "remaining_bytes",
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuilderCacheEntry"
+            }
+          },
+          "reclaimed_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "remaining_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "BuilderInventory": {
+        "type": "object",
+        "required": [
+          "builders",
+          "waiting_jobs"
+        ],
+        "properties": {
+          "builders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuilderView"
+            },
+            "description": "Remote servers, including disabled candidates that can be enabled with PATCH."
+          },
+          "waiting_jobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuilderJob"
+            },
+            "description": "Unclaimed jobs; auto placement has no builder assignment until it is claimed."
+          }
+        }
+      },
+      "BuilderJob": {
+        "type": "object",
+        "required": [
+          "id",
+          "deployment_id",
+          "service_id",
+          "service_name",
+          "status",
+          "cancel_requested",
+          "disconnect_retries",
+          "created_at"
+        ],
+        "properties": {
+          "builder_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "cancel_requested": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deployment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "disconnect_retries": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "service_name": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "BuilderView": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "enabled",
+          "max_jobs",
+          "paused",
+          "draining",
+          "cache_limit_bytes",
+          "buildx",
+          "nixpacks",
+          "online",
+          "active_jobs",
+          "queued_jobs",
+          "cache_bytes"
+        ],
+        "properties": {
+          "active_jobs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "arch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "buildx": {
+            "type": "boolean"
+          },
+          "cache_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Last reported cache catalog, also available while the builder is offline."
+          },
+          "cache_limit_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "description": {
+            "type": "string"
+          },
+          "draining": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_seen": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "max_jobs": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nixpacks": {
+            "type": "boolean"
+          },
+          "online": {
+            "type": "boolean"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "queued_jobs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Queued jobs explicitly targeting this builder. Auto jobs are not reserved yet."
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "BuildsCancelled": {
         "type": "object",
         "required": [
@@ -8879,6 +9304,24 @@
           }
         }
       },
+      "CreateBuilder": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateDatabase": {
         "type": "object",
         "required": [
@@ -9321,6 +9764,30 @@
           },
           "role": {
             "type": "string"
+          }
+        }
+      },
+      "CreatedBuilder": {
+        "type": "object",
+        "required": [
+          "server",
+          "join_token",
+          "join_command",
+          "expires_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "join_command": {
+            "type": "string"
+          },
+          "join_token": {
+            "type": "string"
+          },
+          "server": {
+            "$ref": "#/components/schemas/BuilderView"
           }
         }
       },
@@ -14659,6 +15126,43 @@
           }
         }
       },
+      "ServiceBuildSettings": {
+        "type": "object",
+        "properties": {
+          "builder_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "default": null
+          },
+          "fallback": {
+            "type": "string",
+            "description": "panel or wait when no eligible builder is available.",
+            "default": "panel"
+          },
+          "placement": {
+            "type": "string",
+            "description": "panel, auto, or builder (requires builder_id).",
+            "default": "panel"
+          },
+          "test_command": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Shell command run inside the built image with Docker's default network.",
+            "default": null
+          },
+          "timeout_secs": {
+            "type": "integer",
+            "format": "int32",
+            "default": 3600
+          }
+        },
+        "additionalProperties": false
+      },
       "ServiceCachePurge": {
         "type": "object",
         "properties": {
@@ -15032,6 +15536,7 @@
       "SourceView": {
         "type": "object",
         "required": [
+          "build",
           "provider_id",
           "repo",
           "branch",
@@ -15045,6 +15550,9 @@
         "properties": {
           "branch": {
             "type": "string"
+          },
+          "build": {
+            "$ref": "#/components/schemas/ServiceBuildSettings"
           },
           "context": {
             "type": "string"
@@ -16575,6 +17083,44 @@
           }
         }
       },
+      "UpdateBuilder": {
+        "type": "object",
+        "properties": {
+          "cache_limit_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "draining": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "max_jobs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "paused": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateCacheSettings": {
         "type": "object",
         "required": [
@@ -17162,6 +17708,17 @@
         "properties": {
           "branch": {
             "type": "string"
+          },
+          "build": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ServiceBuildSettings",
+                "description": "Omit to preserve build settings; supplying this object replaces them."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "context": {
             "type": [

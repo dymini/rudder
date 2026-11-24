@@ -800,6 +800,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/builders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List remote builder candidates, including disabled servers, and unclaimed waiting jobs */
+        get: operations["get_v1_builders"];
+        put?: never;
+        /** Create a builder with no workloads; assigning a workload later also makes it a deploy target. Installer uses --builder --no-edge */
+        post: operations["post_v1_builders"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/builders/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Configure builder mode on an existing remote server; max_jobs is 1 to 32, cache_limit_bytes is non-negative */
+        patch: operations["patch_v1_builders__id_"];
+        trace?: never;
+    };
+    "/api/v1/builders/{id}/cache": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the last reported builder cache catalog, including while offline */
+        get: operations["get_v1_builders__id__cache"];
+        put?: never;
+        post?: never;
+        /** Clear builder caches. Query: service_id (optional UUID), key (optional); no filters clears all inactive caches. Builder must be connected */
+        delete: operations["delete_v1_builders__id__cache"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/builders/{id}/cache/prune": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Evict builder caches by LRU down to its configured limit; active service caches are protected */
+        post: operations["post_v1_builders__id__cache_prune"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/builders/{id}/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List running and recent builder jobs (up to 100), including jobs waiting for this selected builder */
+        get: operations["get_v1_builders__id__jobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cache-policies": {
         parameters: {
             query?: never;
@@ -4423,6 +4510,89 @@ export interface components {
             /** Format: int64 */
             succeeded_30d: number;
         };
+        BuilderCacheEntry: {
+            cache_key: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            last_used_at: string;
+            /** Format: uuid */
+            service_id: string;
+            service_name: string;
+            /** Format: int64 */
+            size_bytes: number;
+        };
+        BuilderCacheFilter: {
+            key?: string | null;
+            /** Format: uuid */
+            service_id?: string | null;
+        };
+        BuilderCachePruned: {
+            entries: components["schemas"]["BuilderCacheEntry"][];
+            /** Format: int64 */
+            reclaimed_bytes: number;
+            /** Format: int64 */
+            remaining_bytes: number;
+        };
+        BuilderInventory: {
+            /** @description Remote servers, including disabled candidates that can be enabled with PATCH. */
+            builders: components["schemas"]["BuilderView"][];
+            /** @description Unclaimed jobs; auto placement has no builder assignment until it is claimed. */
+            waiting_jobs: components["schemas"]["BuilderJob"][];
+        };
+        BuilderJob: {
+            /** Format: uuid */
+            builder_id?: string | null;
+            cancel_requested: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            deployment_id: string;
+            /** Format: int32 */
+            disconnect_retries: number;
+            /** Format: date-time */
+            finished_at?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            service_id: string;
+            service_name: string;
+            /** Format: date-time */
+            started_at?: string | null;
+            status: string;
+        };
+        BuilderView: {
+            /** Format: int64 */
+            active_jobs: number;
+            arch?: string | null;
+            buildx: boolean;
+            /**
+             * Format: int64
+             * @description Last reported cache catalog, also available while the builder is offline.
+             */
+            cache_bytes: number;
+            /** Format: int64 */
+            cache_limit_bytes: number;
+            description: string;
+            draining: boolean;
+            enabled: boolean;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            last_seen?: string | null;
+            /** Format: int32 */
+            max_jobs: number;
+            name: string;
+            nixpacks: boolean;
+            online: boolean;
+            paused: boolean;
+            /**
+             * Format: int64
+             * @description Queued jobs explicitly targeting this builder. Auto jobs are not reserved yet.
+             */
+            queued_jobs: number;
+            version?: string | null;
+        };
         BuildsCancelled: {
             /**
              * Format: int64
@@ -4736,6 +4906,10 @@ export interface components {
             public_url?: string | null;
             username: string;
         };
+        CreateBuilder: {
+            description?: string | null;
+            name: string;
+        };
         CreateDatabase: {
             database?: string | null;
             /** @description postgres, mysql, mariadb, mongo, or redis. */
@@ -4853,6 +5027,13 @@ export interface components {
             email: string;
             password: string;
             role: string;
+        };
+        CreatedBuilder: {
+            /** Format: date-time */
+            expires_at: string;
+            join_command: string;
+            join_token: string;
+            server: components["schemas"]["BuilderView"];
         };
         CreatedServer: components["schemas"]["ServerView"] & {
             join_command?: string | null;
@@ -6442,6 +6623,33 @@ export interface components {
              */
             telemetry_dropped: number;
         };
+        ServiceBuildSettings: {
+            /**
+             * Format: uuid
+             * @default null
+             */
+            builder_id: string | null;
+            /**
+             * @description panel or wait when no eligible builder is available.
+             * @default panel
+             */
+            fallback: string;
+            /**
+             * @description panel, auto, or builder (requires builder_id).
+             * @default panel
+             */
+            placement: string;
+            /**
+             * @description Shell command run inside the built image with Docker's default network.
+             * @default null
+             */
+            test_command: string | null;
+            /**
+             * Format: int32
+             * @default 3600
+             */
+            timeout_secs: number;
+        };
         ServiceCachePurge: {
             all?: boolean | null;
             /**
@@ -6560,6 +6768,7 @@ export interface components {
         };
         SourceView: {
             branch: string;
+            build: components["schemas"]["ServiceBuildSettings"];
             context: string;
             dockerfile: string;
             has_webhook_secret: boolean;
@@ -6964,6 +7173,15 @@ export interface components {
             turnstile_secret?: string | null;
             turnstile_site_key?: string | null;
         };
+        UpdateBuilder: {
+            /** Format: int64 */
+            cache_limit_bytes?: number | null;
+            draining?: boolean | null;
+            enabled?: boolean | null;
+            /** Format: int32 */
+            max_jobs?: number | null;
+            paused?: boolean | null;
+        };
         UpdateCacheSettings: {
             /**
              * Format: int64
@@ -7132,6 +7350,7 @@ export interface components {
         };
         UpdateSource: {
             branch: string;
+            build?: components["schemas"]["ServiceBuildSettings"] | null;
             context?: string | null;
             dockerfile?: string | null;
             /** @description Open pull requests against this branch get their own copy of the service. */
@@ -8459,6 +8678,154 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    get_v1_builders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List remote builder candidates, including disabled servers, and unclaimed waiting jobs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuilderInventory"];
+                };
+            };
+        };
+    };
+    post_v1_builders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CreateBuilder"];
+            };
+        };
+        responses: {
+            /** @description Create a builder with no workloads; assigning a workload later also makes it a deploy target. Installer uses --builder --no-edge */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedBuilder"];
+                };
+            };
+        };
+    };
+    patch_v1_builders__id_: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["UpdateBuilder"];
+            };
+        };
+        responses: {
+            /** @description Configure builder mode on an existing remote server; max_jobs is 1 to 32, cache_limit_bytes is non-negative */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuilderView"];
+                };
+            };
+        };
+    };
+    get_v1_builders__id__cache: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List the last reported builder cache catalog, including while offline */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuilderCacheEntry"][];
+                };
+            };
+        };
+    };
+    delete_v1_builders__id__cache: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Clear builder caches. Query: service_id (optional UUID), key (optional); no filters clears all inactive caches. Builder must be connected */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuilderCachePruned"];
+                };
+            };
+        };
+    };
+    post_v1_builders__id__cache_prune: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Evict builder caches by LRU down to its configured limit; active service caches are protected */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuilderCachePruned"];
+                };
+            };
+        };
+    };
+    get_v1_builders__id__jobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List running and recent builder jobs (up to 100), including jobs waiting for this selected builder */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuilderJob"][];
+                };
             };
         };
     };

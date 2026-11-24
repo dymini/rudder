@@ -349,6 +349,7 @@ pub async fn deploy_service(
 }
 
 pub(crate) struct BuiltRollout {
+    pub already_on_target: bool,
     pub service_id: Uuid,
     pub deployment_id: Uuid,
     pub image: String,
@@ -444,6 +445,7 @@ pub(crate) async fn deploy_r2_stream(
     roll_loaded_image(
         state,
         BuiltRollout {
+            already_on_target: true,
             service_id,
             deployment_id,
             image: image.clone(),
@@ -458,7 +460,8 @@ pub(crate) async fn deploy_r2_stream(
 
 /// Roll a locally built image onto an existing deployment row.
 pub(crate) async fn roll_built_image(state: &AppState, roll: BuiltRollout) -> Result<(), ApiError> {
-    roll_loaded_image(state, roll, false).await
+    let already_on_target = roll.already_on_target;
+    roll_loaded_image(state, roll, already_on_target).await
 }
 
 async fn roll_loaded_image(
@@ -774,7 +777,7 @@ pub async fn rollback_image(
 }
 
 /// Built images exist on the panel host; stream them to a remote server's engine.
-async fn copy_image(
+pub(crate) async fn copy_image(
     from: &dyn NodeDriver,
     to: &dyn NodeDriver,
     image: &str,

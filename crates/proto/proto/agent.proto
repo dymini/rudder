@@ -36,6 +36,9 @@ message Hello {
   string os_info = 4;
   uint32 cpu_count = 5;
   uint64 memory_bytes = 6;
+  string arch = 7;
+  bool builder_buildx = 8;
+  bool builder_nixpacks = 9;
 }
 
 message Welcome {

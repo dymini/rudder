@@ -5,10 +5,12 @@
 //! container logs and metrics. Collection keeps running while the panel is
 //! unreachable; see [`telemetry`] for the buffering rules.
 
+pub mod builder;
 mod collect;
 mod host;
 pub mod identity;
 mod session;
+pub mod status;
 pub mod telemetry;
 pub mod update;
 
@@ -31,6 +33,7 @@ const STATS_INTERVAL: Duration = Duration::from_secs(10);
 /// `rudder-agent run` settings.
 #[derive(Debug, Clone)]
 pub struct AgentConfig {
+    pub builder: bool,
     /// Identity and cursors, `/var/lib/rudder-agent`.
     pub data_dir: PathBuf,
     /// Root for files the panel writes, `/var/lib/rudder`.
@@ -53,6 +56,8 @@ pub struct RunOptions {
     pub stats_interval: Duration,
     /// `None` refuses binary updates from the panel.
     pub self_update: Option<SelfUpdate>,
+    /// None disables build operations for embedded agents without a filesystem.
+    pub builder: Option<Arc<builder::Builder>>,
 }
 
 /// Run the agent with the local Docker driver until SIGINT or SIGTERM.
@@ -95,9 +100,17 @@ pub async fn run(config: AgentConfig) -> anyhow::Result<()> {
     run_with(
         RunOptions {
             identity,
-            data_dir: config.data_dir,
+            data_dir: config.data_dir.clone(),
             stats_interval: STATS_INTERVAL,
             self_update: Some(self_update),
+            builder: if config.builder {
+                Some(Arc::new(builder::Builder::new(
+                    config.data_dir.join("builder"),
+                    config.docker_socket,
+                )?))
+            } else {
+                None
+            },
         },
         Arc::new(driver),
         buffer,
@@ -117,6 +130,19 @@ pub async fn run_with(
     shutdown: impl Future<Output = ()>,
 ) {
     let (connected, welcomed) = tokio::sync::watch::channel(false);
+    let status = match status::StatusFile::new(
+        &options.data_dir,
+        &options.identity.meta,
+        options.builder.is_some(),
+    ) {
+        Ok(file) => Some(Arc::new(file)),
+        Err(error) => {
+            tracing::warn!(%error, "could not initialize agent status");
+            None
+        }
+    };
+    let status_shutdown = status.clone();
+    let builder_status = options.builder.clone();
     let mut tasks = Tasks(vec![
         tokio::spawn(collect::stats(
             driver.clone(),
@@ -135,10 +161,35 @@ pub async fn run_with(
                 buffer,
                 self_update: options.self_update.clone(),
                 connected,
+                builder: options.builder,
+                status: status.clone(),
             })
             .run(),
         ),
     ]);
+    if let Some(status) = status {
+        tasks.0.push(tokio::spawn(async move {
+            let capabilities = match &builder_status {
+                Some(builder) => builder.capabilities().await,
+                None => (false, false),
+            };
+            let mut tick = tokio::time::interval(Duration::from_secs(5));
+            loop {
+                tick.tick().await;
+                let (jobs, cache) = match &builder_status {
+                    Some(builder) => (
+                        builder.running_jobs().unwrap_or_default(),
+                        builder.usage(None).unwrap_or_default(),
+                    ),
+                    None => (Vec::new(), Vec::new()),
+                };
+                let bytes = cache
+                    .iter()
+                    .fold(0u64, |sum, entry| sum.saturating_add(entry.size_bytes));
+                status.runtime(capabilities, jobs, (bytes, cache.len() as u64));
+            }
+        }));
+    }
     if let Some(self_update) = options.self_update {
         tasks.0.push(tokio::spawn(async move {
             update::watchdog(self_update, welcomed).await;
@@ -146,6 +197,9 @@ pub async fn run_with(
     }
     shutdown.await;
     drop(tasks);
+    if let Some(status) = status_shutdown {
+        status.connection(false, Some("agent service stopped".into()));
+    }
 }
 
 struct Tasks(Vec<tokio::task::JoinHandle<()>>);

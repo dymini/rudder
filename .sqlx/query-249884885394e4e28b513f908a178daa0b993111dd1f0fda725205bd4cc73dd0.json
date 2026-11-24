@@ -1,12 +1,12 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id, deployment_id, cancel_requested\n            FROM build_queue\n            WHERE server_id = $1 AND status = 'queued'\n            ORDER BY created_at\n            FOR UPDATE SKIP LOCKED\n            LIMIT 1\n            ",
+  "query": "\n        SELECT status, deployment_id, cancel_requested, builder_id\n        FROM build_queue\n        WHERE id = $1 FOR UPDATE\n        ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
-        "type_info": "Uuid"
+        "name": "status",
+        "type_info": "Text"
       },
       {
         "ordinal": 1,
@@ -17,6 +17,11 @@
         "ordinal": 2,
         "name": "cancel_requested",
         "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "builder_id",
+        "type_info": "Uuid"
       }
     ],
     "parameters": {
@@ -27,8 +32,9 @@
     "nullable": [
       false,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "4e6155ae352cbb65b16ef05f9a6fbde92c90ce9ec98ba9356fc4220a65638f87"
+  "hash": "249884885394e4e28b513f908a178daa0b993111dd1f0fda725205bd4cc73dd0"
 }

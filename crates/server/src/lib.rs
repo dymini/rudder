@@ -174,11 +174,14 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            match build_queue::build_once(&build_state).await {
-                Ok(true) => tracing::debug!("build queue claimed a job"),
-                Ok(false) => {}
-                Err(error) => {
-                    tracing::warn!(message = %error.public_message(), "build queue failed")
+            loop {
+                match build_queue::dispatch_once(&build_state).await {
+                    Ok(true) => tracing::debug!("build queue claimed a job"),
+                    Ok(false) => break,
+                    Err(error) => {
+                        tracing::warn!(message = %error.public_message(), "build queue failed");
+                        break;
+                    }
                 }
             }
         }
@@ -327,6 +330,7 @@ pub fn router(state: AppState) -> axum::Router {
         .merge(routes::security::router())
         .merge(routes::cloudflare::router())
         .merge(routes::catalog::router())
+        .merge(routes::builders::router())
         .merge(routes::edge::router())
         .merge(routes::panel_ssl::router())
         .merge(routes::git::router())
