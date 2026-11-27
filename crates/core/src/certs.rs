@@ -6,10 +6,10 @@
 use p256::elliptic_curve::sec1::ToSec1Point;
 use p256::pkcs8::DecodePrivateKey;
 use p256::SecretKey;
-use rsa::pkcs1::DecodeRsaPrivateKey;
+use rsa::pkcs1::DecodePrivateKey;
 use rsa::pkcs8::DecodePrivateKey as DecodeRsaPkcs8;
 use rsa::traits::PublicKeyParts;
-use rsa::{RsaPrivateKey, RsaPublicKey};
+use rsa::{PrivateKey, PublicKey};
 use x509_parser::certificate::X509Certificate;
 use x509_parser::extensions::GeneralName;
 use x509_parser::pem::Pem;
@@ -220,12 +220,12 @@ fn ensure_key_matches(key_pem: &str, der: &[u8]) -> Result<(), Error> {
 }
 
 fn rsa_matches(key_pem: &str, modulus: &[u8], exponent: &[u8]) -> Result<bool, Error> {
-    let key = <RsaPrivateKey as DecodeRsaPkcs8>::from_pkcs8_pem(key_pem)
-        .or_else(|_| <RsaPrivateKey as DecodeRsaPrivateKey>::from_pkcs1_pem(key_pem));
+    let key = <PrivateKey as DecodeRsaPkcs8>::from_pkcs8_pem(key_pem)
+        .or_else(|_| <PrivateKey as DecodePrivateKey>::from_pkcs1_pem(key_pem));
     let Ok(key) = key else {
         return Ok(false);
     };
-    let public = RsaPublicKey::from(&key);
+    let public = PublicKey::from(&key);
     Ok(
         unsigned_eq(&public.n().to_be_bytes_trimmed_vartime(), modulus)
             && unsigned_eq(&public.e().to_be_bytes_trimmed_vartime(), exponent),

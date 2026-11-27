@@ -6,7 +6,7 @@
 use base64::Engine;
 use rsa::pkcs1v15::Pkcs1v15Sign;
 use rsa::traits::PublicKeyParts;
-use rsa::{BoxedUint, RsaPublicKey};
+use rsa::{BoxedUint, PublicKey};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -505,7 +505,7 @@ pub fn verify_access_jwt(
             let e = base64::engine::general_purpose::URL_SAFE_NO_PAD
                 .decode(e)
                 .ok()?;
-            RsaPublicKey::new(
+            PublicKey::new(
                 BoxedUint::from_be_slice_vartime(&n),
                 BoxedUint::from_be_slice_vartime(&e),
             )
@@ -554,15 +554,14 @@ pub fn verify_access_jwt(
 mod tests {
     use super::*;
     use rsa::pkcs8::DecodePrivateKey;
-    use rsa::RsaPrivateKey;
+    use rsa::PrivateKey;
 
     fn b64(bytes: &[u8]) -> String {
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
     }
 
     fn signed_token(claims: &Value, kid: &str) -> (String, String) {
-        let private =
-            RsaPrivateKey::from_pkcs8_pem(crate::github_app::tests::TEST_APP_KEY).unwrap();
+        let private = PrivateKey::from_pkcs8_pem(crate::github_app::tests::TEST_APP_KEY).unwrap();
         let public = private.to_public_key();
         let header = b64(json!({ "alg": "RS256", "kid": kid }).to_string().as_bytes());
         let payload = b64(claims.to_string().as_bytes());
