@@ -9,6 +9,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Security
+- **Core runtime, URL and platform libraries were patched.** Rudder now uses fixed tokio, url and rustix releases for task exhaustion, userinfo serialization and memory-corruption advisories.
 - **Cryptographic signing and session-cookie libraries were patched.** GitHub App signatures, Cloudflare Access verification and encrypted cookies now use fixed RSA, bigint, constant-time utility, SHA-2/HMAC and cookie releases.
 - **Compression libraries were patched.** Backup, image and cache compression now uses fixed zstd releases for memory-safety, stream-reuse and allocator-failure advisories.
 - **SMTP delivery libraries were patched.** Notification and Rudder Access email sending now uses a fixed lettre release for SMTP injection, malformed-response and memory-exhaustion advisories.
