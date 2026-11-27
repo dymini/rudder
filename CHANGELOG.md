@@ -9,6 +9,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Security
+- **TLS and certificate-verification libraries were patched.** Rudder now uses fixed rustls, webpki and root-certificate releases for TLS session, certificate-chain and trust-store advisories.
 - **The example development master key can no longer be used by accident.** `.env.example` now contains a placeholder instead of a valid published key, and the panel refuses that old example key at startup; generate a real key with `openssl rand -hex 32`.
 - **The iOS app refuses cleartext panel addresses.** Mobile sign-in now requires HTTPS except for localhost development, so API tokens and OAuth tokens are not sent over plain HTTP to a remote panel.
 
