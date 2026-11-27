@@ -53,7 +53,31 @@ export function normalizePanelUrl(input: string): string {
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`;
   }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new ApiError(0, "invalid_panel_url", "Địa chỉ panel không hợp lệ.");
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new ApiError(0, "invalid_panel_url", "Địa chỉ panel không được chứa credentials, query hoặc fragment.");
+  }
+  if (parsed.protocol === "http:" && !isLoopbackHostname(parsed.hostname)) {
+    throw new ApiError(
+      0,
+      "https_required",
+      "Panel phải dùng HTTPS trên thiết bị di động; HTTP chỉ được chấp nhận cho localhost khi phát triển.",
+    );
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new ApiError(0, "invalid_panel_url", "Địa chỉ panel phải bắt đầu bằng https://.");
+  }
   return url;
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

@@ -10,6 +10,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ### Security
 - **The example development master key can no longer be used by accident.** `.env.example` now contains a placeholder instead of a valid published key, and the panel refuses that old example key at startup; generate a real key with `openssl rand -hex 32`.
+- **The iOS app refuses cleartext panel addresses.** Mobile sign-in now requires HTTPS except for localhost development, so API tokens and OAuth tokens are not sent over plain HTTP to a remote panel.
 
 ### Added
 - **Control the panel from an iPhone.** A new Expo iOS app in `app/` signs in through the panel's OAuth consent (the same grant AI agents use, revocable under Admin → AI agents) or an API token, and operates the panel over the `/mcp/api/v1` machine API: dashboard and server metrics, service deploy/start/stop/restart, container logs, environment variables, domains, compose stack actions, backup jobs and panel updates. The `.github/workflows/ios.yml` workflow builds it on a macOS runner and publishes simulator and device artifacts, signing and uploading to TestFlight automatically on every push through fastlane with the App Store Connect API key.
