@@ -39,5 +39,8 @@
     "typecheck": "tsc --noEmit",
     "api:types": "openapi-typescript ../web/openapi.json -o src/lib/schema.d.ts"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "@expo/fingerprint>minimatch": "11.0.9"
+  }
 }

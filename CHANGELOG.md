@@ -9,6 +9,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Security
+- **Mobile build dependencies were patched.** The Expo fingerprint toolchain now uses a fixed minimatch release, closing a glob-pattern denial-of-service advisory in dependency scanning.
 - **Installers now verify signed release metadata before trusting downloads.** Agent installers validate `SHA256SUMS.minisig` before checksums, and panel installation pulls the image digests pinned in the signed `release.json` instead of mutable tags.
 - **The cache container no longer runs as root.** It uses a dedicated numeric user, and installers grant that user access only to the cache data directory; the panel still requires broader access because it manages the Docker socket and host-mounted state.
 - **Core runtime, URL and platform libraries were patched.** Rudder now uses fixed tokio, url and rustix releases for task exhaustion, userinfo serialization and memory-corruption advisories.
