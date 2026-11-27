@@ -58,7 +58,8 @@ export default function Domains() {
     ]);
   }
 
-  const serviceName = (id: string) => services.data?.find((s) => s.id === id)?.name ?? id.slice(0, 8);
+  const serviceName = (id: string | null | undefined) =>
+    id == null ? "—" : (services.data?.find((s) => s.id === id)?.name ?? id.slice(0, 8));
 
   return (
     <Screen refreshing={domains.isRefetching} onRefresh={() => domains.refetch()}>
@@ -70,18 +71,20 @@ export default function Domains() {
         <Empty text="Chưa có tên miền nào." />
       ) : (
         (domains.data ?? []).map((domain) => (
-          <Card key={domain.id}>
+          <Card key={domain.id ?? domain.host}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <CardTitle>{domain.host}</CardTitle>
               <Badge label={domain.published ? "published" : "unpublished"} tone={domain.published ? "ok" : "dim"} />
             </View>
             <Row label="Dịch vụ" value={serviceName(domain.service_id)} />
             <Row label="Port" value={domain.target_port} dim />
-            <Row label="SSL" value={domain.ssl_mode} dim />
+            <Row label="SSL" value={domain.ssl_mode ?? "—"} dim />
             {domain.matched_certificate_name ? <Row label="Cert" value={domain.matched_certificate_name} dim /> : null}
             <Row label="HTTPS redirect" value={domain.https_redirect ? "bật" : "tắt"} dim />
             <Row label="Cache" value={domain.cache_enabled ? "bật" : "tắt"} dim />
             <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {domain.id != null && (
+              <>
               <Button
                 title={domain.published ? "Gỡ publish" : "Publish"}
                 small
@@ -95,6 +98,8 @@ export default function Domains() {
                 onPress={() => patch.mutate({ id: domain.id, body: { https_redirect: !domain.https_redirect } })}
               />
               <Button title="Xóa" small tone="danger" onPress={() => confirmDelete(domain)} />
+              </>
+              )}
             </View>
           </Card>
         ))
