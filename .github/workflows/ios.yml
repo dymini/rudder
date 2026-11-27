@@ -59,7 +59,7 @@ jobs:
       - name: Install CocoaPods dependencies
         run: |
           cd ios
-          pod install --repo-update
+          pod install
 
       - name: Build for the iOS Simulator
         run: |
