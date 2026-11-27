@@ -1,0 +1,144 @@
+name: iOS app
+
+# Builds the Rudder iOS companion app (Expo, in `app/`) on a macOS runner.
+# Two artifacts:
+#   - a simulator build (always unsigned, proves the app compiles and links), and
+#   - an unsigned device `.xcarchive`/IPA when the signing secrets are absent.
+#
+# To produce a signed, installable IPA, add these repository secrets and the
+# workflow signs with them automatically:
+#   - IOS_BUILD_CERTIFICATE_BASE64: base64 of a .p12 distribution certificate
+#   - IOS_P12_PASSWORD: the .p12 password
+#   - IOS_PROVISION_PROFILE_BASE64: base64 of the .mobileprovision file
+#   - IOS_TEAM_ID: the Apple Developer team id
+
+on:
+  push:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["app/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build iOS app
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint and typecheck
+        run: |
+          bunx expo lint
+          bunx tsc --noEmit
+
+      - name: Generate the native iOS project
+        run: bunx expo prebuild --platform ios --no-install
+
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Build for the iOS Simulator
+        run: |
+          cd ios
+          xcodebuild \
+            -workspace Rudder.xcworkspace \
+            -scheme Rudder \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build-sim \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Upload simulator app
+        uses: actions/upload-artifact@v4
+        with:
+          name: rudder-simulator-app
+          path: app/ios/build-sim/Build/Products/Debug-iphonesimulator/*.app
+          retention-days: 14
+
+      - name: Import signing certificate
+        if: ${{ secrets.IOS_BUILD_CERTIFICATE_BASE64 != '' }}
+        run: |
+          echo "$IOS_BUILD_CERTIFICATE_BASE64" | base64 --decode > /tmp/dist.p12
+          security create-keychain -p ci ci.keychain
+          security default-keychain -s ci.keychain
+          security unlock-keychain -p ci ci.keychain
+          security import /tmp/dist.p12 -k ci.keychain -P "$IOS_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci ci.keychain
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+        env:
+          IOS_BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_BUILD_CERTIFICATE_BASE64 }}
+          IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+
+      - name: Archive unsigned device build
+        if: ${{ secrets.IOS_BUILD_CERTIFICATE_BASE64 == '' }}
+        run: |
+          cd ios
+          xcodebuild \
+            -workspace Rudder.xcworkspace \
+            -scheme Rudder \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/rudder \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+
+      - name: Archive signed device build
+        if: ${{ secrets.IOS_BUILD_CERTIFICATE_BASE64 != '' }}
+        run: |
+          cd ios
+          xcodebuild \
+            -workspace Rudder.xcworkspace \
+            -scheme Rudder \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/rudder \
+            archive
+
+      - name: Export signed IPA
+        if: ${{ secrets.IOS_BUILD_CERTIFICATE_BASE64 != '' }}
+        run: |
+          cd ios
+          cat > export.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>development</string>
+            <key>teamID</key><string>${{ secrets.IOS_TEAM_ID }}</string>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath build/rudder.xcarchive -exportPath build/ipa -exportOptionsPlist export.plist
+
+      - name: Upload device archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: rudder-device-build
+          path: |
+            app/ios/build/rudder.xcarchive
+            app/ios/build/ipa/*.ipa
+          retention-days: 14
+        if: ${{ always() && hashFiles('app/ios/build') != '' }}

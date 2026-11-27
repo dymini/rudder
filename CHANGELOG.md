@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Added
+- **Control the panel from an iPhone.** A new Expo iOS app in `app/` signs in through the panel's OAuth consent (the same grant AI agents use, revocable under Admin → AI agents) or an API token, and operates the panel over the `/mcp/api/v1` machine API: dashboard and server metrics, service deploy/start/stop/restart, container logs, environment variables, domains, compose stack actions, backup jobs and panel updates. The `.github/workflows/ios.yml` workflow builds it on a macOS runner and publishes simulator and device artifacts, signing an IPA when the signing secrets are configured.
+
 ## [0.15.0] - 2026-11-24
 
 ### Fixed
