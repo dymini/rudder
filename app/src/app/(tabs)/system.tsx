@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
-import { Badge, Button, Card, CardTitle, ErrorBox, Loading, Row, Screen, SectionTitle } from "../../components/ui";
+import { router } from "expo-router";
+import { Badge, Button, Card, CardTitle, ErrorBox, ListItem, Loading, Row, Screen, SectionTitle } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
 import { colors, spacing, statusTone } from "../../lib/theme";
 import { formatTime, timeAgo, type AlertView, type McpGrantView, type TokenView, type UpdateOverview, type UserView } from "../../lib/types";
@@ -67,6 +68,28 @@ export default function System() {
       }}
     >
       <ErrorBox error={error ?? updates.error} />
+
+      <SectionTitle>Quản trị</SectionTitle>
+      <ListItem title="Projects" subtitle="Project và môi trường" onPress={() => router.push("/projects")} />
+      <ListItem title="Servers" subtitle="Máy chủ chạy dịch vụ" onPress={() => router.push("/servers")} />
+      <ListItem title="Builders" subtitle="Builder và build cache" onPress={() => router.push("/builders")} />
+      <ListItem title="Tải hệ thống" subtitle="Load guard và hàng đợi build" onPress={() => router.push("/load")} />
+      <ListItem title="Thống kê" subtitle="Lưu lượng và vận hành" onPress={() => router.push("/statistics")} />
+      <ListItem title="Logs panel" subtitle="Nhật ký của panel" onPress={() => router.push("/logs")} />
+      <ListItem title="Tên miền" subtitle="Domains và routing" onPress={() => router.push("/domains")} />
+      <ListItem title="Chứng chỉ TLS" subtitle="Certificates" onPress={() => router.push("/certificates")} />
+      <ListItem title="Registries" subtitle="Docker registries" onPress={() => router.push("/registries")} />
+      <ListItem title="Git providers" subtitle="GitHub/GitLab đã kết nối" onPress={() => router.push("/git-providers")} />
+      <ListItem title="Rudder Image" subtitle="Kho image nội bộ" onPress={() => router.push("/image-store")} />
+      <ListItem title="Cache edge" subtitle="Cache policies" onPress={() => router.push("/cache-policies")} />
+      <ListItem title="Templates" subtitle="Template một chạm" onPress={() => router.push("/templates")} />
+      <ListItem title="Plugins" subtitle="Plugin cộng đồng" onPress={() => router.push("/plugins")} />
+      <ListItem title="Người dùng" subtitle="Tài khoản panel" onPress={() => router.push("/users")} />
+      <ListItem title="Rudder Access" subtitle="Định danh và phân quyền" onPress={() => router.push("/access")} />
+      <ListItem title="Bảo mật" subtitle="Findings và SSL" onPress={() => router.push("/security")} />
+      <ListItem title="Cloudflare" subtitle="Tunnel và edge" onPress={() => router.push("/cloudflare")} />
+      <ListItem title="Nhật ký audit" subtitle="Ai đã làm gì" onPress={() => router.push("/audit")} />
+
 
       <Card>
         <CardTitle>Tài khoản</CardTitle>

@@ -261,3 +261,50 @@ const styles = StyleSheet.create({
   listSubtitle: { color: colors.textDim, fontSize: 12, marginTop: 2 },
   chevron: { color: colors.textDim, fontSize: 20, marginLeft: spacing.xs },
 });
+
+export function Input({
+  value,
+  onChangeText,
+  placeholder,
+  secure,
+  multiline,
+  keyboardType,
+}: {
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+  secure?: boolean;
+  multiline?: boolean;
+  keyboardType?: "default" | "numeric" | "email-address" | "url";
+}) {
+  return (
+    <TextInput
+      style={[formStyles.input, multiline && formStyles.inputMultiline]}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor={colors.textDim}
+      secureTextEntry={secure}
+      autoCapitalize="none"
+      autoCorrect={false}
+      multiline={multiline}
+      keyboardType={keyboardType}
+    />
+  );
+}
+
+import { TextInput } from "react-native";
+
+const formStyles = StyleSheet.create({
+  input: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    color: colors.text,
+    fontSize: 15,
+  },
+  inputMultiline: { minHeight: 90, textAlignVertical: "top" },
+});
