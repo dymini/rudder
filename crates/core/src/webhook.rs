@@ -3,7 +3,7 @@
 //! GitHub signs the raw body with HMAC-SHA256. GitLab sends the shared token
 //! in a header. Both comparisons are constant-time.
 
-use hmac::Mac;
+use hmac::{KeyInit, Mac};
 use serde_json::Value;
 use sha2::Sha256;
 use subtle::ConstantTimeEq;

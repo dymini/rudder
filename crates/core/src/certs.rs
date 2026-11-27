@@ -226,8 +226,10 @@ fn rsa_matches(key_pem: &str, modulus: &[u8], exponent: &[u8]) -> Result<bool, E
         return Ok(false);
     };
     let public = RsaPublicKey::from(&key);
-    Ok(unsigned_eq(&public.n().to_bytes_be(), modulus)
-        && unsigned_eq(&public.e().to_bytes_be(), exponent))
+    Ok(
+        unsigned_eq(&public.n().to_be_bytes_trimmed_vartime(), modulus)
+            && unsigned_eq(&public.e().to_be_bytes_trimmed_vartime(), exponent),
+    )
 }
 
 fn ec_matches(key_pem: &str, point: &[u8]) -> Result<bool, Error> {

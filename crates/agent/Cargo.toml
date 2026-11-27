@@ -32,7 +32,7 @@ tower = { version = "0.5", features = ["util"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
 tonic = { version = "0.14.5", features = ["tls-aws-lc"] }
-sha2 = "0.10.9"
+sha2 = "0.11.2"
 hex = "0.4.3"
 
 [target.'cfg(unix)'.dependencies]

@@ -6,7 +6,7 @@
 use base64::Engine;
 use rsa::pkcs1v15::Pkcs1v15Sign;
 use rsa::traits::PublicKeyParts;
-use rsa::{BigUint, RsaPublicKey};
+use rsa::{BoxedUint, RsaPublicKey};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -505,7 +505,11 @@ pub fn verify_access_jwt(
             let e = base64::engine::general_purpose::URL_SAFE_NO_PAD
                 .decode(e)
                 .ok()?;
-            RsaPublicKey::new(BigUint::from_bytes_be(&n), BigUint::from_bytes_be(&e)).ok()
+            RsaPublicKey::new(
+                BoxedUint::from_be_slice_vartime(&n),
+                BoxedUint::from_be_slice_vartime(&e),
+            )
+            .ok()
         })
         .any(|key| {
             key.size() >= 256
