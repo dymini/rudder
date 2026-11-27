@@ -5,6 +5,14 @@ iPhone instead of the browser: dashboard and server metrics, service actions
 (deploy, start, stop, restart), container logs, environment variables, domains,
 compose stack actions, backup jobs, and panel updates.
 
+## Interface
+
+The app uses a dark iOS-style control-room interface: floating rounded tab bar,
+cards with depth and status color, a dashboard hero with service/server/alert
+metrics, progress bars for CPU, memory and disk, and a redesigned sign-in screen
+with a branded compass mark and grouped credential fields. Pull to refresh is
+available on data screens.
+
 ## Signing in
 
 The app uses the same OAuth 2.1 + PKCE flow as AI agents (see [mcp.md](mcp.md)):

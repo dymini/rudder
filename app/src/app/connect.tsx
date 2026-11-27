@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -10,9 +11,9 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Button, ErrorBox } from "../components/ui";
 import { useAuth } from "../lib/auth";
 import { colors, spacing } from "../lib/theme";
-import { Button, ErrorBox } from "../components/ui";
 
 export default function Connect() {
   const { signIn, signInWithToken } = useAuth();
@@ -29,9 +30,7 @@ export default function Connect() {
       await action();
       router.replace("/(tabs)");
     } catch (err) {
-      if (err instanceof Error && err.message.includes("hủy")) {
-        // user cancelled the sign-in sheet: no error box needed
-      } else {
+      if (!(err instanceof Error && err.message.includes("hủy"))) {
         setError(err);
       }
     } finally {
@@ -45,59 +44,72 @@ export default function Connect() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.logo}>⚓</Text>
+        <View style={styles.heroGlow} />
+        <View style={styles.brandOrbit}>
+          <View style={styles.brandBadge}>
+            <Ionicons name="compass" color={colors.accentBright} size={42} />
+          </View>
+        </View>
         <Text style={styles.title}>Rudder</Text>
-        <Text style={styles.subtitle}>Điều khiển panel Rudder của bạn từ điện thoại.</Text>
+        <Text style={styles.subtitle}>Bảng điều khiển hạm đội của bạn — nhanh, an toàn và luôn trong tầm tay.</Text>
 
-        <Text style={styles.label}>Địa chỉ panel</Text>
-        <TextInput
-          style={styles.input}
-          value={panelUrl}
-          onChangeText={setPanelUrl}
-          placeholder="https://rudder.example.com"
-          placeholderTextColor={colors.textDim}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-        />
-
-        <ErrorBox error={error} />
-
-        <Button
-          title="Đăng nhập qua trình duyệt"
-          loading={busy}
-          disabled={!panelUrl.trim()}
-          onPress={() => run(() => signIn(panelUrl))}
-        />
-        <Text style={styles.hint}>
-          Mở trang đăng nhập của panel trong một phiên trình duyệt bảo mật, bạn phê duyệt quyền rồi
-          quay lại app.
-        </Text>
-
-        <Pressable onPress={() => setShowToken((v) => !v)}>
-          <Text style={styles.tokenToggle}>{showToken ? "Ẩn đăng nhập bằng API token" : "Dùng API token"}</Text>
-        </Pressable>
-        {showToken ? (
-          <View style={{ gap: spacing.md }}>
+        <View style={styles.formCard}>
+          <Text style={styles.label}>Địa chỉ panel</Text>
+          <View style={styles.inputShell}>
+            <Ionicons name="link-outline" color={colors.textDim} size={18} />
             <TextInput
               style={styles.input}
-              value={token}
-              onChangeText={setToken}
-              placeholder="rudder_token_…"
-              placeholderTextColor={colors.textDim}
+              value={panelUrl}
+              onChangeText={setPanelUrl}
+              placeholder="https://rudder.example.com"
+              placeholderTextColor={colors.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
-              secureTextEntry
-            />
-            <Button
-              title="Đăng nhập bằng token"
-              tone="ghost"
-              loading={busy}
-              disabled={!panelUrl.trim() || !token.trim()}
-              onPress={() => run(() => signInWithToken(panelUrl, token))}
+              keyboardType="url"
             />
           </View>
-        ) : null}
+
+          <ErrorBox error={error} />
+
+          <Button
+            title="Đăng nhập qua trình duyệt"
+            loading={busy}
+            disabled={!panelUrl.trim()}
+            onPress={() => run(() => signIn(panelUrl))}
+          />
+          <Text style={styles.hint}>
+            Phiên đăng nhập mở trong trình duyệt bảo mật của hệ thống, sau đó tự động quay lại app.
+          </Text>
+
+          <Pressable onPress={() => setShowToken((v) => !v)} style={styles.tokenToggleWrap}>
+            <Text style={styles.tokenToggle}>{showToken ? "Ẩn đăng nhập bằng API token" : "Dùng API token"}</Text>
+            <Ionicons name={showToken ? "chevron-up" : "chevron-down"} color={colors.accentBright} size={15} />
+          </Pressable>
+          {showToken ? (
+            <View style={{ gap: spacing.md }}>
+              <View style={styles.inputShell}>
+                <Ionicons name="key-outline" color={colors.textDim} size={18} />
+                <TextInput
+                  style={styles.input}
+                  value={token}
+                  onChangeText={setToken}
+                  placeholder="rudder_token_…"
+                  placeholderTextColor={colors.textFaint}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  secureTextEntry
+                />
+              </View>
+              <Button
+                title="Đăng nhập bằng token"
+                tone="ghost"
+                loading={busy}
+                disabled={!panelUrl.trim() || !token.trim()}
+                onPress={() => run(() => signInWithToken(panelUrl, token))}
+              />
+            </View>
+          ) : null}
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -108,22 +120,75 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: "center",
     padding: spacing.xl,
-    gap: spacing.md,
+    gap: spacing.lg,
   },
-  logo: { fontSize: 44, textAlign: "center" },
-  title: { color: colors.text, fontSize: 32, fontWeight: "700", textAlign: "center" },
-  subtitle: { color: colors.textDim, fontSize: 15, textAlign: "center", marginBottom: spacing.lg },
-  label: { color: colors.textDim, fontSize: 13, fontWeight: "600" },
-  input: {
+  heroGlow: {
+    position: "absolute",
+    top: 30,
+    alignSelf: "center",
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: colors.accentDim,
+    opacity: 0.42,
+  },
+  brandOrbit: {
+    alignSelf: "center",
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    borderWidth: 1,
+    borderColor: colors.accent + "44",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  brandBadge: {
+    width: 76,
+    height: 76,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.cardSoft,
+    borderWidth: 1,
+    borderColor: colors.accent + "66",
+    shadowColor: colors.accent,
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  title: { color: colors.text, fontSize: 38, fontWeight: "800", letterSpacing: -1, textAlign: "center" },
+  subtitle: { color: colors.textDim, fontSize: 15, lineHeight: 22, textAlign: "center", marginHorizontal: spacing.lg },
+  formCard: {
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    borderRadius: 10,
+    borderRadius: 26,
+    padding: spacing.xl,
+    gap: spacing.md,
+    shadowColor: "#000",
+    shadowOpacity: 0.32,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 8,
+  },
+  label: { color: colors.textDim, fontSize: 13, fontWeight: "700" },
+  inputShell: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.bgElevated,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 16,
     paddingHorizontal: spacing.md,
-    paddingVertical: 12,
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 14,
     color: colors.text,
     fontSize: 15,
   },
-  hint: { color: colors.textDim, fontSize: 12, textAlign: "center" },
-  tokenToggle: { color: colors.accent, fontSize: 14, textAlign: "center", paddingVertical: spacing.sm },
+  hint: { color: colors.textDim, fontSize: 12, lineHeight: 17, textAlign: "center" },
+  tokenToggleWrap: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: spacing.xs },
+  tokenToggle: { color: colors.accentBright, fontSize: 14, fontWeight: "700", textAlign: "center" },
 });

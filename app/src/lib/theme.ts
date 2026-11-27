@@ -1,16 +1,21 @@
 import { Platform } from "react-native";
+
 export const colors = {
-  bg: "#0b0f17",
-  card: "#151b26",
-  cardBorder: "#232c3d",
-  text: "#e8edf5",
-  textDim: "#8b98ad",
-  accent: "#4f8ef7",
-  accentDim: "#1d3252",
-  ok: "#3fb96f",
-  warn: "#e0a83c",
-  danger: "#e05c5c",
-  busy: "#b07ce0",
+  bg: "#050812",
+  bgElevated: "#0a1020",
+  card: "#101827",
+  cardSoft: "#162033",
+  cardBorder: "#263449",
+  text: "#f4f7fb",
+  textDim: "#93a1b7",
+  textFaint: "#64748b",
+  accent: "#61a5ff",
+  accentBright: "#7dd3fc",
+  accentDim: "#173759",
+  ok: "#34d399",
+  warn: "#fbbf24",
+  danger: "#fb7185",
+  busy: "#a78bfa",
 };
 
 export type Tone = "ok" | "warn" | "danger" | "busy" | "dim";
@@ -30,6 +35,14 @@ export const spacing = {
   md: 12,
   lg: 16,
   xl: 24,
+  xxl: 32,
+};
+
+export const radius = {
+  sm: 10,
+  md: 14,
+  lg: 20,
+  xl: 28,
 };
 
 export const monoFont = Platform.OS === "ios" ? "Menlo" : "monospace";

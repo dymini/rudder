@@ -49,6 +49,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 - **Manage multiple Cloudflare zones in one account.** Discover zones with the connected token and enable only the zones Rudder should manage. Cloudflare settings now lists zone status and controls; Domains shows and filters by zone. The existing zone stays enabled on upgrade; other discovered zones start disabled. Tokens need Zone Read plus DNS Edit for each enabled zone.
 
 ### Changed
+- **The iOS app has a redesigned control-room interface.** Sign-in, the dashboard, server metrics, cards, badges, inputs and the tab bar now use a polished dark iOS-style visual system with clearer operational status.
 - **Use Access across enabled Cloudflare zones.** The login portal and panel Access application can use any enabled zone in the connected account, with hostname-specific readiness diagnostics before closing public ports.
 - **Publish DNS safely across zones.** Domains resolve to their most-specific known zone, with no fallback past a disabled or inaccessible child zone. DNS errors are reported per zone and hostname; working tunnel routes and DNS records survive discovery loss or disabled zones, and cleanup uses the zone where each record was written.
 
