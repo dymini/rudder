@@ -56,12 +56,20 @@ export function normalizePanelUrl(input: string): string {
   return url;
 }
 
+const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
 function base64url(bytes: Uint8Array): string {
-  let binary = "";
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  let output = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const a = bytes[index];
+    const b = bytes[index + 1];
+    const c = bytes[index + 2];
+    output += B64[a >> 2];
+    output += B64[((a & 3) << 4) | (index + 1 < bytes.length ? b >> 4 : 0)];
+    output += index + 1 < bytes.length ? B64[((b & 15) << 2) | (index + 2 < bytes.length ? c >> 6 : 0)] : "";
+    output += index + 2 < bytes.length ? B64[c & 63] : "";
+  }
+  return output.replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 async function pkcePair(): Promise<{ verifier: string; challenge: string }> {
