@@ -92,8 +92,10 @@ jobs:
           fetch-depth: 0
 
       - name: Changes that people can see are in CHANGELOG.md
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          changed=$(git diff --name-only "refs/remotes/origin/$BASE_REF...HEAD")
           if printf '%s\n' "$changed" | grep -Eq '^(crates|web/src|deploy|templates)/'; then
             if ! printf '%s\n' "$changed" | grep -qx 'CHANGELOG.md'; then
               echo "::error::this pull request changes code but not CHANGELOG.md; add a line under [Unreleased] that says what users will notice"
