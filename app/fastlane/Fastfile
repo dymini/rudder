@@ -25,16 +25,8 @@ platform :ios do
       timeout: 3600
     )
 
-    # Register the App Store Connect app on first run; a no-op once it exists.
-    produce(
-      app_identifier: BUNDLE_ID,
-      app_name: "Rudder",
-      language: "English",
-      app_version: "1.0.0",
-      sku: "rudder-panel",
-      team_id: APPLE_TEAM_ID
-    )
-
+    # The App Store Connect app record cannot be created through the API
+    # (Apple forbids CREATE on /v1/apps): create it once in the web UI.
     cert(
       api_key: api_key,
       keychain_path: File.expand_path("~/Library/Keychains/ci-db"),
