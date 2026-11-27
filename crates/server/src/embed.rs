@@ -14,7 +14,7 @@ pub async fn spa(uri: axum::http::Uri) -> Response {
 }
 
 pub fn spa_response(path: &str) -> Response {
-    if path.starts_with("/api/") || path == "/api" || path.starts_with("/_rudder") {
+    if path.starts_with("/api/") || path == "/api" || path.starts_with("/_dymini_panel") {
         return StatusCode::NOT_FOUND.into_response_empty();
     }
     let relative = path.trim_start_matches('/');
@@ -69,7 +69,7 @@ mod tests {
         assert_eq!(spa_response("/").status(), StatusCode::OK);
         let index = Assets::get("index.html").expect("index");
         let text = String::from_utf8_lossy(&index.data);
-        assert!(text.contains("Rudder"));
+        assert!(text.contains("Dymini Panel"));
         assert_eq!(spa_response("/api/missing").status(), StatusCode::NOT_FOUND);
         assert_eq!(spa_response("/dashboard").status(), StatusCode::OK);
     }

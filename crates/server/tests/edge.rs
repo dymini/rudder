@@ -11,23 +11,29 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 
 fn app(pool: PgPool, data_dir: &std::path::Path) -> axum::Router {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
-        ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_PUBLIC_URL".into(), "https://panel.example".into()),
-        ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        (
+            "DYMINI_PANEL_PUBLIC_URL".into(),
+            "https://panel.example".into(),
+        ),
+        (
+            "DYMINI_PANEL_DATA_DIR".into(),
+            data_dir.display().to_string(),
+        ),
         // These assertions describe a host without Docker, even when one is running.
         (
-            "RUDDER_DOCKER_SOCKET".into(),
+            "DYMINI_PANEL_DOCKER_SOCKET".into(),
             data_dir.join("no-docker.sock").display().to_string(),
         ),
     ]);
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::router(rudder_server::AppState::new(pool, config))
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    dymini_panel_server::router(dymini_panel_server::AppState::new(pool, config))
 }
 
 struct Reply {
@@ -46,7 +52,7 @@ async fn call(
 ) -> Reply {
     let mut builder = Request::builder().method(method).uri(path);
     if let Some(cookie) = cookie {
-        builder = builder.header("cookie", format!("rudder_session={cookie}"));
+        builder = builder.header("cookie", format!("dymini_panel_session={cookie}"));
     }
     if let Some(csrf) = csrf {
         builder = builder.header("x-csrf-token", csrf);
@@ -66,7 +72,7 @@ async fn call(
         .get("set-cookie")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .and_then(|pair| pair.strip_prefix("rudder_session="))
+        .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
         .map(str::to_owned);
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let body = if bytes.is_empty() {
@@ -118,7 +124,7 @@ fn certificate(names: &[&str]) -> (String, String) {
 #[sqlx::test(migrations = "./migrations")]
 async fn certificates_domains_registries_and_failed_deploy(pool: PgPool) {
     let data_dir: PathBuf =
-        std::env::temp_dir().join(format!("rudder-edge-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("dymini-panel-edge-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&data_dir).unwrap();
     let sql = pool.clone();
     let app = app(pool, &data_dir);
@@ -281,7 +287,9 @@ async fn certificates_domains_registries_and_failed_deploy(pool: PgPool) {
     let routes = std::fs::read_to_string(data_dir.join("traefik/dynamic/routes.yml")).unwrap();
     assert!(routes.contains("Host(`www.example.com`) && PathPrefix(`/api`)"));
     assert!(routes.contains("tls: {}"));
-    assert!(routes.contains(&format!("/etc/rudder/traefik/certs/{certificate_id}.crt")));
+    assert!(routes.contains(&format!(
+        "/etc/dymini-panel/traefik/certs/{certificate_id}.crt"
+    )));
 
     let letsencrypt = call(
         &app,

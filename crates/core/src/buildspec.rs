@@ -241,9 +241,9 @@ fn dockerfile_path(plan: &BuildPlan) -> Result<String, Error> {
     }
     if plan.strategy == BuildStrategy::Static {
         return Ok(if plan.context == "." {
-            "Dockerfile.rudder".into()
+            "Dockerfile.dymini-panel".into()
         } else {
-            format!("{}/Dockerfile.rudder", plan.context)
+            format!("{}/Dockerfile.dymini-panel", plan.context)
         });
     }
     validate_rel_path(&plan.dockerfile)?;
@@ -275,7 +275,7 @@ mod tests {
             context: ".".into(),
             dockerfile: "Dockerfile".into(),
             publish_dir: "dist".into(),
-            image: "rudder-web:abc123".into(),
+            image: "dymini-panel-web:abc123".into(),
             build_args: vec![("NODE_ENV".into(), "production".into())],
         }
     }
@@ -363,7 +363,7 @@ mod tests {
         let argv = git_clone_argv(
             "main",
             "https://github.com/acme/web.git",
-            "/tmp/rudder-build",
+            "/tmp/dymini-panel-build",
         )
         .unwrap();
         assert_eq!(argv[0], "git");

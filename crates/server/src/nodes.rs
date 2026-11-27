@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use rudder_core::NodeDriver;
+use dymini_panel_core::NodeDriver;
 use uuid::Uuid;
 
 use crate::error::ApiError;

@@ -3,4 +3,4 @@
 
 pub mod remote;
 
-pub use rudder_node::{LocalDriver, DEFAULT_CACHE_ADMIN};
+pub use dymini_panel_node::{LocalDriver, DEFAULT_CACHE_ADMIN};

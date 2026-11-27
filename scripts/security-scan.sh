@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Rudder security scan runner. Writes raw output only under the chosen directory.
+# Dymini Panel security scan runner. Writes raw output only under the chosen directory.
 set -euo pipefail
 mode="${1:-full}"
-out="${2:-/tmp/rudder-security-scan}"
+out="${2:-/tmp/dymini-panel-security-scan}"
 mkdir -p "$out"
 root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 cd "$root"
 tool() {
   local name="$1"
-  if command -v "$name" >/dev/null 2>&1; then command -v "$name"; else printf '/tmp/rudder-security-tools/bin/%s' "$name"; fi
+  if command -v "$name" >/dev/null 2>&1; then command -v "$name"; else printf '/tmp/dymini-panel-security-tools/bin/%s' "$name"; fi
 }
 run_deps() {
   echo '== dependencies =='

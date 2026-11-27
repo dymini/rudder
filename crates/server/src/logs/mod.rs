@@ -103,7 +103,7 @@ impl LogHub {
             match insert_batch(&pool, &batch).await {
                 Ok(rows) => self.publish(rows),
                 Err(error) => {
-                    tracing::warn!(target: "rudder_server::logs", %error, lines = batch.len(), "log batch dropped")
+                    tracing::warn!(target: "dymini_panel_server::logs", %error, lines = batch.len(), "log batch dropped")
                 }
             }
             batch.clear();
@@ -211,7 +211,7 @@ pub async fn search(
     let pattern = filter
         .search
         .as_ref()
-        .map(|needle| format!("%{}%", rudder_core::escape_like(needle)));
+        .map(|needle| format!("%{}%", dymini_panel_core::escape_like(needle)));
     sqlx::query_as!(
         LogView,
         r#"

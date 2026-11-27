@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
-use rudder_core::{
+use dymini_panel_core::{
     dump_command, dump_extension, expired_ids, filter_databases, is_due,
     mysql_list_databases_command, object_key, redis_bgsave_command, redis_persistence_command,
     restore_command, retry_backoff_secs, validate_host_path, ArchiveSource, BackupPoint,
@@ -176,7 +176,7 @@ impl RunLog {
 
     pub fn line(&mut self, message: impl AsRef<str>) {
         let refs: Vec<&str> = self.secrets.iter().map(String::as_str).collect();
-        let clean = rudder_core::redact(message.as_ref(), &refs);
+        let clean = dymini_panel_core::redact(message.as_ref(), &refs);
         let _ = writeln!(
             self.text,
             "[{:>7.1}s] {clean}",
@@ -495,7 +495,7 @@ async fn prepare(
         } else {
             let export = crate::panel::settings_export(&state.pool).await?;
             meta.panel_manifest = Some(
-                json!({"format":export["format"],"version":export["version"],"rudder_version":export["rudder_version"],"created_at":export["exported_at"],"contents":["settings.json"]}),
+                json!({"format":export["format"],"version":export["version"],"dymini_panel_version":export["dymini_panel_version"],"created_at":export["exported_at"],"contents":["settings.json"]}),
             );
             let bytes = serde_json::to_vec_pretty(&export)
                 .map_err(|_| bad("invalid", "could not serialize the settings export"))?;
@@ -985,7 +985,7 @@ async fn execute_run(state: &AppState, run_id: Uuid, job: Job) {
     }
     let refs: Vec<String> = log.secrets.clone();
     let refs: Vec<&str> = refs.iter().map(String::as_str).collect();
-    let clean = rudder_core::redact(&last_error, &refs);
+    let clean = dymini_panel_core::redact(&last_error, &refs);
     fail_run(state, run_id, &log, &clean).await;
     notify_failure(state, &job, server_id, &clean).await;
 }
@@ -1256,7 +1256,7 @@ async fn start_restore_mode(
                         })
                 })
             }) {
-                return Err(conflict("plugin_restore_required", "restore plugin data through the plugin install so Rudder takes a safety backup and checks health"));
+                return Err(conflict("plugin_restore_required", "restore plugin data through the plugin install so Dymini Panel takes a safety backup and checks health"));
             }
         }
     }
@@ -1268,7 +1268,7 @@ async fn start_restore_mode(
                 .await
                 .map_err(ApiError::database)?;
         if plugin.is_some() && !managed {
-            return Err(conflict("plugin_restore_required", "restore plugin data through the plugin install so Rudder takes a safety backup and checks health"));
+            return Err(conflict("plugin_restore_required", "restore plugin data through the plugin install so Dymini Panel takes a safety backup and checks health"));
         }
         if managed && plugin.as_deref() != Some("restoring") {
             return Err(conflict(
@@ -1557,7 +1557,7 @@ pub fn next_run(
     anchor: DateTime<Utc>,
 ) -> Option<DateTime<Utc>> {
     let cron = cron.filter(|c| !c.is_empty())?;
-    rudder_core::next_after(
+    dymini_panel_core::next_after(
         cron,
         timezone,
         anchor.max(Utc::now() - chrono::Duration::seconds(1)),

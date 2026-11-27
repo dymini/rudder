@@ -1,7 +1,7 @@
 //! Embedded plugin catalog and bounded GitHub release discovery.
 
 use chrono::{DateTime, Utc};
-use rudder_core::{parse_version, Error, GithubRelease, Plugin, PluginDescriptor};
+use dymini_panel_core::{parse_version, Error, GithubRelease, Plugin, PluginDescriptor};
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
@@ -155,9 +155,9 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let releases = json!([
-            {"tag_name":"v0.2.0", "body":"Release notes", "assets":[{"name":"rudder-plugin.json","browser_download_url": format!("{base}/good")}]},
-            {"tag_name":"v0.3.0", "prerelease":true, "assets":[{"name":"rudder-plugin.json","browser_download_url": format!("{base}/good")}]},
-            {"tag_name":"v0.4.0", "assets":[{"name":"rudder-plugin.json","browser_download_url": format!("{base}/bad")}]},
+            {"tag_name":"v0.2.0", "body":"Release notes", "assets":[{"name":"dymini-panel-plugin.json","browser_download_url": format!("{base}/good")}]},
+            {"tag_name":"v0.3.0", "prerelease":true, "assets":[{"name":"dymini-panel-plugin.json","browser_download_url": format!("{base}/good")}]},
+            {"tag_name":"v0.4.0", "assets":[{"name":"dymini-panel-plugin.json","browser_download_url": format!("{base}/bad")}]},
             {"tag_name":"v0.5.0", "draft":true, "assets":[]}
         ]);
         let descriptor = json!({"schema":1,"plugin":"dockside","version":"0.2.0","image":format!("ghcr.io/vantanminh/dockside-server@sha256:{}", "a".repeat(64)),"health_path":"/v1/health","port":7420});
@@ -187,7 +187,7 @@ mod tests {
         for path in super::Files::iter() {
             let file = super::Files::get(&path).unwrap();
             let plugin =
-                rudder_core::Plugin::parse(std::str::from_utf8(&file.data).unwrap()).unwrap();
+                dymini_panel_core::Plugin::parse(std::str::from_utf8(&file.data).unwrap()).unwrap();
             assert_eq!(path.as_ref(), format!("{}.yml", plugin.template.slug));
         }
         assert_eq!(super::all().len(), super::Files::iter().count());

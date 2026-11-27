@@ -2,7 +2,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { api, setCsrf } from "../api";
 import { useAuth } from "../auth";
-import { Icon, KnotreeMark } from "../components/icons";
+import { Icon, DyminiPanelMark } from "../components/icons";
 import {
   CommandPalette,
   ConnectionStatus,
@@ -46,7 +46,7 @@ export function Shell() {
   }, [pathname]);
 
   useEffect(() => {
-    document.title = page ? `${t(page.label)} · Rudder` : "Rudder";
+    document.title = page ? `${t(page.label)} · Dymini Panel` : "Dymini Panel";
   }, [page, t]);
 
   useEffect(() => {
@@ -103,10 +103,10 @@ export function Shell() {
           <Link
             to="/"
             className="flex items-center gap-2 lg:hidden"
-            aria-label={t("Rudder overview")}
+            aria-label={t("Dymini Panel overview")}
           >
-            <KnotreeMark size={24} />
-            <span className="text-[15px] font-semibold tracking-[-0.01em]">Rudder</span>
+            <DyminiPanelMark size={24} />
+            <span className="text-[15px] font-semibold tracking-[-0.01em]">Dymini Panel</span>
           </Link>
           {page ? (
             <nav
@@ -143,10 +143,9 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
-        <Link to="/" className="flex items-center gap-2.5" aria-label={t("Rudder overview")}>
-          <KnotreeMark size={26} />
-          <span className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Knotree</span>
-          <span className="border-l border-line-strong pl-2.5 text-[15px] text-muted">Rudder</span>
+        <Link to="/" className="flex items-center gap-2.5" aria-label={t("Dymini Panel overview")}>
+          <DyminiPanelMark size={26} />
+          <span className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Dymini Panel</span>
         </Link>
         {onClose ? (
           <button

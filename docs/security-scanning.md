@@ -25,7 +25,7 @@ the baseline is older than 90 days:
    shell, Dockerfile, and GitHub Actions; run Trivy filesystem scanning for
    vulnerability, secret, and misconfiguration coverage.
 5. **Manual high-risk review** — review authentication/sessions/MFA/CSRF,
-   OAuth/MCP grants and delegated API keys, Rudder Access and the edge gate,
+   OAuth/MCP grants and delegated API keys, Dymini Panel Access and the edge gate,
    agent enrollment/mTLS/WebSocket tunnel, command execution and build inputs,
    archive extraction/path traversal, SSRF/webhooks, cryptographic use,
    logging/redaction, backups/restore, update verification, XSS/log rendering,
@@ -67,12 +67,12 @@ network addresses.
 ## Local runner
 
 `scripts/security-scan.sh` automates the non-manual portions. It expects tools
-on `PATH` or under `/tmp/rudder-security-tools/bin` when present:
+on `PATH` or under `/tmp/dymini-panel-security-tools/bin` when present:
 
 ```sh
-scripts/security-scan.sh full /tmp/rudder-security-scan
-scripts/security-scan.sh deps /tmp/rudder-security-scan
-scripts/security-scan.sh config /tmp/rudder-security-scan
+scripts/security-scan.sh full /tmp/dymini-panel-security-scan
+scripts/security-scan.sh deps /tmp/dymini-panel-security-scan
+scripts/security-scan.sh config /tmp/dymini-panel-security-scan
 ```
 
 The script writes raw scanner output only to the caller-selected temporary

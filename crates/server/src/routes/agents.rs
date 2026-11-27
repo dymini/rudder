@@ -365,8 +365,8 @@ async fn install_script() -> Response {
 /// reaching GitHub.
 async fn download(State(state): State<AppState>, Path(file): Path<String>) -> Response {
     let allowed = [
-        "rudder-agent-x86_64-unknown-linux-musl",
-        "rudder-agent-aarch64-unknown-linux-musl",
+        "dymini-panel-agent-x86_64-unknown-linux-musl",
+        "dymini-panel-agent-aarch64-unknown-linux-musl",
     ];
     let name = file.strip_suffix(".sha256").unwrap_or(&file);
     if !allowed.contains(&name) {

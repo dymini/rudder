@@ -77,7 +77,7 @@ export default function Dashboard() {
             <Ionicons name="compass" color={colors.accentBright} size={30} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroKicker}>Rudder Control</Text>
+            <Text style={styles.heroKicker}>Dymini Panel Control</Text>
             <Text style={styles.heroTitle}>Hạm đội của bạn</Text>
           </View>
           <Badge label={`v${system.data?.version ?? "—"}`} tone="busy" />

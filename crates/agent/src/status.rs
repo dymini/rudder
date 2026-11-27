@@ -93,7 +93,7 @@ pub fn read(dir: &Path) -> anyhow::Result<AgentStatus> {
     };
     let Some(meta) = meta else {
         let mut status = AgentStatus::empty(settings.builder);
-        status.last_error = Some("not enrolled; run rudder-agent enroll first".into());
+        status.last_error = Some("not enrolled; run dymini-panel-agent enroll first".into());
         return Ok(status);
     };
     let enrolled = dir.join("cert.pem").is_file()
@@ -102,7 +102,7 @@ pub fn read(dir: &Path) -> anyhow::Result<AgentStatus> {
     let mut status = match fs::read(dir.join(STATUS)) {
         Ok(bytes) => serde_json::from_slice::<AgentStatus>(&bytes).unwrap_or_else(|_| {
             let mut value = AgentStatus::empty(settings.builder);
-            value.last_error = Some("invalid status file; restart rudder-agent".into());
+            value.last_error = Some("invalid status file; restart dymini-panel-agent".into());
             value
         }),
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn renders_missing_connected_disconnected_and_stale_status_and_writes_atomically() {
         let dir = std::env::temp_dir().join(format!(
-            "rudder-status-{}-{}",
+            "dymini-panel-status-{}-{}",
             std::process::id(),
             SEQUENCE.fetch_add(1, Ordering::Relaxed)
         ));
@@ -228,7 +228,7 @@ mod tests {
             panel_url: "https://panel.example".into(),
             server_id: "server-1".into(),
             grpc_url: "https://panel.example:7443".into(),
-            tls_name: "rudder-panel".into(),
+            tls_name: "dymini-panel".into(),
         };
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("agent.json"), serde_json::to_vec(&meta).unwrap()).unwrap();

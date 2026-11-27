@@ -349,7 +349,7 @@ pub trait NodeDriver: Send + Sync {
         Err(unsupported("remove_volume"))
     }
 
-    /// Stats for containers carrying the `rudder.managed=true` label.
+    /// Stats for containers carrying the `dymini-panel.managed=true` label.
     async fn container_stats(&self) -> Result<Vec<ContainerStats>, Error> {
         Err(unsupported("container_stats"))
     }

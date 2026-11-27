@@ -9,7 +9,7 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Mutex;
 
-use rudder_proto::agent::{LogRecord, StatsSample, Telemetry};
+use dymini_panel_proto::agent::{LogRecord, StatsSample, Telemetry};
 
 const MAX_LOG_BYTES: usize = 4 * 1024 * 1024;
 const MAX_LOGS: usize = 20_000;

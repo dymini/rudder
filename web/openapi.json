@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Rudder API",
-    "description": "Control-plane API for the Rudder deployment panel.",
+    "title": "Dymini Panel API",
+    "description": "Control-plane API for the Dymini Panel deployment panel.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -66,13 +66,13 @@
         }
       }
     },
-    "/_rudder/callback": {
+    "/_dymini_panel/callback": {
       "get": {
         "tags": [
           "access"
         ],
         "summary": "Redeem a one-time Access code on its gated service hostname",
-        "operationId": "get___rudder_callback",
+        "operationId": "get___dymini_panel_callback",
         "responses": {
           "307": {
             "description": "Redeem a one-time Access code on its gated service hostname"
@@ -238,11 +238,11 @@
         "tags": [
           "access"
         ],
-        "summary": "List people allowed into Rudder Access",
+        "summary": "List people allowed into Dymini Panel Access",
         "operationId": "get_v1_access_identities",
         "responses": {
           "200": {
-            "description": "List people allowed into Rudder Access",
+            "description": "List people allowed into Dymini Panel Access",
             "content": {
               "application/json": {
                 "schema": {
@@ -260,7 +260,7 @@
         "tags": [
           "access"
         ],
-        "summary": "Allow a person into Rudder Access (admin, write)",
+        "summary": "Allow a person into Dymini Panel Access (admin, write)",
         "operationId": "post_v1_access_identities",
         "requestBody": {
           "content": {
@@ -273,7 +273,7 @@
         },
         "responses": {
           "201": {
-            "description": "Allow a person into Rudder Access (admin, write)",
+            "description": "Allow a person into Dymini Panel Access (admin, write)",
             "content": {
               "application/json": {
                 "schema": {
@@ -290,11 +290,11 @@
         "tags": [
           "access"
         ],
-        "summary": "Remove a Rudder Access person (admin, write)",
+        "summary": "Remove a Dymini Panel Access person (admin, write)",
         "operationId": "delete_v1_access_identities__id_",
         "responses": {
           "204": {
-            "description": "Remove a Rudder Access person (admin, write)"
+            "description": "Remove a Dymini Panel Access person (admin, write)"
           }
         }
       },
@@ -302,7 +302,7 @@
         "tags": [
           "access"
         ],
-        "summary": "Update a Rudder Access person (admin, write)",
+        "summary": "Update a Dymini Panel Access person (admin, write)",
         "operationId": "patch_v1_access_identities__id_",
         "requestBody": {
           "content": {
@@ -315,7 +315,7 @@
         },
         "responses": {
           "200": {
-            "description": "Update a Rudder Access person (admin, write)",
+            "description": "Update a Dymini Panel Access person (admin, write)",
             "content": {
               "application/json": {
                 "schema": {
@@ -417,7 +417,7 @@
         "tags": [
           "access"
         ],
-        "summary": "Email a 6-digit Rudder Access code",
+        "summary": "Email a 6-digit Dymini Panel Access code",
         "operationId": "post_v1_access_login_email",
         "requestBody": {
           "content": {
@@ -430,7 +430,7 @@
         },
         "responses": {
           "202": {
-            "description": "Email a 6-digit Rudder Access code"
+            "description": "Email a 6-digit Dymini Panel Access code"
           }
         }
       }
@@ -440,7 +440,7 @@
         "tags": [
           "access"
         ],
-        "summary": "Sign in to Rudder Access with an email code",
+        "summary": "Sign in to Dymini Panel Access with an email code",
         "operationId": "post_v1_access_login_email_verify",
         "requestBody": {
           "content": {
@@ -453,7 +453,7 @@
         },
         "responses": {
           "200": {
-            "description": "Sign in to Rudder Access with an email code",
+            "description": "Sign in to Dymini Panel Access with an email code",
             "content": {
               "application/json": {
                 "schema": {
@@ -470,7 +470,7 @@
         "tags": [
           "access"
         ],
-        "summary": "Start Google sign-in for Rudder Access",
+        "summary": "Start Google sign-in for Dymini Panel Access",
         "operationId": "post_v1_access_login_google",
         "requestBody": {
           "content": {
@@ -483,7 +483,7 @@
         },
         "responses": {
           "200": {
-            "description": "Start Google sign-in for Rudder Access",
+            "description": "Start Google sign-in for Dymini Panel Access",
             "content": {
               "application/json": {
                 "schema": {
@@ -500,11 +500,11 @@
         "tags": [
           "access"
         ],
-        "summary": "Finish Google sign-in for Rudder Access",
+        "summary": "Finish Google sign-in for Dymini Panel Access",
         "operationId": "get_v1_access_login_google_callback",
         "responses": {
           "302": {
-            "description": "Finish Google sign-in for Rudder Access"
+            "description": "Finish Google sign-in for Dymini Panel Access"
           }
         }
       }
@@ -514,11 +514,11 @@
         "tags": [
           "access"
         ],
-        "summary": "Sign out of Rudder Access",
+        "summary": "Sign out of Dymini Panel Access",
         "operationId": "post_v1_access_logout",
         "responses": {
           "200": {
-            "description": "Sign out of Rudder Access"
+            "description": "Sign out of Dymini Panel Access"
           }
         }
       }
@@ -528,11 +528,11 @@
         "tags": [
           "access"
         ],
-        "summary": "The signed-in Rudder Access person",
+        "summary": "The signed-in Dymini Panel Access person",
         "operationId": "get_v1_access_me",
         "responses": {
           "200": {
-            "description": "The signed-in Rudder Access person",
+            "description": "The signed-in Dymini Panel Access person",
             "content": {
               "application/json": {
                 "schema": {
@@ -549,11 +549,11 @@
         "tags": [
           "access"
         ],
-        "summary": "Public Rudder Access sign-in settings",
+        "summary": "Public Dymini Panel Access sign-in settings",
         "operationId": "get_v1_access_public",
         "responses": {
           "200": {
-            "description": "Public Rudder Access sign-in settings",
+            "description": "Public Dymini Panel Access sign-in settings",
             "content": {
               "application/json": {
                 "schema": {
@@ -664,11 +664,11 @@
         "tags": [
           "access"
         ],
-        "summary": "Read whether an app requires Rudder Access",
+        "summary": "Read whether an app requires Dymini Panel Access",
         "operationId": "get_v1_access_services__id_",
         "responses": {
           "200": {
-            "description": "Read whether an app requires Rudder Access",
+            "description": "Read whether an app requires Dymini Panel Access",
             "content": {
               "application/json": {
                 "schema": {
@@ -734,11 +734,11 @@
         "tags": [
           "access"
         ],
-        "summary": "Rudder Access provider settings",
+        "summary": "Dymini Panel Access provider settings",
         "operationId": "get_v1_access_settings",
         "responses": {
           "200": {
-            "description": "Rudder Access provider settings",
+            "description": "Dymini Panel Access provider settings",
             "content": {
               "application/json": {
                 "schema": {
@@ -753,7 +753,7 @@
         "tags": [
           "access"
         ],
-        "summary": "Save Rudder Access provider settings (admin, write)",
+        "summary": "Save Dymini Panel Access provider settings (admin, write)",
         "operationId": "put_v1_access_settings",
         "requestBody": {
           "content": {
@@ -766,7 +766,7 @@
         },
         "responses": {
           "200": {
-            "description": "Save Rudder Access provider settings (admin, write)",
+            "description": "Save Dymini Panel Access provider settings (admin, write)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1879,7 +1879,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Approve a rudder CLI browser callback or 8-character device code login",
+        "summary": "Approve a dymini-panel CLI browser callback or 8-character device code login",
         "operationId": "post_v1_cli_auth_approve",
         "requestBody": {
           "content": {
@@ -1892,7 +1892,7 @@
         },
         "responses": {
           "200": {
-            "description": "Approve a rudder CLI browser callback or 8-character device code login",
+            "description": "Approve a dymini-panel CLI browser callback or 8-character device code login",
             "content": {
               "application/json": {
                 "schema": {
@@ -1909,7 +1909,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Poll a rudder CLI login request for the issued API token",
+        "summary": "Poll a dymini-panel CLI login request for the issued API token",
         "operationId": "post_v1_cli_auth_poll",
         "requestBody": {
           "content": {
@@ -1922,7 +1922,7 @@
         },
         "responses": {
           "200": {
-            "description": "Poll a rudder CLI login request for the issued API token",
+            "description": "Poll a dymini-panel CLI login request for the issued API token",
             "content": {
               "application/json": {
                 "schema": {
@@ -1939,11 +1939,11 @@
         "tags": [
           "auth"
         ],
-        "summary": "Inspect a pending rudder CLI login request before approving it",
+        "summary": "Inspect a pending dymini-panel CLI login request before approving it",
         "operationId": "get_v1_cli_auth_requests__id_",
         "responses": {
           "200": {
-            "description": "Inspect a pending rudder CLI login request before approving it",
+            "description": "Inspect a pending dymini-panel CLI login request before approving it",
             "content": {
               "application/json": {
                 "schema": {
@@ -1960,7 +1960,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Start a browser or 8-character device-code login flow for rudder CLI",
+        "summary": "Start a browser or 8-character device-code login flow for dymini-panel CLI",
         "operationId": "post_v1_cli_auth_start",
         "requestBody": {
           "content": {
@@ -1973,7 +1973,7 @@
         },
         "responses": {
           "201": {
-            "description": "Start a browser or 8-character device-code login flow for rudder CLI",
+            "description": "Start a browser or 8-character device-code login flow for dymini-panel CLI",
             "content": {
               "application/json": {
                 "schema": {
@@ -2501,11 +2501,11 @@
         "tags": [
           "system"
         ],
-        "summary": "List the built-in Rudder guides of this panel version",
+        "summary": "List the built-in Dymini Panel guides of this panel version",
         "operationId": "get_v1_docs",
         "responses": {
           "200": {
-            "description": "List the built-in Rudder guides of this panel version",
+            "description": "List the built-in Dymini Panel guides of this panel version",
             "content": {
               "application/json": {
                 "schema": {
@@ -2525,11 +2525,11 @@
         "tags": [
           "system"
         ],
-        "summary": "Search the Rudder documentation of this panel version. Query: q (required), limit (default 5, max 20)",
+        "summary": "Search the Dymini Panel documentation of this panel version. Query: q (required), limit (default 5, max 20)",
         "operationId": "get_v1_docs_search",
         "responses": {
           "200": {
-            "description": "Search the Rudder documentation of this panel version. Query: q (required), limit (default 5, max 20)",
+            "description": "Search the Dymini Panel documentation of this panel version. Query: q (required), limit (default 5, max 20)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2546,11 +2546,11 @@
         "tags": [
           "system"
         ],
-        "summary": "Read one Rudder guide as Markdown by name, as listed by the docs list or search",
+        "summary": "Read one Dymini Panel guide as Markdown by name, as listed by the docs list or search",
         "operationId": "get_v1_docs__name_",
         "responses": {
           "200": {
-            "description": "Read one Rudder guide as Markdown by name, as listed by the docs list or search",
+            "description": "Read one Dymini Panel guide as Markdown by name, as listed by the docs list or search",
             "content": {
               "application/json": {
                 "schema": {
@@ -3165,11 +3165,11 @@
         "tags": [
           "source"
         ],
-        "summary": "Rudder Image dashboard: setup status, push and build statistics, per-service usage, recent pushes, and signed-in CLI clients",
+        "summary": "Dymini Panel Image dashboard: setup status, push and build statistics, per-service usage, recent pushes, and signed-in CLI clients",
         "operationId": "get_v1_image-store_overview",
         "responses": {
           "200": {
-            "description": "Rudder Image dashboard: setup status, push and build statistics, per-service usage, recent pushes, and signed-in CLI clients",
+            "description": "Dymini Panel Image dashboard: setup status, push and build statistics, per-service usage, recent pushes, and signed-in CLI clients",
             "content": {
               "application/json": {
                 "schema": {
@@ -3186,11 +3186,11 @@
         "tags": [
           "source"
         ],
-        "summary": "Rudder Image store settings (Cloudflare R2 / S3 destination and default retention)",
+        "summary": "Dymini Panel Image store settings (Cloudflare R2 / S3 destination and default retention)",
         "operationId": "get_v1_image-store_settings",
         "responses": {
           "200": {
-            "description": "Rudder Image store settings (Cloudflare R2 / S3 destination and default retention)",
+            "description": "Dymini Panel Image store settings (Cloudflare R2 / S3 destination and default retention)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3205,7 +3205,7 @@
         "tags": [
           "source"
         ],
-        "summary": "Configure the Cloudflare R2 / S3 destination and default retention for Rudder Images",
+        "summary": "Configure the Cloudflare R2 / S3 destination and default retention for Dymini Panel Images",
         "operationId": "put_v1_image-store_settings",
         "requestBody": {
           "content": {
@@ -3218,7 +3218,7 @@
         },
         "responses": {
           "200": {
-            "description": "Configure the Cloudflare R2 / S3 destination and default retention for Rudder Images",
+            "description": "Configure the Cloudflare R2 / S3 destination and default retention for Dymini Panel Images",
             "content": {
               "application/json": {
                 "schema": {
@@ -3235,11 +3235,11 @@
         "tags": [
           "source"
         ],
-        "summary": "Check the Rudder Image bucket by writing, reading, and deleting a probe object",
+        "summary": "Check the Dymini Panel Image bucket by writing, reading, and deleting a probe object",
         "operationId": "post_v1_image-store_test",
         "responses": {
           "200": {
-            "description": "Check the Rudder Image bucket by writing, reading, and deleting a probe object",
+            "description": "Check the Dymini Panel Image bucket by writing, reading, and deleting a probe object",
             "content": {
               "application/json": {
                 "schema": {
@@ -5708,11 +5708,11 @@
         "tags": [
           "source"
         ],
-        "summary": "Get a service's Rudder Image auto-deploy and R2 retention policy",
+        "summary": "Get a service's Dymini Panel Image auto-deploy and R2 retention policy",
         "operationId": "get_v1_services__id__image-policy",
         "responses": {
           "200": {
-            "description": "Get a service's Rudder Image auto-deploy and R2 retention policy",
+            "description": "Get a service's Dymini Panel Image auto-deploy and R2 retention policy",
             "content": {
               "application/json": {
                 "schema": {
@@ -5727,7 +5727,7 @@
         "tags": [
           "source"
         ],
-        "summary": "Set whether pushed Rudder Images deploy immediately or notify only, plus R2 retention",
+        "summary": "Set whether pushed Dymini Panel Images deploy immediately or notify only, plus R2 retention",
         "operationId": "put_v1_services__id__image-policy",
         "requestBody": {
           "content": {
@@ -5740,7 +5740,7 @@
         },
         "responses": {
           "200": {
-            "description": "Set whether pushed Rudder Images deploy immediately or notify only, plus R2 retention",
+            "description": "Set whether pushed Dymini Panel Images deploy immediately or notify only, plus R2 retention",
             "content": {
               "application/json": {
                 "schema": {
@@ -5757,17 +5757,17 @@
         "tags": [
           "source"
         ],
-        "summary": "List Rudder Image versions pushed for a service and their Cloudflare R2 presence",
+        "summary": "List Dymini Panel Image versions pushed for a service and their Cloudflare R2 presence",
         "operationId": "get_v1_services__id__images",
         "responses": {
           "200": {
-            "description": "List Rudder Image versions pushed for a service and their Cloudflare R2 presence",
+            "description": "List Dymini Panel Image versions pushed for a service and their Cloudflare R2 presence",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/RudderImageView"
+                    "$ref": "#/components/schemas/DyminiPanelImageView"
                   }
                 }
               }
@@ -5809,20 +5809,20 @@
         "tags": [
           "source"
         ],
-        "summary": "Deploy the latest or specified Rudder Image stored in Cloudflare R2",
+        "summary": "Deploy the latest or specified Dymini Panel Image stored in Cloudflare R2",
         "operationId": "post_v1_services__id__images_deploy",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DeployRudderImageRequest"
+                "$ref": "#/components/schemas/DeployDyminiPanelImageRequest"
               }
             }
           }
         },
         "responses": {
           "202": {
-            "description": "Deploy the latest or specified Rudder Image stored in Cloudflare R2",
+            "description": "Deploy the latest or specified Dymini Panel Image stored in Cloudflare R2",
             "content": {
               "application/json": {
                 "schema": {
@@ -5839,11 +5839,11 @@
         "tags": [
           "source"
         ],
-        "summary": "Delete a Rudder Image from Cloudflare R2 and/or version history",
+        "summary": "Delete a Dymini Panel Image from Cloudflare R2 and/or version history",
         "operationId": "delete_v1_services__id__images__image_id_",
         "responses": {
           "204": {
-            "description": "Delete a Rudder Image from Cloudflare R2 and/or version history"
+            "description": "Delete a Dymini Panel Image from Cloudflare R2 and/or version history"
           }
         }
       }
@@ -5853,11 +5853,11 @@
         "tags": [
           "source"
         ],
-        "summary": "Deploy a specific Rudder Image version from Cloudflare R2",
+        "summary": "Deploy a specific Dymini Panel Image version from Cloudflare R2",
         "operationId": "post_v1_services__id__images__image_id__deploy",
         "responses": {
           "202": {
-            "description": "Deploy a specific Rudder Image version from Cloudflare R2",
+            "description": "Deploy a specific Dymini Panel Image version from Cloudflare R2",
             "content": {
               "application/json": {
                 "schema": {
@@ -8029,7 +8029,7 @@
           "image_deploys_30d": {
             "type": "integer",
             "format": "int64",
-            "description": "Deployments rolled out from a Rudder Image in the last 30 days."
+            "description": "Deployments rolled out from a Dymini Panel Image in the last 30 days."
           },
           "queued": {
             "type": "integer",
@@ -9967,7 +9967,7 @@
           }
         }
       },
-      "DeployRudderImageRequest": {
+      "DeployDyminiPanelImageRequest": {
         "type": "object",
         "properties": {
           "image_id": {
@@ -10445,6 +10445,77 @@
           "target_port": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "DyminiPanelImageView": {
+        "type": "object",
+        "required": [
+          "id",
+          "service_id",
+          "tag",
+          "image_ref",
+          "object_key",
+          "compression",
+          "size_bytes",
+          "sha256",
+          "r2_present",
+          "created_at"
+        ],
+        "properties": {
+          "compression": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "destination_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "git_sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "image_ref": {
+            "type": "string"
+          },
+          "object_key": {
+            "type": "string"
+          },
+          "pushed_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "r2_present": {
+            "type": "boolean"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tag": {
+            "type": "string"
           }
         }
       },
@@ -11569,7 +11640,7 @@
           "r2_bytes": {
             "type": "integer",
             "format": "int64",
-            "description": "Bytes the bucket holds for Rudder Images."
+            "description": "Bytes the bucket holds for Dymini Panel Images."
           },
           "r2_images": {
             "type": "integer",
@@ -13724,7 +13795,7 @@
             ]
           },
           "image": {
-            "$ref": "#/components/schemas/RudderImageView"
+            "$ref": "#/components/schemas/DyminiPanelImageView"
           },
           "pruned_tags": {
             "type": "array",
@@ -14062,77 +14133,6 @@
           "deployment_id": {
             "type": "string",
             "format": "uuid"
-          }
-        }
-      },
-      "RudderImageView": {
-        "type": "object",
-        "required": [
-          "id",
-          "service_id",
-          "tag",
-          "image_ref",
-          "object_key",
-          "compression",
-          "size_bytes",
-          "sha256",
-          "r2_present",
-          "created_at"
-        ],
-        "properties": {
-          "compression": {
-            "type": "string"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "destination_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid"
-          },
-          "git_sha": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "image_ref": {
-            "type": "string"
-          },
-          "object_key": {
-            "type": "string"
-          },
-          "pushed_by": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid"
-          },
-          "r2_present": {
-            "type": "boolean"
-          },
-          "service_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "sha256": {
-            "type": "string"
-          },
-          "size_bytes": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "tag": {
-            "type": "string"
           }
         }
       },
@@ -15497,7 +15497,7 @@
           },
           "setup_token": {
             "type": "string",
-            "description": "One-time token from `setup-token` in the data directory, or `RUDDER_SETUP_TOKEN`."
+            "description": "One-time token from `setup-token` in the data directory, or `DYMINI_PANEL_SETUP_TOKEN`."
           }
         }
       },
@@ -15510,7 +15510,7 @@
         "properties": {
           "address": {
             "type": "string",
-            "description": "IPv4 address `cloudflared` reaches the server's SSH daemon on, for\nexample the Docker gateway of the `rudder-proxy` network."
+            "description": "IPv4 address `cloudflared` reaches the server's SSH daemon on, for\nexample the Docker gateway of the `dymini-panel-proxy` network."
           },
           "users": {
             "type": "array",
@@ -15881,7 +15881,7 @@
           },
           "generated_yaml": {
             "type": "string",
-            "description": "The file Rudder runs: project name, labels, and proxy network applied."
+            "description": "The file Dymini Panel runs: project name, labels, and proxy network applied."
           },
           "git": {
             "oneOf": [
@@ -15965,7 +15965,7 @@
               "string",
               "null"
             ],
-            "description": "Name of the app. Defaults to `Rudder-` and four random characters."
+            "description": "Name of the app. Defaults to `Dymini-Panel-` and four random characters."
           },
           "organization": {
             "type": [
@@ -16266,7 +16266,7 @@
           },
           "pending": {
             "type": "integer",
-            "description": "Hostnames whose DNS record Rudder did not change.",
+            "description": "Hostnames whose DNS record Dymini Panel did not change.",
             "minimum": 0
           },
           "skipped": {
@@ -16325,7 +16325,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Hostnames whose DNS record Rudder removed. Point them back at this server."
+            "description": "Hostnames whose DNS record Dymini Panel removed. Point them back at this server."
           },
           "warnings": {
             "type": "array",

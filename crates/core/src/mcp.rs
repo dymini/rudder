@@ -39,7 +39,7 @@ const GROUPS: &[(&str, &str)] = &[
     ("system", "Panel settings, load, and updates"),
     (
         "access",
-        "Rudder Access people, departments, and app sign-in",
+        "Dymini Panel Access people, departments, and app sign-in",
     ),
     ("security", "Security checks, SSL activity, and rate limits"),
     (

@@ -1,6 +1,6 @@
 # Load guard and overload protection
 
-A small server runs the panel, its database, Traefik, your builds and your apps side by side. When a build or a burst of traffic uses up the memory or the CPU, the kernel starts swapping and then kills processes. Rudder keeps the panel answering in that situation, so you can still open it and stop what is causing the load.
+A small server runs the panel, its database, Traefik, your builds and your apps side by side. When a build or a burst of traffic uses up the memory or the CPU, the kernel starts swapping and then kills processes. Dymini Panel keeps the panel answering in that situation, so you can still open it and stop what is causing the load.
 
 ## What protects the panel
 
@@ -50,12 +50,12 @@ A red banner on every page says when the server is critical, with a link to the 
 The CPU weight of the panel, its database and Traefik is raised every time the panel starts, so existing installs get it right away. The OOM score of a running container cannot be changed:
 
 - The panel container gets `-900` with the next panel update (**System → Updates**).
-- Postgres and Traefik get it when `install.sh` creates their containers; it leaves running ones alone. Their CPU weight, which matters most, is already raised. To give Traefik the low OOM score now, run `docker rm -f rudder-traefik` and re-run `install.sh` with the same options (your apps are unreachable for a few seconds while Traefik starts again).
+- Postgres and Traefik get it when `install.sh` creates their containers; it leaves running ones alone. Their CPU weight, which matters most, is already raised. To give Traefik the low OOM score now, run `docker rm -f dymini-panel-traefik` and re-run `install.sh` with the same options (your apps are unreachable for a few seconds while Traefik starts again).
 - App containers get `300` the next time they are deployed.
 
 The Load page lists each protected container and says whether it is fully protected.
 
-On extra servers, the agent's systemd unit has `OOMScoreAdjust=-900` and `CPUWeight=1000` for new installs. For an agent installed earlier, run `systemctl edit rudder-agent`, add those two lines under `[Service]`, and restart it.
+On extra servers, the agent's systemd unit has `OOMScoreAdjust=-900` and `CPUWeight=1000` for new installs. For an agent installed earlier, run `systemctl edit dymini-panel-agent`, add those two lines under `[Service]`, and restart it.
 
 ## API
 

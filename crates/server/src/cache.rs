@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use rudder_core::{
+use dymini_panel_core::{
     cache_preset, CacheDocument, CachePolicy, CacheRule, CacheSite, NodeDriver, RuleAction,
     RuleMatch, CACHE_TOKEN_FILE, DEFAULT_MEMORY_BYTES,
 };
@@ -155,7 +155,7 @@ pub async fn render_document(
     for policy in &mut policies {
         let object = policy
             .max_object_bytes
-            .unwrap_or(rudder_core::DEFAULT_MAX_OBJECT_BYTES);
+            .unwrap_or(dymini_panel_core::DEFAULT_MAX_OBJECT_BYTES);
         policy.max_object_bytes = Some(object.min(budget));
     }
     let document = CacheDocument {
@@ -183,13 +183,13 @@ pub async fn memory_cap(pool: &PgPool, host_proc: &std::path::Path) -> Result<u6
     .map_err(ApiError::database)?;
     let host = std::fs::read_to_string(host_proc.join("meminfo"))
         .ok()
-        .and_then(|text| rudder_core::parse_meminfo(&text))
+        .and_then(|text| dymini_panel_core::parse_meminfo(&text))
         .map(|(total, _)| total);
     let percent = u8::try_from(row.cache_memory_percent).unwrap_or(15);
     let absolute = row
         .cache_memory_cap_bytes
         .and_then(|value| u64::try_from(value).ok());
-    Ok(rudder_core::effective_cache_budget(
+    Ok(dymini_panel_core::effective_cache_budget(
         u64::MAX,
         host,
         percent,
@@ -206,7 +206,7 @@ pub async fn ensure_token(driver: &dyn NodeDriver) -> Result<(), ApiError> {
     {
         return Ok(());
     }
-    let token: String = rudder_core::random_bytes::<32>()
+    let token: String = dymini_panel_core::random_bytes::<32>()
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect();

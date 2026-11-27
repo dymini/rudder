@@ -10,7 +10,7 @@ fn main() {
         let _ = fs::create_dir_all(dist);
         let _ = fs::write(
             index,
-            "<!doctype html><html><head><title>Rudder</title></head><body><div id=\"root\"></div></body></html>\n",
+            "<!doctype html><html><head><title>Dymini Panel</title></head><body><div id=\"root\"></div></body></html>\n",
         );
     }
 }

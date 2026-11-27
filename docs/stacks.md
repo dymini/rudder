@@ -5,20 +5,20 @@ A compose stack is a service of kind `compose` that runs one `docker compose` pr
 ## Creating a stack
 
 - **Paste YAML**: Projects → choose an environment → Service → kind *compose stack*, then paste the file. API: `POST /api/v1/environments/{id}/stacks` with `source: "inline"` and `compose_yaml`.
-- **Git**: choose *Git repository*, a Git provider, the repository, branch, and the compose file path inside it. The repository is cloned on the panel into `<data dir>/stacks/<project>/src` and updated with `git fetch` + `git reset --hard` afterwards, so untracked files such as `./data` bind mounts survive. On an extra server the panel then copies the tracked files (not the `.git` directory) to that server. Files already on the server that Git does not track, such as a bind-mounted data directory, are left in place. A checkout larger than 512 MiB is refused. Symlinks in the repository may point only inside it: a compose file or folder that resolves outside the checkout is refused, and so is a `rudder-compose.yml` or `.env` symlink beside the compose file. The agent must be connected.
+- **Git**: choose *Git repository*, a Git provider, the repository, branch, and the compose file path inside it. The repository is cloned on the panel into `<data dir>/stacks/<project>/src` and updated with `git fetch` + `git reset --hard` afterwards, so untracked files such as `./data` bind mounts survive. On an extra server the panel then copies the tracked files (not the `.git` directory) to that server. Files already on the server that Git does not track, such as a bind-mounted data directory, are left in place. A checkout larger than 512 MiB is refused. Symlinks in the repository may point only inside it: a compose file or folder that resolves outside the checkout is refused, and so is a `dymini-panel-compose.yml` or `.env` symlink beside the compose file. The agent must be connected.
 - **Template**: Templates → pick an app → fill in the domain and any options → Deploy.
 - **Plugin**: Plugins → check releases → install a managed app with digest-pinned updates and optional backups. See [Plugins](plugins.md).
 
 Set the *main service* to the compose service that serves HTTP. New domains target it unless you choose another compose service in the domain form.
 
-## What Rudder changes in your file
+## What Dymini Panel changes in your file
 
-The original file is stored unchanged. The generated file, shown on the stack's General tab and written to `stacks/<project>/rudder-compose.yml`, differs as follows:
+The original file is stored unchanged. The generated file, shown on the stack's General tab and written to `stacks/<project>/dymini-panel-compose.yml`, differs as follows:
 
 - the top-level `name` becomes the project name (`<service name>-<6 hex>`) and `version` is dropped;
 - `container_name` values gain the `<project>-` prefix;
-- every service gets `rudder.managed`, `rudder.project`, and `rudder.service` labels;
-- the main service and every service with a domain join the external `rudder-proxy` network next to their own networks.
+- every service gets `dymini-panel.managed`, `dymini-panel.project`, and `dymini-panel.service` labels;
+- the main service and every service with a domain join the external `dymini-panel-proxy` network next to their own networks.
 
 Traefik routes are written by the panel's file provider (see decision 0011), not by Docker labels, so you do not need to add Traefik labels. Routed services must not use `network_mode`. Published host ports and `replicas` produce warnings.
 
@@ -28,7 +28,7 @@ A Git stack's compose file is read from the repository at deploy time, so until 
 
 ### Project name, and taking over an existing project
 
-Compose prefixes the containers, networks and named volumes of a stack with its **project name** (`<project>-web-1`, `<project>_pgdata`). By default Rudder generates one: the stack name plus six random characters, so two environments can hold stacks with the same name. Set **Compose project name** when creating the stack (`"project"` in `POST /api/v1/environments/{id}/stacks`) or on the stack's source form to choose it yourself: lowercase letters, digits and hyphens, unique among the stacks of that server (`409 project_taken` otherwise). It can be changed only until the first deploy (`409 project_locked` afterwards), because the containers and volumes then carry the name.
+Compose prefixes the containers, networks and named volumes of a stack with its **project name** (`<project>-web-1`, `<project>_pgdata`). By default Dymini Panel generates one: the stack name plus six random characters, so two environments can hold stacks with the same name. Set **Compose project name** when creating the stack (`"project"` in `POST /api/v1/environments/{id}/stacks`) or on the stack's source form to choose it yourself: lowercase letters, digits and hyphens, unique among the stacks of that server (`409 project_taken` otherwise). It can be changed only until the first deploy (`409 project_locked` afterwards), because the containers and volumes then carry the name.
 
 To take over something that already runs under another compose project on the same server, find its name and use it:
 
@@ -37,7 +37,7 @@ docker compose ls                                   # project names
 docker volume ls --filter label=com.docker.compose.project=<project>
 ```
 
-The first deploy then finds the volumes called `<project>_<volume>` and keeps their data. Containers are recreated from the file Rudder generates (compose replaces a container whose configuration changed), and Rudder adds its labels and the proxy network. Keep the same service and volume names as in the old file; a volume that was created by hand or by an old compose version is used as it is, with a warning in the deploy log that compose did not create it.
+The first deploy then finds the volumes called `<project>_<volume>` and keeps their data. Containers are recreated from the file Dymini Panel generates (compose replaces a container whose configuration changed), and Dymini Panel adds its labels and the proxy network. Keep the same service and volume names as in the old file; a volume that was created by hand or by an old compose version is used as it is, with a warning in the deploy log that compose did not create it.
 
 ### Moving a database between projects or servers
 
@@ -70,7 +70,7 @@ Values stay write-only, but the list shows when each key was last written and ho
 
 | Action | Command |
 | --- | --- |
-| Deploy | `docker compose -p <project> -f rudder-compose.yml up -d --remove-orphans` (with `--build` when *Build images on every deploy* is on) |
+| Deploy | `docker compose -p <project> -f dymini-panel-compose.yml up -d --remove-orphans` (with `--build` when *Build images on every deploy* is on) |
 | Rebuild and deploy | `… up -d --build --remove-orphans`: rebuilds services that have a `build:` section from the current checkout |
 | Pull and deploy | `… up -d --pull always --remove-orphans`: fetches newer versions of every image first |
 | Restart | `… restart` |
@@ -82,23 +82,23 @@ A plain *Deploy* never builds on its own: compose reuses an image it already has
 
 ### Following and stopping an action
 
-Actions run in the background and appear under Deployments. Only one runs per stack at a time; if another start or Rudder Image deploy arrives while an action is already running, the newest request is queued (replacing any earlier queued deploy) and runs immediately when the active action finishes. The output of `docker compose` (image pulls, build steps, container start-up) is written to the deployment while the command runs, so the Deployments tab shows it live, opens the running deployment's log by itself and follows the newest line. Environment values are masked in it. Each deployment keeps the last 1 MiB of its output; the list shows the last 200 000 characters and `GET /api/v1/services/{id}/deployments/{deployment}/logs` returns all of it. Logs for each compose service are on the Logs tab.
+Actions run in the background and appear under Deployments. Only one runs per stack at a time; if another start or Dymini Panel Image deploy arrives while an action is already running, the newest request is queued (replacing any earlier queued deploy) and runs immediately when the active action finishes. The output of `docker compose` (image pulls, build steps, container start-up) is written to the deployment while the command runs, so the Deployments tab shows it live, opens the running deployment's log by itself and follows the newest line. Environment values are masked in it. Each deployment keeps the last 1 MiB of its output; the list shows the last 200 000 characters and `GET /api/v1/services/{id}/deployments/{deployment}/logs` returns all of it. Logs for each compose service are on the Logs tab.
 
-**Cancel** (or `POST /api/v1/services/{id}/stack/cancel`) stops the `docker compose` process; the deployment ends as `cancelled`. Containers that had already been replaced stay as they are, and the stack goes back to `running` when it was running before. A stack that was not running before (a first deploy that is cancelled, or one that had been stopped) is `stopped`. The stack status changes in the same moment as the deployment, so it does not stay on Deploying after the action is already over. An action that runs longer than `RUDDER_STACK_TIMEOUT_SECS` (default 3600, `0` for no limit) is stopped the same way and recorded as `failed`. Stacks on remote servers show their output when the agent finishes the command, not line by line, and cancelling them stops waiting rather than killing the remote process. If the panel restarts during an action, the deployment is marked `failed` ("interrupted by process restart").
+**Cancel** (or `POST /api/v1/services/{id}/stack/cancel`) stops the `docker compose` process; the deployment ends as `cancelled`. Containers that had already been replaced stay as they are, and the stack goes back to `running` when it was running before. A stack that was not running before (a first deploy that is cancelled, or one that had been stopped) is `stopped`. The stack status changes in the same moment as the deployment, so it does not stay on Deploying after the action is already over. An action that runs longer than `DYMINI_PANEL_STACK_TIMEOUT_SECS` (default 3600, `0` for no limit) is stopped the same way and recorded as `failed`. Stacks on remote servers show their output when the agent finishes the command, not line by line, and cancelling them stops waiting rather than killing the remote process. If the panel restarts during an action, the deployment is marked `failed` ("interrupted by process restart").
 
-### Deploy a pushed image (Rudder Image)
+### Deploy a pushed image (Dymini Panel Image)
 
-`rudder push`, `rudder deploy [--image <tag>]`, and `rudder images rollback <tag>` work seamlessly for Compose stacks. The image archive is stored in Cloudflare R2 as for an application; on deploy, Rudder loads the archive onto the stack's server, writes `RUDDER_IMAGE_TAG` and `RUDDER_IMAGE_REF` (plus per-image `RUDDER_IMAGE_TAG_<SLUG>` and `RUDDER_IMAGE_REF_<SLUG>`) into the stack's generated `.env`, and runs `docker compose up -d`, recreating only the compose services whose image changed.
+`dymini-panel push`, `dymini-panel deploy [--image <tag>]`, and `dymini-panel images rollback <tag>` work seamlessly for Compose stacks. The image archive is stored in Cloudflare R2 as for an application; on deploy, Dymini Panel loads the archive onto the stack's server, writes `DYMINI_PANEL_IMAGE_TAG` and `DYMINI_PANEL_IMAGE_REF` (plus per-image `DYMINI_PANEL_IMAGE_TAG_<SLUG>` and `DYMINI_PANEL_IMAGE_REF_<SLUG>`) into the stack's generated `.env`, and runs `docker compose up -d`, recreating only the compose services whose image changed.
 
 Reference the injected variable once in your Compose file so you never have to edit YAML tags manually on each release:
 
 ```yaml
 services:
   api:
-    image: rudder-image/my-api:${RUDDER_IMAGE_TAG}
+    image: dymini-panel-image/my-api:${DYMINI_PANEL_IMAGE_TAG}
 ```
 
-Rudder recognizes `RUDDER_IMAGE_TAG` and `RUDDER_IMAGE_REF` (and their `_<SLUG>` variants) as built-in variables so they are never flagged as missing, records the deployed image on the service and deployment history, and protects the active image from R2 retention pruning. The **Rudder Image** card on the stack's General tab lets you configure `auto_deploy`, retention, and deploy any stored version.
+Dymini Panel recognizes `DYMINI_PANEL_IMAGE_TAG` and `DYMINI_PANEL_IMAGE_REF` (and their `_<SLUG>` variants) as built-in variables so they are never flagged as missing, records the deployed image on the service and deployment history, and protects the active image from R2 retention pruning. The **Dymini Panel Image** card on the stack's General tab lets you configure `auto_deploy`, retention, and deploy any stored version.
 
 ### Deploy on push
 
@@ -141,4 +141,4 @@ compose: |
         KEY: ${SECRET_KEY}
 ```
 
-Every `${VAR}` must be declared. `cargo test -p rudder-server templates` checks each file, and `RUDDER_DOCKER_TESTS=1 cargo test -p rudder-server --test stacks` also runs `docker compose config` on each. Generated secrets are returned once by the deploy call and shown on screen; afterwards they are only in the encrypted environment.
+Every `${VAR}` must be declared. `cargo test -p dymini-panel-server templates` checks each file, and `DYMINI_PANEL_DOCKER_TESTS=1 cargo test -p dymini-panel-server --test stacks` also runs `docker compose config` on each. Generated secrets are returned once by the deploy call and shown on screen; afterwards they are only in the encrypted environment.

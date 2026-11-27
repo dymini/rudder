@@ -1,15 +1,15 @@
-//! Native self-update (`rudder update` / `rudder self-update`) across macOS, Windows, and Linux.
+//! Native self-update (`dymini-panel update` / `dymini-panel self-update`) across macOS, Windows, and Linux.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context as _};
-use rudder_core::{parse_sha256sums, parse_version, verify_minisign, VERSION};
+use dymini_panel_core::{parse_sha256sums, parse_version, verify_minisign, VERSION};
 
 const DEFAULT_GITHUB_REPO: &str = "vantanminh/rudder";
 
-fn is_newer(current: &str, latest: &str) -> Result<bool, rudder_core::Error> {
+fn is_newer(current: &str, latest: &str) -> Result<bool, dymini_panel_core::Error> {
     Ok(parse_version(latest)? > parse_version(current)?)
 }
 use serde::Deserialize;
@@ -34,30 +34,30 @@ pub fn current_target_asset() -> anyhow::Result<String> {
 
 pub fn asset_name_for(os: &str, arch: &str) -> anyhow::Result<String> {
     match (os, arch) {
-        ("linux", "x86_64") => Ok("rudder-x86_64-unknown-linux-musl".into()),
-        ("linux", "aarch64") => Ok("rudder-aarch64-unknown-linux-musl".into()),
-        ("macos", "x86_64") => Ok("rudder-x86_64-apple-darwin".into()),
-        ("macos", "aarch64") => Ok("rudder-aarch64-apple-darwin".into()),
-        ("windows", "x86_64") => Ok("rudder-x86_64-pc-windows-msvc.exe".into()),
-        ("windows", "aarch64") => Ok("rudder-aarch64-pc-windows-msvc.exe".into()),
+        ("linux", "x86_64") => Ok("dymini-panel-x86_64-unknown-linux-musl".into()),
+        ("linux", "aarch64") => Ok("dymini-panel-aarch64-unknown-linux-musl".into()),
+        ("macos", "x86_64") => Ok("dymini-panel-x86_64-apple-darwin".into()),
+        ("macos", "aarch64") => Ok("dymini-panel-aarch64-apple-darwin".into()),
+        ("windows", "x86_64") => Ok("dymini-panel-x86_64-pc-windows-msvc.exe".into()),
+        ("windows", "aarch64") => Ok("dymini-panel-aarch64-pc-windows-msvc.exe".into()),
         _ => bail!("unsupported OS/architecture for native update: {os}/{arch}"),
     }
 }
 
 pub async fn run(args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Result<()> {
     let mut check_only = false;
-    let mut repo = std::env::var("RUDDER_GITHUB_REPO")
+    let mut repo = std::env::var("DYMINI_PANEL_GITHUB_REPO")
         .ok()
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| DEFAULT_GITHUB_REPO.to_owned());
-    let mut api_url = std::env::var("RUDDER_GITHUB_API_URL")
+    let mut api_url = std::env::var("DYMINI_PANEL_GITHUB_API_URL")
         .ok()
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| "https://api.github.com".to_owned());
-    let mut pubkey = std::env::var("RUDDER_UPDATE_PUBKEY")
+    let mut pubkey = std::env::var("DYMINI_PANEL_UPDATE_PUBKEY")
         .ok()
         .filter(|v| !v.is_empty());
-    let mut target_path = std::env::var("RUDDER_UPDATE_TARGET_PATH")
+    let mut target_path = std::env::var("DYMINI_PANEL_UPDATE_TARGET_PATH")
         .ok()
         .filter(|v| !v.is_empty())
         .map(PathBuf::from);
@@ -69,7 +69,7 @@ pub async fn run(args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Res
             "--help" | "-h" => {
                 writeln!(
                     out,
-                    "Usage: rudder update [--check] [--repo OWNER/REPO]\n\nOptions:\n  --check              Check whether a newer release is available without installing\n  --repo <OWNER/REPO>  GitHub repository to fetch releases from (default: {DEFAULT_GITHUB_REPO})"
+                    "Usage: dymini-panel update [--check] [--repo OWNER/REPO]\n\nOptions:\n  --check              Check whether a newer release is available without installing\n  --repo <OWNER/REPO>  GitHub repository to fetch releases from (default: {DEFAULT_GITHUB_REPO})"
                 )?;
                 return Ok(());
             }
@@ -87,13 +87,13 @@ pub async fn run(args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Res
                 current_version = iter.next().context("--current-version needs a version")?
             }
             other => {
-                bail!("unknown option {other}; usage: rudder update [--check] [--repo OWNER/REPO]")
+                bail!("unknown option {other}; usage: dymini-panel update [--check] [--repo OWNER/REPO]")
             }
         }
     }
 
     let http = reqwest::Client::builder()
-        .user_agent(format!("rudder-cli/{VERSION}"))
+        .user_agent(format!("dymini-panel-cli/{VERSION}"))
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(120))
         .build()?;
@@ -121,7 +121,7 @@ pub async fn run(args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Res
     if !is_newer(&current_version, latest_version).map_err(|e| anyhow!(e.to_string()))? {
         writeln!(
             out,
-            "rudder {current_version} is already up to date (latest: {latest_version})."
+            "dymini-panel {current_version} is already up to date (latest: {latest_version})."
         )?;
         return Ok(());
     }
@@ -129,7 +129,7 @@ pub async fn run(args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Res
     if check_only {
         writeln!(
             out,
-            "Update available: rudder {current_version} -> {latest_version} (run `rudder update` to install)"
+            "Update available: dymini-panel {current_version} -> {latest_version} (run `dymini-panel update` to install)"
         )?;
         return Ok(());
     }
@@ -153,7 +153,7 @@ pub async fn run(args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Res
 
     writeln!(
         out,
-        "Updating rudder {current_version} -> {latest_version} ({asset_name})..."
+        "Updating dymini-panel {current_version} -> {latest_version} ({asset_name})..."
     )?;
 
     let sums_bytes = http
@@ -203,13 +203,13 @@ pub async fn run(args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Res
 
     let dest = match target_path {
         Some(path) => path,
-        None => std::env::current_exe().context("locate current rudder executable")?,
+        None => std::env::current_exe().context("locate current dymini-panel executable")?,
     };
     replace_executable(&dest, &bin_bytes)?;
 
     writeln!(
         out,
-        "Updated rudder to {latest_version} at {}",
+        "Updated dymini-panel to {latest_version} at {}",
         dest.display()
     )?;
     Ok(())
@@ -221,7 +221,7 @@ fn replace_executable(dest: &Path, new_bytes: &[u8]) -> anyhow::Result<()> {
     let file_name = dest
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "rudder".into());
+        .unwrap_or_else(|| "dymini-panel".into());
     let staged = parent.join(format!("{file_name}.new"));
     let backup = parent.join(format!("{file_name}.old"));
 
@@ -277,15 +277,15 @@ mod tests {
     fn maps_os_and_arch_to_release_asset_names() {
         assert_eq!(
             asset_name_for("linux", "x86_64").unwrap(),
-            "rudder-x86_64-unknown-linux-musl"
+            "dymini-panel-x86_64-unknown-linux-musl"
         );
         assert_eq!(
             asset_name_for("macos", "aarch64").unwrap(),
-            "rudder-aarch64-apple-darwin"
+            "dymini-panel-aarch64-apple-darwin"
         );
         assert_eq!(
             asset_name_for("windows", "x86_64").unwrap(),
-            "rudder-x86_64-pc-windows-msvc.exe"
+            "dymini-panel-x86_64-pc-windows-msvc.exe"
         );
         assert!(asset_name_for("freebsd", "x86_64").is_err());
     }

@@ -1,6 +1,6 @@
 # iOS app
 
-Rudder ships an iOS companion app (Expo) in `app/`. It controls the panel from an
+Dymini Panel ships an iOS companion app (Expo) in `app/`. It controls the panel from an
 iPhone instead of the browser: dashboard and server metrics, service actions
 (deploy, start, stop, restart), container logs, environment variables, domains,
 compose stack actions, backup jobs, and panel updates.
@@ -19,7 +19,7 @@ The app uses the same OAuth 2.1 + PKCE flow as AI agents (see [mcp.md](mcp.md)):
 
 1. You type the panel address.
 2. The app registers a public OAuth client (`POST /oauth/register`) with the
-   private redirect scheme `rudder://oauth/callback`, which the panel accepts
+   private redirect scheme `dymini-panel://oauth/callback`, which the panel accepts
    like any private app scheme.
 3. A secure browser sheet (ASWebAuthenticationSession) opens the panel sign-in
    and consent page. Choose a permission template — **Full control** for full
@@ -31,7 +31,7 @@ The app uses the same OAuth 2.1 + PKCE flow as AI agents (see [mcp.md](mcp.md)):
 An API token (`rdr_...`) can be pasted instead of going through OAuth.
 
 Every request goes to `/mcp/api/v1/...`, the machine mirror of the REST API, so
-panels behind Cloudflare Access work the same way they do for the `rudder` CLI
+panels behind Cloudflare Access work the same way they do for the `dymini-panel` CLI
 (the agent bypass must be on when Zero Trust is enforced). The MCP gate scopes
 every call to the approved grant, exactly as if an AI agent were calling.
 

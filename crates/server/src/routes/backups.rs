@@ -7,11 +7,11 @@ use axum::response::Response;
 use axum::routing::{get, post};
 use axum::Json;
 use chrono::{DateTime, Utc};
-use futures_util::StreamExt;
-use rudder_core::{
+use dymini_panel_core::{
     validate_host_path, validate_prefix, validate_schedule, validate_tool_options, ArchiveSource,
     Compression, Consistency, RetentionSpec, ToolOptions,
 };
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use utoipa::ToSchema;
@@ -195,7 +195,7 @@ pub fn router() -> axum::Router<AppState> {
 
 async fn presets(_auth: AuthUser) -> Json<Value> {
     Json(json!({
-        "schedules": rudder_core::PRESETS
+        "schedules": dymini_panel_core::PRESETS
             .iter()
             .map(|(name, cron)| json!({ "name": name, "cron": cron }))
             .collect::<Vec<_>>(),
@@ -259,7 +259,7 @@ async fn list_destinations(
 }
 
 fn check_destination(body: &SaveDestination, creating: bool) -> Result<(), ApiError> {
-    rudder_core::validate_name(&body.name).map_err(core_error)?;
+    dymini_panel_core::validate_name(&body.name).map_err(core_error)?;
     if let Some(endpoint) = body.endpoint.as_deref().filter(|e| !e.is_empty()) {
         s3::validate_endpoint(endpoint).map_err(core_error)?;
     }
@@ -608,7 +608,7 @@ async fn validate_fields(state: &AppState, fields: &JobFields) -> Result<(), Api
     if let Some(cron) = &fields.schedule_cron {
         validate_schedule(cron, &fields.timezone).map_err(core_error)?;
     } else {
-        rudder_core::parse_timezone(&fields.timezone).map_err(core_error)?;
+        dymini_panel_core::parse_timezone(&fields.timezone).map_err(core_error)?;
     }
     if fields.destination_ids.is_empty() {
         return Err(bad("invalid", "choose at least one S3 destination"));
@@ -624,10 +624,10 @@ async fn validate_fields(state: &AppState, fields: &JobFields) -> Result<(), Api
         return Err(not_found("S3 destination not found"));
     }
     validate_prefix(&fields.path_prefix).map_err(core_error)?;
-    rudder_core::object_key(
+    dymini_panel_core::object_key(
         &fields.path_prefix,
         &fields.filename_template,
-        &rudder_core::KeyVars {
+        &dymini_panel_core::KeyVars {
             name: "job",
             service: "service",
             engine: "engine",
@@ -791,7 +791,7 @@ fn merge(existing: Option<&BackupJobView>, body: &SaveBackupJob) -> Result<JobFi
         path_prefix: pick_str(
             &body.path_prefix,
             existing.map(|job| job.path_prefix.as_str()),
-            "rudder",
+            "dymini-panel",
         ),
         filename_template: pick_str(
             &body.filename_template,

@@ -1,20 +1,20 @@
 [package]
-name = "rudder-agent"
+name = "dymini-panel-agent"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
-description = "Rudder node agent"
+description = "Dymini Panel node agent"
 
 [[bin]]
-name = "rudder-agent"
+name = "dymini-panel-agent"
 path = "src/main.rs"
 
 [dependencies]
-rudder-core = { path = "../core" }
-rudder-node = { path = "../node" }
-rudder-proto = { path = "../proto" }
+dymini-panel-core = { path = "../core" }
+dymini-panel-node = { path = "../node" }
+dymini-panel-proto = { path = "../proto" }
 anyhow.workspace = true
 chrono.workspace = true
 serde.workspace = true

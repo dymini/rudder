@@ -326,11 +326,11 @@ export function StackOverview({ serviceId }: { serviceId: string }) {
         <p className="mb-3 text-sm text-muted">
           {view.compose_path
             ? t(
-                "What Rudder runs from {path}: your file with the project name, rudder labels, and the rudder-proxy network for routed services.",
+                "What Dymini Panel runs from {path}: your file with the project name, dymini-panel labels, and the dymini-panel-proxy network for routed services.",
                 { path: view.compose_path },
               )
             : t(
-                "What Rudder runs: your file with the project name, rudder labels, and the rudder-proxy network for routed services.",
+                "What Dymini Panel runs: your file with the project name, dymini-panel labels, and the dymini-panel-proxy network for routed services.",
               )}
         </p>
         <CodeBlock copy className="max-h-[28rem]">
@@ -565,7 +565,7 @@ function SourceForm({
         </fieldset>
         <p className="text-sm text-muted">
           {t(
-            "Use {variable} for values from the Environment tab; Rudder writes them to a mode 0600 {file} next to the generated file.",
+            "Use {variable} for values from the Environment tab; Dymini Panel writes them to a mode 0600 {file} next to the generated file.",
             {
               variable: <span className="font-mono">{"${NAME}"}</span>,
               file: <span className="font-mono">.env</span>,

@@ -36,7 +36,7 @@ export function AccessAdminPage() {
     <>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">{t("Rudder Access")}</h1>
+          <h1 className="text-2xl font-semibold">{t("Dymini Panel Access")}</h1>
           <p className="text-sm text-muted">
             {t("Decide who may open internal apps. People sign in at the Access portal, separate from this panel.")}
           </p>
@@ -187,7 +187,7 @@ function SettingsForm({ current }: { current: Settings }) {
           </select>
         </Field>
         <Field label={t("From address")}>
-          <TextInput value={from} placeholder="Rudder Access <login@example.com>" onChange={(event) => setFrom(event.target.value)} />
+          <TextInput value={from} placeholder="Dymini Panel Access <login@example.com>" onChange={(event) => setFrom(event.target.value)} />
         </Field>
         {provider === "resend" ? (
           <Field label={t("Resend API key")}>

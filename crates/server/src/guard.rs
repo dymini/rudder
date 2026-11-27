@@ -16,7 +16,7 @@ use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use rudder_core::{
+use dymini_panel_core::{
     read_host_pressure, Assessment, CpuTimes, GuardLevel, GuardLimits, GuardReason, GuardTracker,
     HostPressure, CONTROL_PLANE_CPU_SHARES, CONTROL_PLANE_OOM_SCORE_ADJ, DEFAULT_GUARD_CPU_PERCENT,
     DEFAULT_MEMORY_RESERVE_PERCENT, GUARD_INTERVAL_SECS, PROXY_CPU_SHARES, TRAEFIK_CONTAINER,
@@ -34,7 +34,7 @@ use crate::state::AppState;
 /// whose apps keep the CPU busy still deploys.
 pub const CPU_HOLD_LIMIT: Duration = Duration::from_secs(20 * 60);
 /// Name of the panel database container created by the installer.
-pub const POSTGRES_CONTAINER: &str = "rudder-postgres";
+pub const POSTGRES_CONTAINER: &str = "dymini-panel-postgres";
 const MIB: i64 = 1024 * 1024;
 /// Re-apply container priorities this often, in samples (about 10 minutes).
 const PROTECT_EVERY: u64 = 200;

@@ -1,13 +1,13 @@
 //! Container replacement against a real Docker Engine. Runs only with
-//! `RUDDER_DOCKER_TESTS=1`.
+//! `DYMINI_PANEL_DOCKER_TESTS=1`.
 
-use rudder_core::{ContainerSpec, NodeDriver, ReadyProbe, ReplaceContainer};
-use rudder_node::LocalDriver;
+use dymini_panel_core::{ContainerSpec, NodeDriver, ReadyProbe, ReplaceContainer};
+use dymini_panel_node::LocalDriver;
 
 fn docker_tests() -> bool {
-    let enabled = std::env::var("RUDDER_DOCKER_TESTS").as_deref() == Ok("1");
+    let enabled = std::env::var("DYMINI_PANEL_DOCKER_TESTS").as_deref() == Ok("1");
     if !enabled {
-        eprintln!("skipping: set RUDDER_DOCKER_TESTS=1 to run Docker tests");
+        eprintln!("skipping: set DYMINI_PANEL_DOCKER_TESTS=1 to run Docker tests");
     }
     enabled
 }
@@ -17,10 +17,10 @@ async fn replace_keeps_settings_and_rolls_back_a_failed_probe() {
     if !docker_tests() {
         return;
     }
-    let root = std::env::temp_dir().join(format!("rudder-swap-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("dymini-panel-swap-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
     let driver = LocalDriver::connect(&root, None);
-    let name = format!("rudder-swap-test-{}", std::process::id());
+    let name = format!("dymini-panel-swap-test-{}", std::process::id());
     for image in ["alpine:3.20", "alpine:3.22", "busybox:1.36"] {
         if driver.image_digest(image).await.is_err() {
             driver.pull_image(image, None).await.unwrap();
@@ -46,7 +46,7 @@ async fn replace_keeps_settings_and_rolls_back_a_failed_probe() {
             nano_cpus: None,
             restart: "unless-stopped".into(),
             network: None,
-            labels: vec![("rudder.test".into(), "swap".into())],
+            labels: vec![("dymini-panel.test".into(), "swap".into())],
         })
         .await
         .unwrap();

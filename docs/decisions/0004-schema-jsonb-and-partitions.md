@@ -26,7 +26,7 @@ The product needs users, servers, projects, services, domains, certificates, cac
 
 Migration `0001_init.sql` creates the relational tables listed in the product model. Kind-specific desired state is stored in `services.spec` as JSONB. Secrets are `BYTEA` ciphertext, never plaintext columns.
 
-`log_entries`, `metrics_samples`, and `metrics_rollups` are partitioned by day. A default partition catches rows if a daily partition is missing. `rudder_ensure_daily_partition` creates a day's partition when the default partition has no conflicting rows. The server calls it on startup for today and tomorrow. Foreign keys are omitted on the partitioned tables so partition maintenance does not have to cascade through them; service and server ids are still stored for filtering.
+`log_entries`, `metrics_samples`, and `metrics_rollups` are partitioned by day. A default partition catches rows if a daily partition is missing. `dymini_panel_ensure_daily_partition` creates a day's partition when the default partition has no conflicting rows. The server calls it on startup for today and tomorrow. Foreign keys are omitted on the partitioned tables so partition maintenance does not have to cascade through them; service and server ids are still stored for filtering.
 
 A single `panel_settings` row and a single `retention_settings` row hold singleton configuration. The default metrics retention document is raw 24h, 1-minute 7d, 5-minute 14d, 1-hour 30d. Log retention defaults to 14 days per source.
 

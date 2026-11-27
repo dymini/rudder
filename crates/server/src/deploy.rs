@@ -4,7 +4,7 @@
 //! the container create call. They are not written to deployment logs.
 
 use chrono::{DateTime, Utc};
-use rudder_core::{
+use dymini_panel_core::{
     container_name, image_registry, rollout, select_registry, validate_image_ref, HealthKind,
     HealthSpec, NodeDriver, PortMapping, RegistryAuth, RegistryRecord, RolloutPlan, VolumeMount,
     PROXY_NETWORK,
@@ -219,9 +219,9 @@ pub async fn deploy_service(
         image: image.clone(),
         env,
         command: resources.command,
-        ports: rudder_core::isolated_ports(
+        ports: dymini_panel_core::isolated_ports(
             resources.ports,
-            rudder_core::network_isolation_enabled(&service.spec),
+            dymini_panel_core::network_isolation_enabled(&service.spec),
         ),
         volumes: resources.volumes,
         memory_bytes: resources.memory_bytes,
@@ -229,8 +229,8 @@ pub async fn deploy_service(
         restart: resources.restart,
         network: Some(PROXY_NETWORK.into()),
         labels: vec![
-            ("rudder.managed".into(), "true".into()),
-            ("rudder.service".into(), service.id.to_string()),
+            ("dymini-panel.managed".into(), "true".into()),
+            ("dymini-panel.service".into(), service.id.to_string()),
         ],
         auth,
         health: params.health.clone(),
@@ -274,7 +274,7 @@ pub async fn deploy_service(
             saved.container_id = container_id.clone();
             record_running(&state, service_id, &saved)
                 .await
-                .map_err(|error| rudder_core::Error::Node(error.public_message()))?;
+                .map_err(|error| dymini_panel_core::Error::Node(error.public_message()))?;
             if let Err(error) = publish_server(&state, server_id).await {
                 restore_previous(
                     &state,
@@ -285,7 +285,7 @@ pub async fn deploy_service(
                     &container_id,
                 )
                 .await;
-                return Err(rudder_core::Error::Node(error.public_message()));
+                return Err(dymini_panel_core::Error::Node(error.public_message()));
             }
             Ok(())
         }
@@ -357,12 +357,12 @@ pub(crate) struct BuiltRollout {
     pub log_prefix: String,
 }
 
-/// Load a Docker image tar stream from Rudder Image store (R2/S3) onto the target server and roll it out.
+/// Load a Docker image tar stream from Dymini Panel Image store (R2/S3) onto the target server and roll it out.
 pub(crate) async fn deploy_r2_stream(
     state: &AppState,
     service_id: Uuid,
     image: String,
-    tar_stream: rudder_core::ByteStream,
+    tar_stream: dymini_panel_core::ByteStream,
     trigger: String,
     actor: Option<Uuid>,
 ) -> Result<DeploymentView, ApiError> {
@@ -402,7 +402,7 @@ pub(crate) async fn deploy_r2_stream(
     }
     if compose {
         // A stack has no single container to swap: load the image onto its server, update
-        // `current_image` so Rudder injects `RUDDER_IMAGE_TAG` / `RUDDER_IMAGE_REF` into `.env`
+        // `current_image` so Dymini Panel injects `DYMINI_PANEL_IMAGE_TAG` / `DYMINI_PANEL_IMAGE_REF` into `.env`
         // and protects the active image from R2 retention pruning, then run `docker compose up -d`.
         let driver = crate::nodes::driver_for(state, service.server_id).await?;
         driver.load_image(tar_stream).await.map_err(core_error)?;
@@ -437,7 +437,7 @@ pub(crate) async fn deploy_r2_stream(
     };
     if let Err(error) = driver.load_image(tar_stream).await {
         let message = error.to_string();
-        let logs = format!("failed to load {image} from Rudder Image store: {message}\n");
+        let logs = format!("failed to load {image} from Dymini Panel Image store: {message}\n");
         let _ = finish_deployment(state, deployment_id, "failed", Some(&message), &logs).await;
         mark_failed(state, service.id, None, &message).await;
         return Err(core_error(error));
@@ -450,7 +450,7 @@ pub(crate) async fn deploy_r2_stream(
             deployment_id,
             image: image.clone(),
             actor,
-            log_prefix: format!("loaded {image} from Rudder Image store\n"),
+            log_prefix: format!("loaded {image} from Dymini Panel Image store\n"),
         },
         true,
     )
@@ -562,9 +562,9 @@ async fn roll_loaded_image(
         image: roll.image.clone(),
         env,
         command: resources.command,
-        ports: rudder_core::isolated_ports(
+        ports: dymini_panel_core::isolated_ports(
             resources.ports,
-            rudder_core::network_isolation_enabled(&service.spec),
+            dymini_panel_core::network_isolation_enabled(&service.spec),
         ),
         volumes: resources.volumes,
         memory_bytes: resources.memory_bytes,
@@ -572,8 +572,8 @@ async fn roll_loaded_image(
         restart: resources.restart,
         network: Some(PROXY_NETWORK.into()),
         labels: vec![
-            ("rudder.managed".into(), "true".into()),
-            ("rudder.service".into(), service.id.to_string()),
+            ("dymini-panel.managed".into(), "true".into()),
+            ("dymini-panel.service".into(), service.id.to_string()),
         ],
         auth: None,
         health: service_health(state, service.id)
@@ -628,7 +628,7 @@ async fn roll_loaded_image(
             saved.container_id = container_id.clone();
             record_running(&state, service_id, &saved)
                 .await
-                .map_err(|error| rudder_core::Error::Node(error.public_message()))?;
+                .map_err(|error| dymini_panel_core::Error::Node(error.public_message()))?;
             if let Err(error) = publish_server(&state, server_id).await {
                 restore_previous(
                     &state,
@@ -639,7 +639,7 @@ async fn roll_loaded_image(
                     &container_id,
                 )
                 .await;
-                return Err(rudder_core::Error::Node(error.public_message()));
+                return Err(dymini_panel_core::Error::Node(error.public_message()));
             }
             Ok(())
         }
@@ -781,7 +781,7 @@ pub(crate) async fn copy_image(
     from: &dyn NodeDriver,
     to: &dyn NodeDriver,
     image: &str,
-) -> Result<(), rudder_core::Error> {
+) -> Result<(), dymini_panel_core::Error> {
     let tar = from.save_image(image).await?;
     to.load_image(tar).await
 }
@@ -1006,7 +1006,7 @@ pub(crate) async fn registry_auth(
 }
 
 async fn note_internal_ip(
-    driver: &dyn rudder_core::NodeDriver,
+    driver: &dyn dymini_panel_core::NodeDriver,
     state: &AppState,
     service_id: Uuid,
     container_id: &str,
@@ -1049,11 +1049,14 @@ async fn access_env(
         return env;
     };
     let mut extra = vec![
-        ("RUDDER_ACCESS_TOKEN".to_owned(), token),
-        ("RUDDER_ACCESS_SERVICE".to_owned(), service_id.to_string()),
+        ("DYMINI_PANEL_ACCESS_TOKEN".to_owned(), token),
+        (
+            "DYMINI_PANEL_ACCESS_SERVICE".to_owned(),
+            service_id.to_string(),
+        ),
     ];
     if let Some(url) = state.config.public_url.clone() {
-        extra.push(("RUDDER_ACCESS_URL".to_owned(), url));
+        extra.push(("DYMINI_PANEL_ACCESS_URL".to_owned(), url));
     }
     for (key, value) in extra {
         if !env.iter().any(|(existing, _)| existing == &key) {

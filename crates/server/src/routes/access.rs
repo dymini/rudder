@@ -1,4 +1,4 @@
-//! Rudder Access: a separate sign-in for internal apps.
+//! Dymini Panel Access: a separate sign-in for internal apps.
 //!
 //! Panel administrators and Access administrators manage people, departments,
 //! and ranks. Visitors sign in with Google or an email code, after Turnstile.
@@ -15,12 +15,12 @@ use axum::routing::{get, post};
 use axum::Json;
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use chrono::{DateTime, Duration, Utc};
-use hmac::KeyInit;
-use hmac::{Hmac, Mac};
-use rudder_core::{
+use dymini_panel_core::{
     accept_turnstile, access_allowed, department_closure, parse_turnstile, safe_return_path,
     validate_host, AccessRule, Membership, ACCESS_LOGIN_ACTION,
 };
+use hmac::KeyInit;
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::Sha256;
@@ -34,8 +34,8 @@ use crate::mailer::{send_login_code, MailConfig};
 use crate::routes::catalog::{bad, conflict, core_error, is_unique, not_found};
 use crate::state::AppState;
 
-const ACCESS_COOKIE: &str = "rudder_access";
-const GOOGLE_STATE_COOKIE: &str = "rudder_access_google";
+const ACCESS_COOKIE: &str = "dymini_panel_access";
+const GOOGLE_STATE_COOKIE: &str = "dymini_panel_access_google";
 const GOOGLE_CALLBACK_PATH: &str = "/api/v1/access/login/google/callback";
 const SESSION_HOURS: i64 = 12;
 const CODE_MINUTES: i64 = 10;
@@ -86,7 +86,7 @@ pub fn router() -> axum::Router<AppState> {
         .route("/api/v1/access/me", get(me))
         .route("/api/v1/access/apps", get(apps))
         .route("/api/v1/access/callback", get(handoff_callback))
-        .route("/_rudder/callback", get(handoff_callback))
+        .route("/_dymini_panel/callback", get(handoff_callback))
         .route("/api/v1/access/introspect", post(introspect))
         .route("/api/v1/edge/gate", get(edge_gate))
 }
@@ -547,8 +547,8 @@ async fn test_email(
         &config,
         &settings.email_from,
         &manager.email,
-        "Rudder Access email",
-        "Rudder Access can send mail from this panel.",
+        "Dymini Panel Access email",
+        "Dymini Panel Access can send mail from this panel.",
     )
     .await?;
     Ok(StatusCode::NO_CONTENT)
@@ -1084,7 +1084,7 @@ async fn put_policy(
             return Err(bad("invalid", "at most 100 Access bypass paths"));
         }
         for path in paths {
-            rudder_core::validate_access_path(path).map_err(core_error)?;
+            dymini_panel_core::validate_access_path(path).map_err(core_error)?;
         }
     }
     let service = sqlx::query_scalar!(r#"SELECT id FROM services WHERE id = $1"#, id)
@@ -1323,7 +1323,7 @@ async fn google_start(
     let client_id = settings.google_client_id.clone();
     let origin = portal_origin(&state, &settings, &headers).await?;
     let (host, path) = clean_return(body.return_host.as_deref(), body.return_path.as_deref())?;
-    let nonce = hex::encode(rudder_core::random_bytes::<16>());
+    let nonce = hex::encode(dymini_panel_core::random_bytes::<16>());
     let payload = json!({
         "exp": (Utc::now() + Duration::minutes(CODE_MINUTES)).timestamp(),
         "host": host,
@@ -1695,7 +1695,7 @@ async fn edge_gate(
             .http_requests
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
-    if rudder_core::host_is_ip(host.split(':').next().unwrap_or(&host)) {
+    if dymini_panel_core::host_is_ip(host.split(':').next().unwrap_or(&host)) {
         state
             .edge
             .ip_requests
@@ -1758,7 +1758,7 @@ async fn edge_gate(
             if !paths.is_empty()
                 && paths
                     .iter()
-                    .all(|prefixes| rudder_core::access_path_bypasses(path, prefixes)) =>
+                    .all(|prefixes| dymini_panel_core::access_path_bypasses(path, prefixes)) =>
         {
             return StatusCode::OK.into_response()
         }
@@ -1796,6 +1796,19 @@ async fn edge_gate(
         .collect::<Vec<_>>()
         .join(",");
     let mut response = StatusCode::OK.into_response();
+    insert_header(&mut response, "x-dymini-panel-access-email", &session.email);
+    insert_header(
+        &mut response,
+        "x-dymini-panel-access-user",
+        &session.display_name,
+    );
+    insert_header(
+        &mut response,
+        "x-dymini-panel-access-departments",
+        &departments,
+    );
+    insert_header(&mut response, "x-dymini-panel-access-ranks", &ranks);
+    // Pre-rebrand upstreams still read the Rudder headers.
     insert_header(&mut response, "x-rudder-access-email", &session.email);
     insert_header(&mut response, "x-rudder-access-user", &session.display_name);
     insert_header(&mut response, "x-rudder-access-departments", &departments);
@@ -1811,7 +1824,7 @@ pub(crate) async fn gate_secret(state: &AppState) -> Result<String, ApiError> {
     if let Some(bytes) = current.gate_secret_enc {
         return decrypt_string(state, &bytes);
     }
-    let secret = hex::encode(rudder_core::random_bytes::<32>());
+    let secret = hex::encode(dymini_panel_core::random_bytes::<32>());
     let encrypted = encrypt(state, secret.as_bytes())?;
     sqlx::query!(
         r#"UPDATE access_settings SET gate_secret_enc = $1 WHERE id = TRUE AND gate_secret_enc IS NULL"#,
@@ -1957,8 +1970,8 @@ async fn issue_session(
     headers: &HeaderMap,
     force_secure: bool,
 ) -> Result<(CookieJar, String), ApiError> {
-    let token = hex::encode(rudder_core::random_bytes::<32>());
-    let csrf = hex::encode(rudder_core::random_bytes::<16>());
+    let token = hex::encode(dymini_panel_core::random_bytes::<32>());
+    let csrf = hex::encode(dymini_panel_core::random_bytes::<16>());
     let user_agent = headers
         .get(axum::http::header::USER_AGENT)
         .and_then(|value| value.to_str().ok())
@@ -2009,9 +2022,12 @@ async fn handoff_url(
     };
     let protected = protected_service(state, &host).await?;
     if protected.is_none() {
-        return Err(bad("invalid", "that app is not protected by Rudder Access"));
+        return Err(bad(
+            "invalid",
+            "that app is not protected by Dymini Panel Access",
+        ));
     }
-    let code = hex::encode(rudder_core::random_bytes::<32>());
+    let code = hex::encode(dymini_panel_core::random_bytes::<32>());
     sqlx::query!(
         r#"
         INSERT INTO access_codes (email, code_hash, purpose, return_host, return_path, expires_at)
@@ -2025,7 +2041,9 @@ async fn handoff_url(
     .execute(&state.pool)
     .await
     .map_err(ApiError::database)?;
-    Ok(Some(format!("https://{host}/_rudder/callback?code={code}")))
+    Ok(Some(format!(
+        "https://{host}/_dymini_panel/callback?code={code}"
+    )))
 }
 
 async fn protected_service(state: &AppState, host: &str) -> Result<Option<Uuid>, ApiError> {
@@ -2204,7 +2222,7 @@ pub(crate) async fn portal_cloudflare_warning(
 ) -> Result<Option<String>, ApiError> {
     let (panel,enforced): (Option<String>,bool) = sqlx::query_as("SELECT p.panel_domain,c.access_enforced FROM panel_settings p CROSS JOIN cloudflare_settings c WHERE p.id=TRUE AND c.id=TRUE")
         .fetch_one(&state.pool).await.map_err(ApiError::database)?;
-    Ok(panel.filter(|host| !host.is_empty() && enforced && portal.filter(|p|!p.is_empty()).is_none_or(|p|p.eq_ignore_ascii_case(host))).map(|_| "Cloudflare Access also protects Rudder Access login and assets on the panel hostname. Use a dedicated portal hostname, publish its DNS/tunnel route, and update Turnstile and Google callbacks. Admin APIs remain protected.".into()))
+    Ok(panel.filter(|host| !host.is_empty() && enforced && portal.filter(|p|!p.is_empty()).is_none_or(|p|p.eq_ignore_ascii_case(host))).map(|_| "Cloudflare Access also protects Dymini Panel Access login and assets on the panel hostname. Use a dedicated portal hostname, publish its DNS/tunnel route, and update Turnstile and Google callbacks. Admin APIs remain protected.".into()))
 }
 
 async fn settings_view(
@@ -2797,7 +2815,7 @@ async fn parent_cycles(state: &AppState, id: Uuid, parent: Option<Uuid>) -> Resu
 }
 
 fn six_digits() -> String {
-    let bytes = rudder_core::random_bytes::<4>();
+    let bytes = dymini_panel_core::random_bytes::<4>();
     let value = u32::from_be_bytes(bytes) % 1_000_000;
     format!("{value:06}")
 }

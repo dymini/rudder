@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::Json;
 use chrono::{DateTime, Duration, Utc};
-use rudder_core::{validate_env_key, validate_name, Error as CoreError};
+use dymini_panel_core::{validate_env_key, validate_name, Error as CoreError};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use subtle::ConstantTimeEq;
@@ -1082,7 +1082,7 @@ async fn remove_service_containers(
     let mut containers: Vec<String> = match driver.list_containers().await {
         Ok(list) => list
             .into_iter()
-            .filter(|c| c.labels.get("rudder.service") == Some(&label))
+            .filter(|c| c.labels.get("dymini-panel.service") == Some(&label))
             .map(|c| c.id)
             .collect(),
         Err(error) => {
@@ -1161,7 +1161,7 @@ async fn import_env(
     if exists.is_none() {
         return Err(not_found("service not found"));
     }
-    let parse = rudder_core::parse_env_text(&body.text);
+    let parse = dymini_panel_core::parse_env_text(&body.text);
     let saved = sqlx::query!(
         r#"
         SELECT key, value_enc
@@ -1476,7 +1476,7 @@ fn check_kind(kind: &str) -> Result<(), ApiError> {
 
 pub(crate) fn core_error(error: CoreError) -> ApiError {
     match error {
-        CoreError::InvalidName(_) => bad("invalid_name", rudder_core::NAME_RULE),
+        CoreError::InvalidName(_) => bad("invalid_name", dymini_panel_core::NAME_RULE),
         CoreError::Validation(message) => bad("invalid", message),
         CoreError::Node(message) => ApiError::new(StatusCode::BAD_GATEWAY, "node", message),
         CoreError::Crypto => ApiError::new(

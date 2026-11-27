@@ -9,7 +9,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::get;
 use axum::Json;
 use chrono::{DateTime, Utc};
-use rudder_core::{
+use dymini_panel_core::{
     evaluate_hook, validate_branch, validate_git_url, validate_name, validate_rel_path,
     BuildStrategy, Cipher, HookInput, HookKind, HookOutcome,
 };
@@ -487,7 +487,7 @@ async fn put_source(
     }
     super::github_repos::check_source_access(&state, body.provider_id, &body.repo, &body.branch)
         .await?;
-    let secret = hex::encode(rudder_core::random_bytes::<32>());
+    let secret = hex::encode(dymini_panel_core::random_bytes::<32>());
     let secret_enc = state.cipher.encrypt(secret.as_bytes()).map_err(|_| {
         ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,

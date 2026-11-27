@@ -99,7 +99,7 @@ export function TunnelManagement({
       {data.image_overridden ? (
         <Alert tone="warning" title={t("Custom connector image")}>
           {t(
-            "RUDDER_CLOUDFLARED_IMAGE overrides managed versions. Remove it to enable rolling updates.",
+            "DYMINI_PANEL_CLOUDFLARED_IMAGE overrides managed versions. Remove it to enable rolling updates.",
           )}
         </Alert>
       ) : null}

@@ -23,8 +23,8 @@ const PASSPHRASE: &str = "correct horse battery staple";
 const SECRET_VALUE: &str = "s3cr3t-env-value-for-export";
 
 fn database_url_for(pool: &PgPool) -> String {
-    let base =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+    let base = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
     let name = pool
         .connect_options()
         .get_database()
@@ -38,13 +38,16 @@ fn database_url_for(pool: &PgPool) -> String {
 fn app(pool: PgPool, data_dir: &Path) -> axum::Router {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), database_url_for(&pool)),
-        ("RUDDER_MASTER_KEY".into(), MASTER_HEX.into()),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), MASTER_HEX.into()),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        (
+            "DYMINI_PANEL_DATA_DIR".into(),
+            data_dir.display().to_string(),
+        ),
     ]);
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::router(rudder_server::AppState::new(pool, config))
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    dymini_panel_server::router(dymini_panel_server::AppState::new(pool, config))
 }
 
 fn tools_available() -> bool {
@@ -80,7 +83,7 @@ async fn send(
     let mut builder = Request::builder().method(method).uri(path);
     if let Some((cookie, csrf)) = session {
         builder = builder
-            .header("cookie", format!("rudder_session={cookie}"))
+            .header("cookie", format!("dymini_panel_session={cookie}"))
             .header("x-csrf-token", csrf);
     }
     let request = match body {
@@ -120,7 +123,7 @@ fn session_from(reply: &Reply) -> Session {
         .get("set-cookie")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .and_then(|pair| pair.strip_prefix("rudder_session="))
+        .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
         .expect("session cookie")
         .to_owned();
     Session {
@@ -241,7 +244,7 @@ async fn seed(app: &axum::Router) -> (Session, Session) {
 async fn unseal(sealed: &[u8], passphrase: &str) -> Vec<u8> {
     use tokio::io::AsyncReadExt;
 
-    let mut decryptor = rudder_core::Decryptor::new(passphrase);
+    let mut decryptor = dymini_panel_core::Decryptor::new(passphrase);
     let plain = decryptor.update(sealed).expect("decrypt");
     decryptor.finish().expect("complete envelope");
     let mut decoder = async_compression::tokio::bufread::ZstdDecoder::new(plain.as_slice());
@@ -265,7 +268,7 @@ fn entries(tar_bytes: &[u8]) -> HashMap<String, Vec<u8>> {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn settings_export_and_access(pool: PgPool) {
-    let dir = std::env::temp_dir().join(format!("rudder-panel-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("dymini-panel-{}", uuid::Uuid::new_v4()));
     let app = app(pool, &dir);
     let (owner, viewer) = seed(&app).await;
 
@@ -281,8 +284,8 @@ async fn settings_export_and_access(pool: PgPool) {
     assert!(export.headers["content-disposition"]
         .to_str()
         .unwrap()
-        .contains("rudder-settings-"));
-    assert_eq!(export.body["format"], "rudder-settings-export");
+        .contains("dymini-panel-settings-"));
+    assert_eq!(export.body["format"], "dymini-panel-settings-export");
     assert_eq!(export.body["projects"][0]["name"], "blog");
     assert_eq!(export.body["services"][0]["name"], "web");
     assert_eq!(export.body["env_vars"][0]["key"], "API_TOKEN");
@@ -301,7 +304,7 @@ async fn settings_export_and_access(pool: PgPool) {
     let info = send(&app, "GET", "/api/v1/system", owner.pair(), None).await;
     assert_eq!(info.status, StatusCode::OK);
     assert_eq!(info.body["schema"], info.body["known_schema"]);
-    assert_eq!(info.body["version"], rudder_core::VERSION);
+    assert_eq!(info.body["version"], dymini_panel_core::VERSION);
 
     for path in ["/api/v1/system", "/api/v1/system/settings-export"] {
         let denied = send(&app, "GET", path, viewer.pair(), None).await;
@@ -449,7 +452,7 @@ async fn panel_backup_restores_into_a_fresh_database(pool: PgPool) {
     if !tools_available() {
         return;
     }
-    let dir = std::env::temp_dir().join(format!("rudder-panel-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("dymini-panel-{}", uuid::Uuid::new_v4()));
     let app = app(pool.clone(), &dir);
     let (owner, _viewer) = seed(&app).await;
     sqlx::query("INSERT INTO log_entries (logged_at, source, level, message) VALUES (now(), 'panel', 'info', 'history line')")
@@ -472,7 +475,7 @@ async fn panel_backup_restores_into_a_fresh_database(pool: PgPool) {
         String::from_utf8_lossy(&reply.raw)
     );
     let disposition = reply.headers["content-disposition"].to_str().unwrap();
-    assert!(disposition.contains("rudder-panel-") && disposition.contains(".tar.zst.enc"));
+    assert!(disposition.contains("dymini-panel-") && disposition.contains(".tar.zst.enc"));
     assert_eq!(&reply.raw[..8], b"RDRENC01");
     let files = entries(&unseal(&reply.raw, PASSPHRASE).await);
     let mut names: Vec<&str> = files.keys().map(String::as_str).collect();
@@ -491,8 +494,11 @@ async fn panel_backup_restores_into_a_fresh_database(pool: PgPool) {
         MASTER_HEX
     );
     let manifest: Value = serde_json::from_slice(&files["manifest.json"]).unwrap();
-    assert_eq!(manifest["format"], "rudder-panel-backup");
-    assert_eq!(manifest["migration"], rudder_server::known_migration());
+    assert_eq!(manifest["format"], "dymini-panel-backup");
+    assert_eq!(
+        manifest["migration"],
+        dymini_panel_server::known_migration()
+    );
     assert_eq!(manifest["includes_history"], false);
     assert!(files["database.pgdump"].starts_with(b"PGDMP"));
     assert!(!String::from_utf8_lossy(&files["settings.json"]).contains(SECRET_VALUE));
@@ -501,7 +507,7 @@ async fn panel_backup_restores_into_a_fresh_database(pool: PgPool) {
 
     let archive = dir.join("panel.tar.zst.enc");
     std::fs::write(&archive, &reply.raw).unwrap();
-    let target = format!("rudder_restore_{}", uuid::Uuid::new_v4().simple());
+    let target = format!("dymini_panel_restore_{}", uuid::Uuid::new_v4().simple());
     sqlx::query(&format!("CREATE DATABASE {target}"))
         .execute(&pool)
         .await
@@ -509,17 +515,17 @@ async fn panel_backup_restores_into_a_fresh_database(pool: PgPool) {
     let mut target_url = url::Url::parse(&database_url_for(&pool)).unwrap();
     target_url.set_path(&target);
     let key_file = dir.join("etc").join("master.key");
-    let options = |passphrase: &str, force: bool| rudder_server::RestoreOptions {
+    let options = |passphrase: &str, force: bool| dymini_panel_server::RestoreOptions {
         archive: archive.clone(),
         passphrase: Some(passphrase.to_owned()),
         database_url: target_url.to_string(),
         master_key_out: key_file.clone(),
         force,
         pg_restore: "pg_restore".into(),
-        known_migration: rudder_server::known_migration(),
+        known_migration: dymini_panel_server::known_migration(),
     };
 
-    let wrong = rudder_server::restore_panel(options("not the passphrase", false))
+    let wrong = dymini_panel_server::restore_panel(options("not the passphrase", false))
         .await
         .unwrap_err();
     assert!(format!("{wrong:#}").contains("passphrase"), "{wrong:#}");
@@ -527,10 +533,12 @@ async fn panel_backup_restores_into_a_fresh_database(pool: PgPool) {
 
     let mut too_new = options(PASSPHRASE, false);
     too_new.known_migration = 1;
-    let refused = rudder_server::restore_panel(too_new).await.unwrap_err();
+    let refused = dymini_panel_server::restore_panel(too_new)
+        .await
+        .unwrap_err();
     assert!(format!("{refused:#}").contains("newer than this binary"));
 
-    let report = rudder_server::restore_panel(options(PASSPHRASE, false))
+    let report = dymini_panel_server::restore_panel(options(PASSPHRASE, false))
         .await
         .unwrap();
     assert!(!report.replaced_existing);
@@ -573,26 +581,27 @@ async fn panel_backup_restores_into_a_fresh_database(pool: PgPool) {
         .fetch_one(&restored)
         .await
         .unwrap();
-    let cipher = rudder_core::Cipher::new(hex::decode(MASTER_HEX).unwrap().try_into().unwrap());
+    let cipher =
+        dymini_panel_core::Cipher::new(hex::decode(MASTER_HEX).unwrap().try_into().unwrap());
     assert_eq!(cipher.decrypt(&value).unwrap(), SECRET_VALUE.as_bytes());
     let migrated: i64 =
         sqlx::query_scalar("SELECT MAX(version) FROM _sqlx_migrations WHERE success")
             .fetch_one(&restored)
             .await
             .unwrap();
-    assert_eq!(migrated, rudder_server::known_migration());
+    assert_eq!(migrated, dymini_panel_server::known_migration());
     restored.close().await;
 
-    let again = rudder_server::restore_panel(options(PASSPHRASE, false))
+    let again = dymini_panel_server::restore_panel(options(PASSPHRASE, false))
         .await
         .unwrap_err();
     assert!(format!("{again:#}").contains("--force"));
     std::fs::write(&key_file, "ab".repeat(32)).unwrap();
-    let other_key = rudder_server::restore_panel(options(PASSPHRASE, false))
+    let other_key = dymini_panel_server::restore_panel(options(PASSPHRASE, false))
         .await
         .unwrap_err();
     assert!(format!("{other_key:#}").contains("different master key"));
-    let forced = rudder_server::restore_panel(options(PASSPHRASE, true))
+    let forced = dymini_panel_server::restore_panel(options(PASSPHRASE, true))
         .await
         .unwrap();
     assert!(forced.replaced_existing);
@@ -630,7 +639,7 @@ impl Drop for Container {
 
 async fn start_s3() -> (Container, String) {
     let name = format!(
-        "rudder-s3-{}",
+        "dymini-panel-s3-{}",
         &uuid::Uuid::new_v4().simple().to_string()[..8]
     );
     docker(&[
@@ -641,9 +650,9 @@ async fn start_s3() -> (Container, String) {
         "-p",
         "127.0.0.1::9000",
         "-e",
-        "RUSTFS_ACCESS_KEY=rudderadmin",
+        "RUSTFS_ACCESS_KEY=dymini-paneladmin",
         "-e",
-        "RUSTFS_SECRET_KEY=rudder-secret-key",
+        "RUSTFS_SECRET_KEY=dymini-panel-secret-key",
         "rustfs/rustfs:1.0.1",
     ]);
     let guard = Container(name.clone());
@@ -672,9 +681,9 @@ async fn start_s3() -> (Container, String) {
                 "--s3-endpoint",
                 &endpoint,
                 "--s3-access-key-id",
-                "rudderadmin",
+                "dymini-paneladmin",
                 "--s3-secret-access-key",
-                "rudder-secret-key",
+                "dymini-panel-secret-key",
             ])
             .output()
             .unwrap();
@@ -711,7 +720,7 @@ async fn manage_and_verify_panel_destination_copies_without_docker(pool: PgPool)
         "PostgreSQL client tools are required for panel verification tests"
     );
     let dir =
-        std::env::temp_dir().join(format!("rudder-panel-management-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("dymini-panel-management-{}", uuid::Uuid::new_v4()));
     let app = app(pool.clone(), &dir);
     let (owner, viewer) = seed(&app).await;
     let endpoint = "/api/v1/system/panel-backups";
@@ -768,14 +777,16 @@ async fn manage_and_verify_panel_destination_copies_without_docker(pool: PgPool)
     assert_eq!(inventory.body["objects"][0]["encrypted"], true);
     assert_eq!(
         inventory.body["objects"][0]["version"],
-        rudder_core::VERSION
+        dymini_panel_core::VERSION
     );
     assert_eq!(inventory.body["jobs"][0]["encrypted"], true);
     assert_eq!(inventory.body["health"]["configured"], true);
     let copy = format!("{endpoint}/{run}/copies/{destination}");
     let downloaded = send(&app, "GET", &format!("{copy}/download"), owner.pair(), None).await;
     assert_eq!(downloaded.status, StatusCode::OK);
-    assert!(downloaded.raw.starts_with(rudder_core::ENVELOPE_MAGIC));
+    assert!(downloaded
+        .raw
+        .starts_with(dymini_panel_core::ENVELOPE_MAGIC));
     for corrupt in [false, true] {
         if corrupt {
             sqlx::query("UPDATE backup_runs SET checksum=$2 WHERE id=$1")
@@ -810,7 +821,7 @@ async fn manage_and_verify_panel_destination_copies_without_docker(pool: PgPool)
             "{result}"
         );
         if !corrupt {
-            assert_eq!(result["manifest"]["format"], "rudder-panel-backup");
+            assert_eq!(result["manifest"]["format"], "dymini-panel-backup");
         } else {
             assert!(result["error"].as_str().unwrap().contains("SHA-256"));
         }
@@ -847,11 +858,11 @@ async fn manage_and_verify_panel_destination_copies_without_docker(pool: PgPool)
 
 #[sqlx::test(migrations = "./migrations")]
 async fn docker_panel_jobs_upload_to_s3(pool: PgPool) {
-    if std::env::var("RUDDER_DOCKER_TESTS").as_deref() != Ok("1") || !tools_available() {
-        eprintln!("skipping: set RUDDER_DOCKER_TESTS=1 to run the S3 panel job test");
+    if std::env::var("DYMINI_PANEL_DOCKER_TESTS").as_deref() != Ok("1") || !tools_available() {
+        eprintln!("skipping: set DYMINI_PANEL_DOCKER_TESTS=1 to run the S3 panel job test");
         return;
     }
-    let dir = std::env::temp_dir().join(format!("rudder-panel-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("dymini-panel-{}", uuid::Uuid::new_v4()));
     let app = app(pool.clone(), &dir);
     let (owner, _viewer) = seed(&app).await;
     let (_s3, endpoint) = start_s3().await;
@@ -862,8 +873,8 @@ async fn docker_panel_jobs_upload_to_s3(pool: PgPool) {
         owner.pair(),
         Some(json!({
             "name": "offsite", "endpoint": endpoint, "region": "us-east-1",
-            "bucket": "panel", "access_key_id": "rudderadmin",
-            "secret_access_key": "rudder-secret-key", "path_style": true
+            "bucket": "panel", "access_key_id": "dymini-paneladmin",
+            "secret_access_key": "dymini-panel-secret-key", "path_style": true
         })),
     )
     .await;
@@ -938,25 +949,25 @@ async fn docker_panel_jobs_upload_to_s3(pool: PgPool) {
 
     let archive = dir.join("from-s3.tar.zst.enc");
     std::fs::write(&archive, &download.raw).unwrap();
-    let target = format!("rudder_restore_{}", uuid::Uuid::new_v4().simple());
+    let target = format!("dymini_panel_restore_{}", uuid::Uuid::new_v4().simple());
     sqlx::query(&format!("CREATE DATABASE {target}"))
         .execute(&pool)
         .await
         .unwrap();
     let mut target_url = url::Url::parse(&database_url_for(&pool)).unwrap();
     target_url.set_path(&target);
-    let report = rudder_server::restore_panel(rudder_server::RestoreOptions {
+    let report = dymini_panel_server::restore_panel(dymini_panel_server::RestoreOptions {
         archive,
         passphrase: Some(PASSPHRASE.into()),
         database_url: target_url.to_string(),
         master_key_out: dir.join("master.key"),
         force: false,
         pg_restore: "pg_restore".into(),
-        known_migration: rudder_server::known_migration(),
+        known_migration: dymini_panel_server::known_migration(),
     })
     .await
     .unwrap();
-    assert_eq!(report.manifest.format, "rudder-panel-backup");
+    assert_eq!(report.manifest.format, "dymini-panel-backup");
 
     let settings = send(
         &app,

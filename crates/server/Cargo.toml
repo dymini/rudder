@@ -1,20 +1,20 @@
 [package]
-name = "rudder-server"
+name = "dymini-panel-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
-description = "Rudder control plane"
+description = "Dymini Panel control plane"
 
 [[bin]]
-name = "rudder-server"
+name = "dymini-panel-server"
 path = "src/main.rs"
 
 [dependencies]
-rudder-core = { path = "../core", features = ["openapi"] }
-rudder-node = { path = "../node" }
-rudder-proto = { path = "../proto" }
+dymini-panel-core = { path = "../core", features = ["openapi"] }
+dymini-panel-node = { path = "../node" }
+dymini-panel-proto = { path = "../proto" }
 anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true
@@ -73,8 +73,8 @@ openssl = { version = "0.10", features = ["vendored"] }
 http-body-util = "0.1.5"
 rcgen = { version = "0.14.10", default-features = false, features = ["pem", "aws_lc_rs"] }
 x509-parser = "0.18"
-rudder-agent = { path = "../agent" }
-rudder-cli = { path = "../cli" }
+dymini-panel-agent = { path = "../agent" }
+dymini-panel-cli = { path = "../cli" }
 tower = { version = "0.5.3", features = ["util"] }
 tokio-tungstenite = "0.29.0"
 minisign = "0.10"

@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use rudder_cache::{run, CacheConfig};
+use dymini_panel_cache::{run, CacheConfig};
 
 fn main() -> anyhow::Result<()> {
     let mut listen: SocketAddr = "0.0.0.0:8080".parse().expect("default listen");
@@ -17,7 +17,7 @@ fn main() -> anyhow::Result<()> {
         };
         match arg.as_str() {
             "--version" | "-V" => {
-                println!("rudder-cache {}", rudder_core::VERSION);
+                println!("dymini-panel-cache {}", dymini_panel_core::VERSION);
                 return Ok(());
             }
             "--help" | "-h" => {
@@ -61,10 +61,10 @@ fn main() -> anyhow::Result<()> {
 
 fn print_help() {
     println!(
-        "rudder-cache {version}\n\nUsage: rudder-cache --rules <rules.json> [--listen 0.0.0.0:8080] \
+        "dymini-panel-cache {version}\n\nUsage: dymini-panel-cache --rules <rules.json> [--listen 0.0.0.0:8080] \
          [--admin-listen 127.0.0.1:9090] [--token-file <path>] [--memory-bytes <n>]\n\n\
          The admin token file defaults to admin.token next to the rules file and is created \
          with mode 0600 when missing.",
-        version = rudder_core::VERSION
+        version = dymini_panel_core::VERSION
     );
 }

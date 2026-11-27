@@ -94,7 +94,7 @@ async fn overview(
         .await
         .map_err(ApiError::database)?;
     Ok(Json(UpdateOverview {
-        current_version: rudder_core::VERSION.into(),
+        current_version: dymini_panel_core::VERSION.into(),
         channel: settings.update_channel,
         auto_update: settings.auto_update,
         maintenance_window: settings.maintenance_window,
@@ -130,13 +130,13 @@ async fn settings(
 ) -> Result<Json<UpdateOverview>, ApiError> {
     auth.require_admin()?;
     auth.require_write()?;
-    let channel = rudder_core::UpdateChannel::parse(&body.channel).map_err(core_error)?;
+    let channel = dymini_panel_core::UpdateChannel::parse(&body.channel).map_err(core_error)?;
     let window = body
         .maintenance_window
         .map(|w| w.trim().to_owned())
         .filter(|w| !w.is_empty());
     if let Some(window) = &window {
-        rudder_core::parse_maintenance_window(window)
+        dymini_panel_core::parse_maintenance_window(window)
             .map_err(|error| bad("invalid_window", error.to_string()))?;
     }
     sqlx::query!(
@@ -180,7 +180,7 @@ async fn apply(
         "panel.update",
         "update",
         Some(&id.to_string()),
-        json!({ "from_version": rudder_core::VERSION }),
+        json!({ "from_version": dymini_panel_core::VERSION }),
         None,
     )
     .await;
@@ -202,7 +202,7 @@ async fn components(
         "panel.update_components",
         "update",
         None,
-        json!({ "queued": queued, "to_version": rudder_core::VERSION }),
+        json!({ "queued": queued, "to_version": dymini_panel_core::VERSION }),
         None,
     )
     .await;

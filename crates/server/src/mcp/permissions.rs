@@ -23,8 +23,11 @@ impl Permissions {
     }
 
     pub fn validate(&self) -> Result<(), ApiError> {
-        if self.scopes.len() > rudder_core::MCP_SCOPES.len()
-            || self.scopes.iter().any(|s| !rudder_core::scope_known(s))
+        if self.scopes.len() > dymini_panel_core::MCP_SCOPES.len()
+            || self
+                .scopes
+                .iter()
+                .any(|s| !dymini_panel_core::scope_known(s))
         {
             return Err(bad("Choose known MCP read/write scopes."));
         }

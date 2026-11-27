@@ -14,11 +14,11 @@ Uploading and replacing certificates still happens on **Certificates**. This pag
 
 **Run check** requests a fixed list of paths on every domain this panel routes, except preview domains. The list covers paths that show up when a generated app is left open to the internet: environment files, WordPress admin and config, Git metadata, Firebase service-account names, cloud credentials, private keys, debug endpoints, and SQL dumps.
 
-Rudder does not store the response body. A finding says the path answered and, when the body looks like a secret, that it looked like one. The summary does not include the secret.
+Dymini Panel does not store the response body. A finding says the path answered and, when the body looks like a secret, that it looked like one. The summary does not include the secret.
 
 A normal single-page app that returns its HTML shell for every path is not reported, except WordPress admin pages and any response that looks like a secret.
 
-The same check requests `http://` for domains that are supposed to use HTTPS. A successful answer that never redirects to HTTPS is a finding. If the server has a public IP, Rudder also requests that IP with the domain's Host header and warns when the app answers, because a visitor can then bypass the name.
+The same check requests `http://` for domains that are supposed to use HTTPS. A successful answer that never redirects to HTTPS is a finding. If the server has a public IP, Dymini Panel also requests that IP with the domain's Host header and warns when the app answers, because a visitor can then bypass the name.
 
 Checks run only against domains stored in this panel. Start one with **Run check** or `POST /api/v1/security/scans`. Findings from the latest finished check are `GET /api/v1/security/findings`.
 
@@ -28,14 +28,14 @@ The edge gate counts requests whose forwarded protocol is `http` and requests wh
 
 ## Client address and trusted proxies
 
-Panel sign-in, OAuth, MCP and Access limit requests per client address. Rudder takes that address from the connection itself, and reads `X-Forwarded-For` only when the connection comes from a trusted proxy. It then uses the nearest forwarded hop that is not a trusted proxy. In tunnel mode, `CF-Connecting-IP` counts only when that hop is on a private network.
+Panel sign-in, OAuth, MCP and Access limit requests per client address. Dymini Panel takes that address from the connection itself, and reads `X-Forwarded-For` only when the connection comes from a trusted proxy. It then uses the nearest forwarded hop that is not a trusted proxy. In tunnel mode, `CF-Connecting-IP` counts only when that hop is on a private network.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `RUDDER_TRUST_PROXY` | `true` | `false` ignores forwarded headers from every peer |
-| `RUDDER_TRUSTED_PROXIES` | `127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128,fc00::/7` | Comma-separated addresses or CIDR networks allowed to set `X-Forwarded-For` |
+| `DYMINI_PANEL_TRUST_PROXY` | `true` | `false` ignores forwarded headers from every peer |
+| `DYMINI_PANEL_TRUSTED_PROXIES` | `127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128,fc00::/7` | Comma-separated addresses or CIDR networks allowed to set `X-Forwarded-For` |
 
-The default covers Traefik on the Docker networks. A request sent straight to port 3000 from the internet is limited by its own address, whatever headers it carries. If your own reverse proxy reaches the panel from a public address, add that address to `RUDDER_TRUSTED_PROXIES`.
+The default covers Traefik on the Docker networks. A request sent straight to port 3000 from the internet is limited by its own address, whatever headers it carries. If your own reverse proxy reaches the panel from a public address, add that address to `DYMINI_PANEL_TRUSTED_PROXIES`.
 
 ## Rate limits
 
@@ -51,7 +51,7 @@ A rule has:
 | Burst | Extra requests allowed above the steady rate |
 | Key | Client IP, or the value of a request header |
 
-Every matching rule must allow the request. When one blocks it, Rudder records that rule, the hostname, the path, and the client IP. Those rows are kept for 24 hours so you can see whether a real visitor is being stopped. The allowed and blocked totals for the last day are on the same page.
+Every matching rule must allow the request. When one blocks it, Dymini Panel records that rule, the hostname, the path, and the client IP. Those rows are kept for 24 hours so you can see whether a real visitor is being stopped. The allowed and blocked totals for the last day are on the same page.
 
 Traefik asks `GET /api/v1/edge/gate` before it forwards a gated domain. The gate address contains a secret that only the generated Traefik file has. A request without that secret is not found. Agents cannot call the gate.
 

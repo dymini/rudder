@@ -1,41 +1,41 @@
-//! Rudder Access sign-in, the edge gate, and owner protection around it.
+//! Dymini Panel Access sign-in, the edge gate, and owner protection around it.
 
 use std::collections::HashMap;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
+use dymini_panel_core::Cipher;
+use dymini_panel_server::AppState;
 use http_body_util::BodyExt;
-use rudder_core::Cipher;
-use rudder_server::AppState;
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 use tower::ServiceExt;
 
-fn config(database_url: &str, siteverify: &str) -> rudder_server::Config {
+fn config(database_url: &str, siteverify: &str) -> dymini_panel_server::Config {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), database_url.to_owned()),
-        ("RUDDER_MASTER_KEY".into(), "bb".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_LOG_FORMAT".into(), "pretty".into()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "bb".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        ("DYMINI_PANEL_LOG_FORMAT".into(), "pretty".into()),
         (
-            "RUDDER_DATA_DIR".into(),
+            "DYMINI_PANEL_DATA_DIR".into(),
             std::env::temp_dir()
-                .join(format!("rudder-access-{}", uuid::Uuid::new_v4()))
+                .join(format!("dymini-panel-access-{}", uuid::Uuid::new_v4()))
                 .display()
                 .to_string(),
         ),
         (
-            "RUDDER_PUBLIC_URL".into(),
+            "DYMINI_PANEL_PUBLIC_URL".into(),
             "https://panel.example.com".into(),
         ),
         (
-            "RUDDER_TURNSTILE_SITEVERIFY_URL".into(),
+            "DYMINI_PANEL_TURNSTILE_SITEVERIFY_URL".into(),
             siteverify.to_owned(),
         ),
     ]);
-    rudder_server::Config::from_map(&vars, |_| unreachable!("no key file")).unwrap()
+    dymini_panel_server::Config::from_map(&vars, |_| unreachable!("no key file")).unwrap()
 }
 
 struct Reply {
@@ -125,9 +125,10 @@ async fn turnstile() -> String {
 #[sqlx::test(migrations = "./migrations")]
 async fn access_blocks_unknown_people_and_limits_a_host(pool: PgPool) {
     let siteverify = turnstile().await;
-    let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://rudder:rudder@127.0.0.1:5432/rudder".into());
-    let app = rudder_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
+    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        "postgres://dymini-panel:dymini-panel@127.0.0.1:5432/dymini-panel".into()
+    });
+    let app = dymini_panel_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
 
     let setup = call(
         &app,
@@ -222,7 +223,7 @@ async fn access_blocks_unknown_people_and_limits_a_host(pool: PgPool) {
     .await;
     assert_eq!(verified.status, StatusCode::OK, "{}", verified.body);
     let access_cookie = verified.cookie.unwrap();
-    assert!(access_cookie.starts_with("rudder_access="));
+    assert!(access_cookie.starts_with("dymini_panel_access="));
 
     let me = call(
         &app,
@@ -309,7 +310,8 @@ async fn access_blocks_unknown_people_and_limits_a_host(pool: PgPool) {
     assert_eq!(policy.status, StatusCode::OK, "{}", policy.body);
     let domain: uuid::Uuid = sqlx::query_scalar("INSERT INTO domains(service_id,host,target_port,ssl_mode) VALUES($1,'invoices.example.com',80,'none') RETURNING id")
         .bind(uuid::Uuid::parse_str(service_id).unwrap()).fetch_one(&pool).await.unwrap();
-    let path_app = rudder_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
+    let path_app =
+        dymini_panel_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
     let secret = gate_secret(&pool).await;
     for path in ["/v1/blobs", "/v1/blobs/abc?download=1"] {
         assert_eq!(
@@ -465,7 +467,7 @@ async fn gate_secret(pool: &PgPool) -> String {
 async fn portal_lists_all_authorized_services_and_domains(pool: PgPool) {
     let siteverify = turnstile().await;
     let url = std::env::var("DATABASE_URL").unwrap();
-    let app = rudder_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
+    let app = dymini_panel_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
     let server: uuid::Uuid =
         sqlx::query_scalar("INSERT INTO servers(name,kind) VALUES('local','local') RETURNING id")
             .fetch_one(&pool)
@@ -547,7 +549,7 @@ async fn portal_lists_all_authorized_services_and_domains(pool: PgPool) {
         .bind(environment).bind(server).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO access_rules(service_id,kind,email) SELECT id,'email','person@example.com' FROM services WHERE name LIKE 'extra-%'").execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO access_sessions(identity_id,token_hash,csrf_token,host,expires_at) VALUES($1,encode(digest('portal-token','sha256'),'hex'),'csrf','',now()+interval '1 hour')").bind(identity).execute(&pool).await.unwrap();
-    let cookie = "rudder_access=portal-token";
+    let cookie = "dymini_panel_access=portal-token";
     let listed = call(&app, "GET", "/api/v1/access/apps", Some(cookie), None, None).await;
     assert_eq!(listed.status, StatusCode::OK, "{}", listed.body);
     let rows = listed.body.as_array().unwrap();
@@ -610,7 +612,7 @@ async fn portal_lists_all_authorized_services_and_domains(pool: PgPool) {
 async fn shared_cloudflare_portal_warns_without_opening_admin_routes(pool: PgPool) {
     let siteverify = turnstile().await;
     let url = std::env::var("DATABASE_URL").unwrap();
-    let app = rudder_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
+    let app = dymini_panel_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
     let owner=call(&app,"POST","/api/v1/setup",None,None,Some(json!({"setup_token":"test-setup-token","email":"owner@example.com","password":"correct-horse-battery"}))).await;
     assert_eq!(owner.status, StatusCode::OK, "{}", owner.body);
     let cookie = owner.cookie.unwrap();
@@ -664,7 +666,7 @@ async fn shared_cloudflare_portal_warns_without_opening_admin_routes(pool: PgPoo
             .as_array()
             .unwrap()
             .iter()
-            .find(|c| c["id"] == "rudder_access_portal_cloudflare");
+            .find(|c| c["id"] == "dymini_panel_access_portal_cloudflare");
         assert_eq!(diagnostic.is_some(), conflict);
         if let Some(diagnostic) = diagnostic {
             assert_eq!(diagnostic["ok"], false);
@@ -699,9 +701,10 @@ async fn shared_cloudflare_portal_warns_without_opening_admin_routes(pool: PgPoo
 #[sqlx::test(migrations = "./migrations")]
 async fn parallel_code_guesses_share_five_attempts(pool: PgPool) {
     let siteverify = turnstile().await;
-    let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://rudder:rudder@127.0.0.1:5432/rudder".into());
-    let app = rudder_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
+    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        "postgres://dymini-panel:dymini-panel@127.0.0.1:5432/dymini-panel".into()
+    });
+    let app = dymini_panel_server::router(AppState::new(pool.clone(), config(&url, &siteverify)));
     let setup = call(
         &app,
         "POST",
@@ -844,12 +847,13 @@ async fn google_callback(
 async fn google_callback_requires_the_browser_that_started_sign_in(pool: PgPool) {
     let siteverify = turnstile().await;
     let google = google_mock().await;
-    let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://rudder:rudder@127.0.0.1:5432/rudder".into());
+    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        "postgres://dymini-panel:dymini-panel@127.0.0.1:5432/dymini-panel".into()
+    });
     let mut config = config(&url, &siteverify);
     config.google_token_url = format!("{google}/token");
     config.google_userinfo_url = format!("{google}/userinfo");
-    let app = rudder_server::router(AppState::new(pool.clone(), config));
+    let app = dymini_panel_server::router(AppState::new(pool.clone(), config));
 
     let setup = call(
         &app,
@@ -905,7 +909,7 @@ async fn google_callback_requires_the_browser_that_started_sign_in(pool: PgPool)
     .await;
     assert_eq!(start.status, StatusCode::OK, "{}", start.body);
     let state_cookie = start.cookie.unwrap();
-    assert!(state_cookie.starts_with("rudder_access_google="));
+    assert!(state_cookie.starts_with("dymini_panel_access_google="));
     let google_url = start.body["url"].as_str().unwrap();
     let state = google_url
         .split('&')
@@ -915,17 +919,27 @@ async fn google_callback_requires_the_browser_that_started_sign_in(pool: PgPool)
 
     let (status, cookies) = google_callback(&app, &query, None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert!(!cookies.iter().any(|c| c.starts_with("rudder_access=")));
+    assert!(!cookies
+        .iter()
+        .any(|c| c.starts_with("dymini_panel_access=")));
 
-    let (status, cookies) =
-        google_callback(&app, &query, Some("rudder_access_google=0123456789abcdef")).await;
+    let (status, cookies) = google_callback(
+        &app,
+        &query,
+        Some("dymini_panel_access_google=0123456789abcdef"),
+    )
+    .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert!(!cookies.iter().any(|c| c.starts_with("rudder_access=")));
+    assert!(!cookies
+        .iter()
+        .any(|c| c.starts_with("dymini_panel_access=")));
 
     let (status, cookies) = google_callback(&app, &query, Some(&state_cookie)).await;
     assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
-    assert!(cookies.iter().any(|c| c.starts_with("rudder_access=")));
     assert!(cookies
         .iter()
-        .any(|c| c.starts_with("rudder_access_google=;") && c.contains("Max-Age=0")));
+        .any(|c| c.starts_with("dymini_panel_access=")));
+    assert!(cookies
+        .iter()
+        .any(|c| c.starts_with("dymini_panel_access_google=;") && c.contains("Max-Age=0")));
 }

@@ -16,7 +16,7 @@ export const LANGUAGES: readonly { code: Language; label: string; locale: string
   { code: "vi", label: "Tiếng Việt", locale: "vi-VN" },
 ];
 
-const STORAGE_KEY = "rudder_lang";
+const STORAGE_KEY = "dymini_panel_lang";
 
 /** English text is the lookup key; a language without an entry shows the English text. */
 const dictionaries: Record<Language, Record<string, string>> = { en: {}, vi };

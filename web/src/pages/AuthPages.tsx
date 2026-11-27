@@ -3,7 +3,7 @@ import { Navigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { api, ApiError } from "../api";
 import { rememberSession, useAuth } from "../auth";
-import { Icon, KnotreeMark } from "../components/icons";
+import { Icon, DyminiPanelMark } from "../components/icons";
 import { InsecureBanner } from "../components/insecure-banner";
 import { Button, Field, TextInput } from "../components/ui";
 import { LANGUAGES, useLanguage, useT } from "../i18n";
@@ -223,7 +223,7 @@ export function LoginPage() {
   return (
     <AuthFrame
       title={t("Sign in")}
-      subtitle={t("Use your Rudder panel account.")}
+      subtitle={t("Use your Dymini Panel account.")}
     >
       <form className="grid gap-4" onSubmit={(event) => void onSubmit(event)}>
         <Field label={t("Email")}>
@@ -330,9 +330,8 @@ function AuthFrame({
     <div className="flex min-h-screen flex-col">
       <InsecureBanner link={false} />
       <header className="flex items-center gap-2.5 px-5 py-5 sm:px-8">
-        <KnotreeMark size={26} />
-        <span className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Knotree</span>
-        <span className="border-l border-line-strong pl-2.5 text-[15px] text-muted">Rudder</span>
+        <DyminiPanelMark size={26} />
+        <span className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Dymini Panel</span>
       </header>
       <main className="flex flex-1 items-center justify-center px-4 pb-16">
         <div className="w-full max-w-[400px] animate-fade-up rounded-auth border border-line bg-surface p-6 shadow-raised sm:p-8">

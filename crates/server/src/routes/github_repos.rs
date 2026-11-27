@@ -6,7 +6,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::Json;
-use rudder_core::{github_repo_full_name, validate_branch};
+use dymini_panel_core::{github_repo_full_name, validate_branch};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::ToSchema;
@@ -101,7 +101,7 @@ impl Github {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(20))
             .redirect(reqwest::redirect::Policy::none())
-            .user_agent(format!("rudder/{}", rudder_core::VERSION))
+            .user_agent(format!("dymini-panel/{}", dymini_panel_core::VERSION))
             .build()
             .map_err(|_| unreachable_github())?;
         Ok(Self {

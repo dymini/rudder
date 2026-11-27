@@ -6,8 +6,8 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::Json;
-use rudder_core::{
-    compose_variable_refs, is_rudder_image_env_var, validate_host, validate_name, Template,
+use dymini_panel_core::{
+    compose_variable_refs, is_dymini_panel_image_env_var, validate_host, validate_name, Template,
     VariableKind,
 };
 use serde::{Deserialize, Serialize};
@@ -88,7 +88,7 @@ pub struct StackView {
     pub git: Option<StackGit>,
     pub template: Option<String>,
     pub main_service: Option<String>,
-    /// The file Rudder runs: project name, labels, and proxy network applied.
+    /// The file Dymini Panel runs: project name, labels, and proxy network applied.
     pub generated_yaml: String,
     pub compose_path: String,
     pub services: Vec<StackServiceView>,
@@ -323,7 +323,8 @@ async fn stack_view(state: &AppState, id: Uuid) -> Result<StackView, ApiError> {
     let keys = stacks::env_keys(state, id).await?;
     let refs = compose_variable_refs(&stack.spec.compose_yaml);
     let variables: Vec<String> = refs.iter().map(|variable| variable.name.clone()).collect();
-    let is_provided = |name: &str| keys.iter().any(|k| k == name) || is_rudder_image_env_var(name);
+    let is_provided =
+        |name: &str| keys.iter().any(|k| k == name) || is_dymini_panel_image_env_var(name);
     let missing_variables = refs
         .iter()
         .filter(|variable| !variable.has_default && !is_provided(&variable.name))
@@ -594,7 +595,8 @@ fn kind_name(kind: VariableKind) -> &'static str {
 }
 
 pub(super) fn template_view(template: &Template) -> TemplateView {
-    let plan = rudder_core::transform_compose(&template.slug, &template.compose, &[], true).ok();
+    let plan =
+        dymini_panel_core::transform_compose(&template.slug, &template.compose, &[], true).ok();
     let services = plan
         .as_ref()
         .map(|plan| plan.services.iter().map(|s| s.name.clone()).collect())
@@ -654,7 +656,7 @@ pub fn generate_secret(length: usize) -> String {
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     let mut out = String::with_capacity(length);
     while out.len() < length {
-        for byte in rudder_core::random_bytes::<64>() {
+        for byte in dymini_panel_core::random_bytes::<64>() {
             if byte < 248 && out.len() < length {
                 out.push(ALPHABET[usize::from(byte) % ALPHABET.len()] as char);
             }

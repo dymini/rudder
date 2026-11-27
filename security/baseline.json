@@ -27,7 +27,7 @@
       "app/android",
       ".sqlx"
     ],
-    "raw_reports": "/tmp/rudder-security-scan (temporary; not committed)"
+    "raw_reports": "/tmp/dymini-panel-security-scan (temporary; not committed)"
   },
   "tools": {
     "osv_scanner": "osv-scanner version: 2.7.1",

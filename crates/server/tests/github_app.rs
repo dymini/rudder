@@ -43,8 +43,8 @@ async fn convert(
         StatusCode::CREATED,
         Json(json!({
             "id": APP_ID,
-            "slug": "rudder-test",
-            "name": "Rudder-test",
+            "slug": "dymini-panel-test",
+            "name": "Dymini-Panel-test",
             "owner": { "login": "acme" },
             "client_id": "Iv1.client",
             "client_secret": "client-secret-value",
@@ -217,23 +217,30 @@ async fn fake_github() -> (String, Shared) {
 }
 
 fn app(pool: PgPool, github: &str, public_url: Option<&str>) -> axum::Router {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
-    let data_dir = std::env::temp_dir().join(format!("rudder-ghapp-{}", uuid::Uuid::new_v4()));
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
+    let data_dir =
+        std::env::temp_dir().join(format!("dymini-panel-ghapp-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&data_dir).unwrap();
     let mut vars = HashMap::from([
         ("DATABASE_URL".to_owned(), url),
-        ("RUDDER_MASTER_KEY".to_owned(), "cc".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".to_owned(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".to_owned(), "false".to_owned()),
-        ("RUDDER_DATA_DIR".to_owned(), data_dir.display().to_string()),
-        ("RUDDER_GITHUB_API_URL".to_owned(), github.to_owned()),
+        ("DYMINI_PANEL_MASTER_KEY".to_owned(), "cc".repeat(32)),
+        (
+            "DYMINI_PANEL_SETUP_TOKEN".to_owned(),
+            "test-setup-token".into(),
+        ),
+        ("DYMINI_PANEL_COOKIE_SECURE".to_owned(), "false".to_owned()),
+        (
+            "DYMINI_PANEL_DATA_DIR".to_owned(),
+            data_dir.display().to_string(),
+        ),
+        ("DYMINI_PANEL_GITHUB_API_URL".to_owned(), github.to_owned()),
     ]);
     if let Some(public_url) = public_url {
-        vars.insert("RUDDER_PUBLIC_URL".to_owned(), public_url.to_owned());
+        vars.insert("DYMINI_PANEL_PUBLIC_URL".to_owned(), public_url.to_owned());
     }
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::router(rudder_server::AppState::new(pool, config))
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    dymini_panel_server::router(dymini_panel_server::AppState::new(pool, config))
 }
 
 struct Reply {
@@ -253,7 +260,7 @@ async fn call_raw(
     let mut builder = Request::builder().method(method).uri(path);
     if let Some((cookie, csrf)) = session {
         builder = builder
-            .header("cookie", format!("rudder_session={cookie}"))
+            .header("cookie", format!("dymini_panel_session={cookie}"))
             .header("x-csrf-token", csrf);
     }
     for (name, value) in extra {
@@ -273,7 +280,7 @@ async fn call_raw(
         .get("set-cookie")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .and_then(|pair| pair.strip_prefix("rudder_session="))
+        .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
         .map(str::to_owned);
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
@@ -383,7 +390,10 @@ async fn manifest_describes_the_panel_and_checks_who_asks(pool: PgPool) {
     );
     assert_eq!(started.body["webhook"], true);
     let manifest: Value = serde_json::from_str(started.body["manifest"].as_str().unwrap()).unwrap();
-    assert!(manifest["name"].as_str().unwrap().starts_with("Rudder-"));
+    assert!(manifest["name"]
+        .as_str()
+        .unwrap()
+        .starts_with("Dymini-Panel-"));
     assert_eq!(manifest["redirect_url"], "https://panel.example/git/github");
     assert_eq!(manifest["setup_url"], "https://panel.example/git/github");
     assert_eq!(manifest["default_permissions"]["contents"], "read");
@@ -595,13 +605,14 @@ async fn app_is_created_installed_and_used_as_a_source(pool: PgPool) {
     }
     let provider = &created.body["provider"];
     assert_eq!(provider["kind"], "github_app");
-    assert_eq!(provider["name"], "rudder-test");
+    assert_eq!(provider["name"], "dymini-panel-test");
     assert_eq!(provider["status"], "pending_install");
-    assert_eq!(provider["app_slug"], "rudder-test");
+    assert_eq!(provider["app_slug"], "dymini-panel-test");
     let provider_id = provider["id"].as_str().unwrap().to_owned();
     let install_url = created.body["install_url"].as_str().unwrap();
     assert!(
-        install_url.starts_with("https://github.com/apps/rudder-test/installations/new?state="),
+        install_url
+            .starts_with("https://github.com/apps/dymini-panel-test/installations/new?state="),
         "{install_url}"
     );
 
@@ -712,7 +723,7 @@ async fn app_is_created_installed_and_used_as_a_source(pool: PgPool) {
     assert!(link.body["install_url"]
         .as_str()
         .unwrap()
-        .starts_with("https://github.com/apps/rudder-test/installations/new?state="));
+        .starts_with("https://github.com/apps/dymini-panel-test/installations/new?state="));
     let pat = call(
         &app,
         "POST",

@@ -6,7 +6,7 @@ evidence: "Core 147 and server 94 unit tests; full workspace other suites passed
 id: US-DOCKSIDE-ACCESS
 integration: 1
 lane: high_risk
-notes: "Browser and real Docker/S3/Access-provider paths unverified. Restores run in the panel process, not crash-resumable; safety runs are retained for operator recovery. Dockside 0.2.2 must be released separately. Logs: /home/ubuntu/rudder-dockside-*.log and /home/ubuntu/dockside-backup-*.log."
+notes: "Browser and real Docker/S3/Access-provider paths unverified. Restores run in the panel process, not crash-resumable; safety runs are retained for operator recovery. Dockside 0.2.2 must be released separately. Logs: /home/ubuntu/dymini-panel-dockside-*.log and /home/ubuntu/dockside-backup-*.log."
 platform: 0
 status: implemented
 title: Protect plugin dashboards and manage consistent recoverable backups

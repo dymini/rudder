@@ -1,6 +1,6 @@
 use super::*;
 use crate::backup::{self, RestoreRequest};
-use rudder_core::{ArchiveSource, ContainerSpec, NodeDriver, VolumeMount};
+use dymini_panel_core::{ArchiveSource, ContainerSpec, NodeDriver, VolumeMount};
 use std::future::Future;
 
 #[derive(Deserialize, ToSchema)]
@@ -294,8 +294,8 @@ async fn clear_volume(driver: &dyn NodeDriver, volume: &str) -> Result<(), ApiEr
     .map_err(core_error)?;
     let helper = driver
         .create_container(&ContainerSpec {
-            name: format!("rudder-plugin-restore-{}", Uuid::new_v4().simple()),
-            image: rudder_node::HELPER_IMAGE.into(),
+            name: format!("dymini-panel-plugin-restore-{}", Uuid::new_v4().simple()),
+            image: dymini_panel_node::HELPER_IMAGE.into(),
             env: vec![],
             command: vec!["sleep".into(), "3600".into()],
             ports: vec![],

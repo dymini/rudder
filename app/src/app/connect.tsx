@@ -50,7 +50,7 @@ export default function Connect() {
             <Ionicons name="compass" color={colors.accentBright} size={42} />
           </View>
         </View>
-        <Text style={styles.title}>Rudder</Text>
+        <Text style={styles.title}>Dymini Panel</Text>
         <Text style={styles.subtitle}>Bảng điều khiển hạm đội của bạn — nhanh, an toàn và luôn trong tầm tay.</Text>
 
         <View style={styles.formCard}>
@@ -61,7 +61,7 @@ export default function Connect() {
               style={styles.input}
               value={panelUrl}
               onChangeText={setPanelUrl}
-              placeholder="https://rudder.example.com"
+              placeholder="https://dymini-panel.example.com"
               placeholderTextColor={colors.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
@@ -93,7 +93,7 @@ export default function Connect() {
                   style={styles.input}
                   value={token}
                   onChangeText={setToken}
-                  placeholder="rudder_token_…"
+                  placeholder="dymini_panel_token_…"
                   placeholderTextColor={colors.textFaint}
                   autoCapitalize="none"
                   autoCorrect={false}

@@ -26,7 +26,7 @@ Push-to-deploy and preview hostnames already exist. A pull request still had no 
 
 A service opts in with `preview_pull_requests`. The GitHub App webhook handles `pull_request` for `opened`, `synchronize`, `reopened`, and `closed`.
 
-For each opted-in application or Git stack whose repository and branch match the pull request base, Rudder keeps one copy named `{service}-pr-{number}`. The copy uses the head branch of the same repository, the parent's environment variables, and a preview address. Updating the pull request deploys that copy again. Closing it removes the copy. A head repository that is not the base repository is ignored.
+For each opted-in application or Git stack whose repository and branch match the pull request base, Dymini Panel keeps one copy named `{service}-pr-{number}`. The copy uses the head branch of the same repository, the parent's environment variables, and a preview address. Updating the pull request deploys that copy again. Closing it removes the copy. A head repository that is not the base repository is ignored.
 
 New GitHub Apps subscribe to `push` and `pull_request`. An app created earlier does not receive pull request events until that event is enabled on GitHub.
 

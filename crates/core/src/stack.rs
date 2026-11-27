@@ -1,4 +1,4 @@
-//! Rewrite a user's compose file so it runs under a Rudder project name and
+//! Rewrite a user's compose file so it runs under a Dymini Panel project name and
 //! routed services join the shared proxy network.
 
 use serde_yaml_ng::{Mapping, Value};
@@ -54,8 +54,8 @@ pub fn validate_compose_service(name: &str) -> Result<(), Error> {
 ///
 /// - top-level `name` becomes `project`;
 /// - `container_name` values gain the `project-` prefix;
-/// - every service gets `rudder.*` labels;
-/// - services in `routed` join the external `rudder-proxy` network;
+/// - every service gets `dymini-panel.*` labels;
+/// - services in `routed` join the external `dymini-panel-proxy` network;
 /// - when `isolate` is set, published host ports become container-only
 ///   `expose` entries so another app can listen on the same port.
 ///
@@ -351,9 +351,9 @@ fn add_labels(service: &mut Mapping, project: &str, name: &str) -> Result<(), Er
             )))
         }
     };
-    labels.insert(key("rudder.managed"), key("true"));
-    labels.insert(key("rudder.project"), key(project));
-    labels.insert(key("rudder.service"), key(name));
+    labels.insert(key("dymini-panel.managed"), key("true"));
+    labels.insert(key("dymini-panel.project"), key(project));
+    labels.insert(key("dymini-panel.service"), key(name));
     service.insert(key("labels"), Value::Mapping(labels));
     Ok(())
 }
@@ -485,19 +485,22 @@ volumes:
         assert_eq!(web["restart"], "unless-stopped");
         assert_eq!(
             web["networks"],
-            Value::Sequence(vec![key("default"), key("rudder-proxy")])
+            Value::Sequence(vec![key("default"), key("dymini-panel-proxy")])
         );
         assert_eq!(web["labels"]["com.example"], "1");
         assert_eq!(web["oom_score_adj"], crate::WORKLOAD_OOM_SCORE_ADJ);
-        assert_eq!(web["labels"]["rudder.project"], "blog-1a2b3c");
+        assert_eq!(web["labels"]["dymini-panel.project"], "blog-1a2b3c");
         let db = &doc["services"]["db"];
         assert_eq!(db["container_name"], "blog-1a2b3c-pg");
         assert!(
             db.get("networks").is_none(),
             "unrouted services stay private"
         );
-        assert_eq!(doc["networks"]["rudder-proxy"]["external"], true);
-        assert_eq!(doc["networks"]["rudder-proxy"]["name"], "rudder-proxy");
+        assert_eq!(doc["networks"]["dymini-panel-proxy"]["external"], true);
+        assert_eq!(
+            doc["networks"]["dymini-panel-proxy"]["name"],
+            "dymini-panel-proxy"
+        );
         let web_service = plan.services.iter().find(|s| s.name == "web").unwrap();
         assert_eq!(web_service.container, "blog-1a2b3c-web-1");
         assert!(web_service.routed);
@@ -514,7 +517,7 @@ volumes:
     #[test]
     fn unrouted_stacks_do_not_touch_networks_and_maps_are_extended() {
         let plan = transform_compose("app", "services:\n  a:\n    image: x\n", &[], false).unwrap();
-        assert!(!plan.yaml.contains("rudder-proxy"));
+        assert!(!plan.yaml.contains("dymini-panel-proxy"));
         let mapped =
             "services:\n  a:\n    image: x\n    networks:\n      back: {}\nnetworks:\n  back: {}\n";
         let plan = transform_compose("app", mapped, &["a"], false).unwrap();
@@ -522,7 +525,7 @@ volumes:
         assert!(doc["services"]["a"]["networks"]
             .as_mapping()
             .unwrap()
-            .contains_key("rudder-proxy"));
+            .contains_key("dymini-panel-proxy"));
         assert!(doc["networks"].as_mapping().unwrap().contains_key("back"));
     }
 

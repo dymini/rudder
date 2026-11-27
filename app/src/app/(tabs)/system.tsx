@@ -80,13 +80,13 @@ export default function System() {
       <ListItem title="Chứng chỉ TLS" subtitle="Certificates" onPress={() => router.push("/certificates")} />
       <ListItem title="Registries" subtitle="Docker registries" onPress={() => router.push("/registries")} />
       <ListItem title="Git providers" subtitle="GitHub/GitLab đã kết nối" onPress={() => router.push("/git-providers")} />
-      <ListItem title="Rudder Image" subtitle="Kho image nội bộ" onPress={() => router.push("/image-store")} />
+      <ListItem title="Dymini Panel Image" subtitle="Kho image nội bộ" onPress={() => router.push("/image-store")} />
       <ListItem title="Cache edge" subtitle="Cache policies" onPress={() => router.push("/cache-policies")} />
       <ListItem title="S3 destinations" subtitle="Nơi lưu backup" onPress={() => router.push("/s3-destinations")} />
       <ListItem title="Templates" subtitle="Template một chạm" onPress={() => router.push("/templates")} />
       <ListItem title="Plugins" subtitle="Plugin cộng đồng" onPress={() => router.push("/plugins")} />
       <ListItem title="Người dùng" subtitle="Tài khoản panel" onPress={() => router.push("/users")} />
-      <ListItem title="Rudder Access" subtitle="Định danh và phân quyền" onPress={() => router.push("/access")} />
+      <ListItem title="Dymini Panel Access" subtitle="Định danh và phân quyền" onPress={() => router.push("/access")} />
       <ListItem title="Bảo mật" subtitle="Findings và SSL" onPress={() => router.push("/security")} />
       <ListItem title="Cloudflare" subtitle="Tunnel và edge" onPress={() => router.push("/cloudflare")} />
       <ListItem title="Nhật ký audit" subtitle="Ai đã làm gì" onPress={() => router.push("/audit")} />

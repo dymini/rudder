@@ -1,6 +1,6 @@
 # AI agents
 
-An AI agent connects to Rudder over MCP (the Model Context Protocol) and calls the same actions as the panel. You decide what that agent is allowed to do when you approve it.
+An AI agent connects to Dymini Panel over MCP (the Model Context Protocol) and calls the same actions as the panel. You decide what that agent is allowed to do when you approve it.
 
 ## Connect an agent
 
@@ -9,7 +9,7 @@ An AI agent connects to Rudder over MCP (the Model Context Protocol) and calls t
 3. Choose a permission template, or pick permissions one by one, then approve.
 4. The agent receives a short-lived access token and a refresh token. It refreshes on its own until you revoke it or the approval reaches 90 days.
 
-The address Rudder gives agents is the panel domain saved under **Certificates → Panel domain**. Without one it falls back to `RUDDER_PUBLIC_URL`, then to the address the request came in on. An agent that is not on the same machine (Claude, for example) needs an HTTPS domain: save one and press **Check SSL** on the same page to confirm the certificate is trusted, covers the domain, and is not about to expire.
+The address Dymini Panel gives agents is the panel domain saved under **Certificates → Panel domain**. Without one it falls back to `DYMINI_PANEL_PUBLIC_URL`, then to the address the request came in on. An agent that is not on the same machine (Claude, for example) needs an HTTPS domain: save one and press **Check SSL** on the same page to confirm the certificate is trusted, covers the domain, and is not about to expire.
 
 **Admin → AI agents** lists every approval, the template, and the last time it was used. **Revoke** cuts off the access token and the refresh token immediately.
 
@@ -17,7 +17,7 @@ The address Rudder gives agents is the panel domain saved under **Certificates �
 
 OAuth authorization accepts non-empty `state` values up to 4096 bytes and echoes them unchanged in the callback after approval. This supports agents that encode longer sign-in context in state, such as Devin.
 
-Dynamic registration at `/oauth/register` supports public clients (`none`, the default) and confidential clients (`client_secret_post` or `client_secret_basic`), including server-side agents such as Devin. `client_name` is optional and defaults to “MCP client”; extra registration fields are ignored. Confidential registrations return a client secret once, with no expiry; Rudder stores only its hash. Keep that secret private. For token exchanges, refreshes, and revocation, confidential clients may send the secret through either HTTP Basic or the request body, regardless of which secret method they registered. Public clients must not send a secret. Basic credentials are form-URL-encoded before being joined with `:` and base64-encoded. All authorization code exchanges still require S256 PKCE.
+Dynamic registration at `/oauth/register` supports public clients (`none`, the default) and confidential clients (`client_secret_post` or `client_secret_basic`), including server-side agents such as Devin. `client_name` is optional and defaults to “MCP client”; extra registration fields are ignored. Confidential registrations return a client secret once, with no expiry; Dymini Panel stores only its hash. Keep that secret private. For token exchanges, refreshes, and revocation, confidential clients may send the secret through either HTTP Basic or the request body, regardless of which secret method they registered. Public clients must not send a secret. Basic credentials are form-URL-encoded before being joined with `:` and base64-encoded. All authorization code exchanges still require S256 PKCE.
 
 Discovery is available at both `/.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource/mcp`, and at both `/.well-known/oauth-authorization-server` and `/.well-known/oauth-authorization-server/mcp`.
 
@@ -45,7 +45,7 @@ permissions by calling the HTTP API directly or by creating another key.
 | --- | --- |
 | **Full control** | Read and change every setting and all data, including users, tokens, and updates. |
 | **Read everything** | Read every setting and all data. Cannot change anything. |
-| **Operate** | Deploy and manage apps, domains, databases, stacks, caches, logs, monitors, Rudder Access, and security checks. Can read the Cloudflare Zero Trust settings but not change them. Cannot change users, tokens, backups, or panel updates. |
+| **Operate** | Deploy and manage apps, domains, databases, stacks, caches, logs, monitors, Dymini Panel Access, and security checks. Can read the Cloudflare Zero Trust settings but not change them. Cannot change users, tokens, backups, or panel updates. |
 | **Watch** | Read health, logs, metrics, cache stats, and security checks. |
 | **Custom** | Only the boxes you tick. A write permission includes the matching read permission. |
 
@@ -58,7 +58,7 @@ individual tools. A tool is allowed when either its scope is granted or its name
 is explicitly selected. Group scopes include future tools in that scope;
 individual selections do not. To remove one tool from a group, clear the group
 scope and select the tools you want instead. The agent's `tools/list` advertises
-only its permitted tools. Self-inspection (`rudder_whoami`) is always available.
+only its permitted tools. Self-inspection (`dymini_panel_whoami`) is always available.
 
 Use **AI agents → Edit permissions** to change an active approval without signing
 in again. The same checks protect direct HTTP requests and delegated API keys.
@@ -84,7 +84,7 @@ summaries are deliberately generic; read the tool response for the detailed
 reason. Unknown tool names are stored as `unknown`, not as caller-supplied text.
 Unrecognized credentials have no client/grant attribution; recognized expired
 or revoked access tokens retain their attribution while their hash exists.
-`rudder_whoami` has the synthetic scope `self`.
+`dymini_panel_whoami` has the synthetic scope `self`.
 
 A durable entry is created before dispatch. If it cannot be written, the action
 does not run. Completed calls are finalized afterwards. If finalization fails,
@@ -130,6 +130,6 @@ Every panel carries its own copy of these guides, so an agent reads the document
 
 Pass `q` as a query argument: `{"query": {"q": "deploy an image"}}`. A custom approval needs the **System** read permission ticked to use them.
 
-## Teach agents about Rudder (skills)
+## Teach agents about Dymini Panel (skills)
 
-`rudder skills install` puts a Rudder skill where AI coding agents look for skills. It explains what Rudder is, how to use the CLI and MCP tools, which actions need your confirmation, and how to search these docs. See [Skills for AI agents](cli.md#7-skills-for-ai-agents) in the CLI guide.
+`dymini-panel skills install` puts a Dymini Panel skill where AI coding agents look for skills. It explains what Dymini Panel is, how to use the CLI and MCP tools, which actions need your confirmation, and how to search these docs. See [Skills for AI agents](cli.md#7-skills-for-ai-agents) in the CLI guide.

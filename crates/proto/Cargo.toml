@@ -1,11 +1,11 @@
 [package]
-name = "rudder-proto"
+name = "dymini-panel-proto"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
-description = "gRPC contract between the Rudder panel and node agents"
+description = "gRPC contract between the Dymini Panel and node agents"
 
 [dependencies]
 prost = "0.14.4"

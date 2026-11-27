@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use dymini_panel_core::{BuildPlan, BuildStrategy};
+use dymini_panel_node::ops::{BuildCachePrune, BuildEvent, BuildRequest, BuildStatus};
 use futures_util::StreamExt;
-use rudder_core::{BuildPlan, BuildStrategy};
-use rudder_node::ops::{BuildCachePrune, BuildEvent, BuildRequest, BuildStatus};
 use tempfile::TempDir;
 
 use super::{cache, runner::Redactor, Builder};
@@ -169,7 +169,7 @@ async fn failures_do_not_replace_good_cache_and_tests_fail_the_build() {
         fixture
             .builder
             .root
-            .join("cache/service-a/branch/rudder-cache.json"),
+            .join("cache/service-a/branch/dymini-panel-cache.json"),
     )
     .unwrap();
     fs::write(
@@ -190,7 +190,7 @@ async fn failures_do_not_replace_good_cache_and_tests_fail_the_build() {
         fixture
             .builder
             .root
-            .join("cache/service-a/branch/rudder-cache.json"),
+            .join("cache/service-a/branch/dymini-panel-cache.json"),
     )
     .unwrap();
     let before: serde_json::Value = serde_json::from_slice(&before).unwrap();
@@ -455,11 +455,11 @@ async fn uploads_are_confined_to_agent_builder_storage_and_running_jobs_are_visi
     let src = fixture.dir.path().join("upload");
     fs::create_dir_all(&src).unwrap();
     fs::write(src.join("Dockerfile"), "FROM scratch\n").unwrap();
-    let archive = rudder_node::tree::pack_files(&src, &["Dockerfile".into()]).unwrap();
+    let archive = dymini_panel_node::tree::pack_files(&src, &["Dockerfile".into()]).unwrap();
     let input = || {
         Box::pin(futures_util::stream::iter(vec![Ok(bytes::Bytes::from(
             archive.clone(),
-        ))])) as rudder_core::ByteStream
+        ))])) as dymini_panel_core::ByteStream
     };
     fixture
         .builder
@@ -470,7 +470,7 @@ async fn uploads_are_confined_to_agent_builder_storage_and_running_jobs_are_visi
         .builder
         .root
         .join("workspaces/upload")
-        .join(rudder_node::tree::manifest_relative("src"));
+        .join(dymini_panel_node::tree::manifest_relative("src"));
     assert!(manifest.is_file());
     fixture.builder.cleanup_workspace("upload").await.unwrap();
     assert!(!manifest.exists());
@@ -529,8 +529,8 @@ fn lru_keeps_recent_entries_and_ignores_active_service_caches() {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("index.json"), "{}").unwrap();
         fs::write(
-            dir.join("rudder-cache.json"),
-            serde_json::to_vec(&rudder_node::ops::BuildCacheEntry {
+            dir.join("dymini-panel-cache.json"),
+            serde_json::to_vec(&dymini_panel_node::ops::BuildCacheEntry {
                 service_id: service.into(),
                 cache_key: key.into(),
                 size_bytes: 2,

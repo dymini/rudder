@@ -24,7 +24,7 @@ async fn health(State(state): State<AppState>) -> Result<Json<HealthResponse>, A
         .map_err(ApiError::database)?;
     Ok(Json(HealthResponse {
         status: "ok",
-        version: rudder_core::VERSION,
-        product: rudder_core::PRODUCT,
+        version: dymini_panel_core::VERSION,
+        product: dymini_panel_core::PRODUCT,
     }))
 }

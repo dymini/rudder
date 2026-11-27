@@ -30,8 +30,8 @@ under 60 MB idle) and add another stateful service to back up.
   drops lines rather than blocking producers; a lagging tail client gets a
   `{"type":"lagged"}` notice.
 - The local collector polls `list_containers` every 10 s through `NodeDriver` and
-  follows `rudder.managed` containers (`app`), `rudder-traefik` (`proxy`, JSON access
-  log, host mapped to service through `domains`), and `rudder-cache` (`cache`). It resumes
+  follows `dymini-panel.managed` containers (`app`), `dymini-panel-traefik` (`proxy`, JSON access
+  log, host mapped to service through `domains`), and `dymini-panel-cache` (`cache`). It resumes
   from the last stored line of that container within an hour, else 15 s back. Env values
   and database credentials are redacted before parsing. Remote servers ship their own
   lines through the agent (M11), so the collector never dials remote Docker.

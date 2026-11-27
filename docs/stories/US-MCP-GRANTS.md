@@ -13,7 +13,7 @@ title: "Delegate API keys safely, choose MCP tools, and monitor AI activity"
 type: story
 unit: 1
 updated_at: "2026-11-22T17:24:50.126495889+00:00"
-verify: "cargo fmt --all --check; SQLX_OFFLINE=true cargo clippy --workspace --all-targets -- -D warnings; DATABASE_URL=postgres://rudder:rudder@localhost:5432/rudder cargo sqlx prepare --workspace -- --all-targets; DATABASE_URL=postgres://rudder:rudder@localhost:5432/rudder SQLX_OFFLINE=true cargo test -p rudder-server --lib --test mcp --test mcp_grants --test auth --test openapi_snapshot --no-fail-fast; pnpm --dir web check:i18n; pnpm --dir web build; node --test web/scripts/ansi.test.mjs web/scripts/validation.test.mjs"
+verify: "cargo fmt --all --check; SQLX_OFFLINE=true cargo clippy --workspace --all-targets -- -D warnings; DATABASE_URL=postgres://dymini-panel:dymini-panel@localhost:5432/dymini-panel cargo sqlx prepare --workspace -- --all-targets; DATABASE_URL=postgres://dymini-panel:dymini-panel@localhost:5432/dymini-panel SQLX_OFFLINE=true cargo test -p dymini-panel-server --lib --test mcp --test mcp_grants --test auth --test openapi_snapshot --no-fail-fast; pnpm --dir web check:i18n; pnpm --dir web build; node --test web/scripts/ansi.test.mjs web/scripts/validation.test.mjs"
 ---
 
 # Delegate API keys safely, choose MCP tools, and monitor AI activity

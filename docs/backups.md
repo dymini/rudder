@@ -1,6 +1,6 @@
 # Databases and backups
 
-Rudder runs managed databases as containers on a server through the `NodeDriver`
+Dymini Panel runs managed databases as containers on a server through the `NodeDriver`
 and streams their backups to one or more S3-compatible buckets. Nothing is staged
 on the panel's disk: dump output flows through compression, optional encryption,
 hashing, and a bandwidth limiter straight into a multipart upload.
@@ -19,7 +19,7 @@ hashing, and a bandwidth limiter straight into a multipart upload.
   service's environment. The environment list shows keys only. Admins can reveal
   the connection string from the database page (`GET /api/v1/services/{id}/connection`);
   each reveal is written to the audit log.
-- Databases join the internal `rudder-proxy` network. A public port is optional.
+- Databases join the internal `dymini-panel-proxy` network. A public port is optional.
 - Data lives in the named volume `db-<container>`. Deleting a database keeps the
   volume unless `?purge_volume=true` is passed.
 - On a remote server without a connected agent the row is stored and the API
@@ -92,8 +92,8 @@ passphrase is the only way to read the backup.
 2. Decrypt it:
 
    ```bash
-   export RUDDER_BACKUP_PASSPHRASE='your passphrase'
-   rudder backup decrypt --in pg-20260101T030000Z.dump.zst.enc --out pg.dump.zst
+   export DYMINI_PANEL_BACKUP_PASSPHRASE='your passphrase'
+   dymini-panel backup decrypt --in pg-20260101T030000Z.dump.zst.enc --out pg.dump.zst
    ```
 
 3. Decompress: `zstd -d pg.dump.zst` or `gunzip pg.dump.gz`.
@@ -113,6 +113,6 @@ passphrase is the only way to read the backup.
 ## Testing
 
 `crates/server/tests/backups.rs` covers the API without Docker. With
-`RUDDER_DOCKER_TESTS=1` it also starts Postgres, Redis, MariaDB, MongoDB, and an
+`DYMINI_PANEL_DOCKER_TESTS=1` it also starts Postgres, Redis, MariaDB, MongoDB, and an
 S3-compatible server (RustFS; MinIO no longer publishes images) and runs real
 backups and restores against them.

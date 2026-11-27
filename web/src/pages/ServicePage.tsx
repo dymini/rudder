@@ -18,7 +18,7 @@ import {
   ServiceAccess,
   EnvironmentPanel,
   GitSourceCard,
-  RudderImagesCard,
+  DyminiPanelImagesCard,
   type ServiceDetail,
 } from "../components/service-panels";
 import { StackLogs, StackOverview, StackSourceEditor, useStack } from "../components/stacks";
@@ -456,12 +456,12 @@ function Panel({
       ) : service.kind === "compose" ? (
         <>
           <StackOverview serviceId={id} />
-          <RudderImagesCard service={service} />
+          <DyminiPanelImagesCard service={service} />
         </>
       ) : (
         <>
           <DeployImageCard service={service} />
-          <RudderImagesCard service={service} />
+          <DyminiPanelImagesCard service={service} />
         </>
       );
     case "source":

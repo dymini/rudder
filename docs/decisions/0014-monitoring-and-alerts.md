@@ -24,7 +24,7 @@ whole panel, and each would be another stateful service to back up.
 
 - Samples go into the existing day-partitioned `metrics_samples` table, and rollups into
   `metrics_rollups` (`1m`, `5m`, `1h`, each with avg/min/max and the sample count). Server
-  stats are read from `/proc` (`RUDDER_HOST_PROC`, `/host/proc` in the container) and
+  stats are read from `/proc` (`DYMINI_PANEL_HOST_PROC`, `/host/proc` in the container) and
   `statvfs`. Container stats come from the Docker stats API. Both go through new
   `NodeDriver::host_stats` and the existing `container_stats`, so remote servers can
   supply the same data through the agent in M11.
@@ -37,7 +37,7 @@ whole panel, and each would be another stateful service to back up.
   kept as per-minute rates at every level.
 - The chart API picks the resolution from the range: raw up to 1 h, 1m up to 6 h, 5m up to
   48 h, otherwise 1h.
-- Alerts use a pure state machine (`rudder_core::step_alert`): `ok`, then `pending` once a
+- Alerts use a pure state machine (`dymini_panel_core::step_alert`): `ok`, then `pending` once a
   30 s average breaches, then `firing` after the configured duration, and back to `ok` when
   it clears. Fired and resolved transitions are written to `system_events`, as are deploy,
   build, and backup events.
@@ -47,7 +47,7 @@ whole panel, and each would be another stateful service to back up.
   channels that failed, up to 5 attempts. Channel configs are sealed with the master key
   `Cipher`. The API shows only a summary, and empty secret fields on update keep the stored
   value. HTTP channels use reqwest (rustls, 15 s timeout, no redirects, HTTPS for
-  Discord/Slack). Webhooks are signed with HMAC-SHA256 in `X-Rudder-Signature`. SMTP uses
+  Discord/Slack). Webhooks are signed with HMAC-SHA256 in `X-Dymini-Panel-Signature`. SMTP uses
   lettre with rustls and STARTTLS, implicit TLS, or plain for local relays.
 - Pruning removes dangling images and the build cache only. It never touches volumes or
   tagged images.

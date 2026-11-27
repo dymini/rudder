@@ -10,21 +10,27 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use tower::ServiceExt;
 
-fn state(pool: PgPool) -> rudder_server::AppState {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
-    let data_dir = std::env::temp_dir().join(format!("rudder-git-{}", uuid::Uuid::new_v4()));
+fn state(pool: PgPool) -> dymini_panel_server::AppState {
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
+    let data_dir = std::env::temp_dir().join(format!("dymini-panel-git-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&data_dir).unwrap();
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
-        ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_PUBLIC_URL".into(), "https://panel.example".into()),
-        ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        (
+            "DYMINI_PANEL_PUBLIC_URL".into(),
+            "https://panel.example".into(),
+        ),
+        (
+            "DYMINI_PANEL_DATA_DIR".into(),
+            data_dir.display().to_string(),
+        ),
     ]);
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::AppState::new(pool, config)
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    dymini_panel_server::AppState::new(pool, config)
 }
 
 struct Reply {
@@ -56,7 +62,7 @@ async fn call_raw(
 ) -> Reply {
     let mut builder = Request::builder().method(method).uri(path);
     if let Some(cookie) = cookie {
-        builder = builder.header("cookie", format!("rudder_session={cookie}"));
+        builder = builder.header("cookie", format!("dymini_panel_session={cookie}"));
     }
     if let Some(csrf) = csrf {
         builder = builder.header("x-csrf-token", csrf);
@@ -79,7 +85,7 @@ async fn call_raw(
         .get("set-cookie")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .and_then(|pair| pair.strip_prefix("rudder_session="))
+        .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
         .map(str::to_owned);
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let body = if bytes.is_empty() {
@@ -122,7 +128,7 @@ fn hmac_sha256(key: &[u8], message: &[u8]) -> String {
 #[sqlx::test(migrations = "./migrations")]
 async fn builders_inventory_creation_validation_offline_cache_and_permissions(pool: PgPool) {
     let state = state(pool.clone());
-    let app = rudder_server::router(state.clone());
+    let app = dymini_panel_server::router(state.clone());
     let (cookie, csrf) = owner(&app).await;
     let empty = call(&app, "GET", "/api/v1/builders", Some(&cookie), None, None).await;
     assert_eq!(empty.status, StatusCode::OK);
@@ -279,7 +285,7 @@ async fn builders_inventory_creation_validation_offline_cache_and_permissions(po
 
 #[sqlx::test(migrations = "./migrations")]
 async fn source_build_settings_validate_builder_and_preserve_settings_when_omitted(pool: PgPool) {
-    let app = rudder_server::router(state(pool.clone()));
+    let app = dymini_panel_server::router(state(pool.clone()));
     let (cookie, csrf) = owner(&app).await;
     let server: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO servers (name,kind) VALUES ('remote','remote') RETURNING id",
@@ -390,7 +396,7 @@ async fn owner(app: &axum::Router) -> (String, String) {
 #[sqlx::test(migrations = "./migrations")]
 async fn webhook_enqueues_and_remote_build_fails_closed(pool: PgPool) {
     let state = state(pool);
-    let app = rudder_server::router(state.clone());
+    let app = dymini_panel_server::router(state.clone());
     let (cookie, csrf) = owner(&app).await;
     let docs = call(&app, "GET", "/api/openapi.json", None, None, None).await;
     let document = docs.body.to_string();
@@ -623,7 +629,7 @@ async fn webhook_enqueues_and_remote_build_fails_closed(pool: PgPool) {
     )
     .await;
     assert_eq!(queued.status, StatusCode::ACCEPTED);
-    assert!(rudder_server::build_once(&state).await.unwrap());
+    assert!(dymini_panel_server::build_once(&state).await.unwrap());
     let deployments = call(
         &app,
         "GET",

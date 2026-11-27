@@ -6,13 +6,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
-use futures_util::StreamExt;
-use rudder_core::{ByteStream, Error, NodeDriver, TerminalInput};
-use rudder_node::ops::{self, Request, Streaming};
-use rudder_proto::agent::{
+use dymini_panel_core::{ByteStream, Error, NodeDriver, TerminalInput};
+use dymini_panel_node::ops::{self, Request, Streaming};
+use dymini_panel_proto::agent::{
     agent_message, server_message, AgentMessage, Command, CommandResult, Frame, Hello,
 };
-use rudder_proto::NodeAgentClient;
+use dymini_panel_proto::NodeAgentClient;
+use futures_util::StreamExt;
 use serde_json::Value;
 use tokio::sync::{mpsc, watch};
 use tokio_stream::wrappers::ReceiverStream;
@@ -211,7 +211,7 @@ impl Session {
             arch: std::env::consts::ARCH.into(),
             builder_buildx,
             builder_nixpacks,
-            agent_version: rudder_core::VERSION.to_owned(),
+            agent_version: dymini_panel_core::VERSION.to_owned(),
             hostname: crate::host::hostname(),
             docker_version: docker
                 .as_ref()
@@ -313,7 +313,7 @@ impl Session {
             }
             Request::AgentInfo => {
                 let info = serde_json::json!({
-                    "version": rudder_core::VERSION,
+                    "version": dymini_panel_core::VERSION,
                     "target": update::target(),
                 });
                 return reply(&outbox, id, Ok(info)).await;
@@ -584,7 +584,7 @@ fn input_bytes(mut responses: tonic::Streaming<Frame>) -> ByteStream {
 fn terminal_input(
     mut responses: tonic::Streaming<Frame>,
 ) -> (
-    rudder_core::TerminalInputStream,
+    dymini_panel_core::TerminalInputStream,
     tokio::sync::oneshot::Receiver<()>,
 ) {
     let (tx, rx) = mpsc::channel(STREAM_BUFFER);

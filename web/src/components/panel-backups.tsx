@@ -198,7 +198,7 @@ export function PanelBackups() {
                   <span>{formatTime(o.created_at)}</span>
                   <span>{formatBytes(o.size_bytes)}</span>
                   <Badge value={o.presence} />
-                  <span>Rudder {o.version ?? "—"}</span>
+                  <span>Dymini Panel {o.version ?? "—"}</span>
                   <span>
                     {t("Encryption")}:{" "}
                     {o.encrypted ? t("Enabled") : t("Disabled")}

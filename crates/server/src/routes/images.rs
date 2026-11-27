@@ -1,4 +1,4 @@
-//! Rudder Image store (Cloudflare R2 / S3) settings, per-service auto-deploy/retention
+//! Dymini Panel Image store (Cloudflare R2 / S3) settings, per-service auto-deploy/retention
 //! policy, image upload/push with R2 retention pruning, and image deployment.
 
 use axum::body::Body;
@@ -9,11 +9,11 @@ use axum::Json;
 use base64::Engine;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use futures_util::StreamExt;
-use rudder_core::{
+use dymini_panel_core::{
     image_object_key, select_images_to_prune_protecting, validate_image_ref, validate_image_tag,
     validate_prefix, Compression, ImageVersionEntry,
 };
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -67,7 +67,7 @@ pub struct UpdateServiceImagePolicy {
 }
 
 #[derive(Serialize, Clone, ToSchema, sqlx::FromRow)]
-pub struct RudderImageView {
+pub struct DyminiPanelImageView {
     pub id: Uuid,
     pub service_id: Uuid,
     pub destination_id: Option<Uuid>,
@@ -108,7 +108,7 @@ pub struct PushImageQuery {
 
 #[derive(Serialize, ToSchema)]
 pub struct PushedImageResponse {
-    pub image: RudderImageView,
+    pub image: DyminiPanelImageView,
     pub auto_deploy: bool,
     pub deployed: bool,
     pub deployment: Option<DeploymentView>,
@@ -117,7 +117,7 @@ pub struct PushedImageResponse {
 }
 
 #[derive(Deserialize, Default, ToSchema)]
-pub struct DeployRudderImageRequest {
+pub struct DeployDyminiPanelImageRequest {
     pub tag: Option<String>,
     pub image_id: Option<Uuid>,
 }
@@ -207,7 +207,7 @@ async fn update_image_store_settings(
         Some(raw) => {
             let trimmed = raw.trim().trim_matches('/');
             if trimmed.is_empty() {
-                "rudder-images".to_owned()
+                "dymini-panel-images".to_owned()
             } else {
                 validate_prefix(trimmed).map_err(core_error)?;
                 trimmed.to_owned()
@@ -329,7 +329,7 @@ async fn list_service_images(
     State(state): State<AppState>,
     _auth: AuthUser,
     Path(service_id): Path<Uuid>,
-) -> Result<Json<Vec<RudderImageView>>, ApiError> {
+) -> Result<Json<Vec<DyminiPanelImageView>>, ApiError> {
     let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM services WHERE id = $1)")
         .bind(service_id)
         .fetch_one(&state.pool)
@@ -338,11 +338,11 @@ async fn list_service_images(
     if !exists {
         return Err(not_found("service not found"));
     }
-    let rows = sqlx::query_as::<_, RudderImageView>(
+    let rows = sqlx::query_as::<_, DyminiPanelImageView>(
         r#"
         SELECT id, service_id, destination_id, tag, image_ref, git_sha, object_key,
                compression, size_bytes, sha256, r2_present, pushed_by, created_at
-        FROM rudder_images
+        FROM dymini_panel_images
         WHERE service_id = $1
         ORDER BY created_at DESC
         "#,
@@ -401,7 +401,7 @@ async fn push_service_image(
     if service.kind != "application" && service.kind != "compose" {
         return Err(bad(
             "invalid_kind",
-            "Rudder Image push is only available for application and Compose services",
+            "Dymini Panel Image push is only available for application and Compose services",
         ));
     }
 
@@ -485,7 +485,7 @@ async fn push_service_image(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
-        .unwrap_or_else(|| format!("rudder-image/{}:{tag}", service.name));
+        .unwrap_or_else(|| format!("dymini-panel-image/{}:{tag}", service.name));
     validate_image_ref(&image_ref).map_err(core_error)?;
     let object_key = image_object_key(
         &settings.path_prefix,
@@ -569,9 +569,9 @@ async fn push_service_image(
         .filter(|s| !s.is_empty())
         .map(|s| s.chars().take(64).collect::<String>());
 
-    let image_row = sqlx::query_as::<_, RudderImageView>(
+    let image_row = sqlx::query_as::<_, DyminiPanelImageView>(
         r#"
-        INSERT INTO rudder_images (
+        INSERT INTO dymini_panel_images (
             service_id, destination_id, tag, image_ref, git_sha, object_key,
             compression, size_bytes, sha256, r2_present, pushed_by
         )
@@ -612,11 +612,11 @@ async fn push_service_image(
         .or(settings.r2_keep_count);
     let effective_keep_days = service.image_r2_keep_days.or(settings.r2_keep_days);
 
-    let all_images = sqlx::query_as::<_, RudderImageView>(
+    let all_images = sqlx::query_as::<_, DyminiPanelImageView>(
         r#"
         SELECT id, service_id, destination_id, tag, image_ref, git_sha, object_key,
                compression, size_bytes, sha256, r2_present, pushed_by, created_at
-        FROM rudder_images
+        FROM dymini_panel_images
         WHERE service_id = $1
         ORDER BY created_at DESC
         "#,
@@ -660,7 +660,7 @@ async fn push_service_image(
                 && service.current_image.as_deref() != Some(img.image_ref.as_str())
         }) {
             let _ = s3::delete(destination.store.as_ref(), &target.object_key).await;
-            let _ = sqlx::query("UPDATE rudder_images SET r2_present = FALSE WHERE id = $1")
+            let _ = sqlx::query("UPDATE dymini_panel_images SET r2_present = FALSE WHERE id = $1")
                 .bind(target.id)
                 .execute(&state.pool)
                 .await;
@@ -735,14 +735,14 @@ async fn push_service_image(
 
 async fn trigger_r2_deploy(
     state: &AppState,
-    image: &RudderImageView,
+    image: &DyminiPanelImageView,
     trigger: &str,
     actor: Option<Uuid>,
 ) -> Result<DeploymentView, ApiError> {
     if !image.r2_present {
         return Err(conflict(
             "image_pruned_from_r2",
-            "this image version was pruned from Cloudflare R2 to save storage; re-push it from your local machine with 'rudder push'",
+            "this image version was pruned from Cloudflare R2 to save storage; re-push it from your local machine with 'dymini-panel push'",
         ));
     }
     let settings = load_store_settings(&state.pool).await?;
@@ -776,15 +776,15 @@ async fn deploy_service_image_by_selector(
     State(state): State<AppState>,
     auth: AuthUser,
     Path(service_id): Path<Uuid>,
-    Json(body): Json<DeployRudderImageRequest>,
+    Json(body): Json<DeployDyminiPanelImageRequest>,
 ) -> Result<(StatusCode, Json<DeploymentView>), ApiError> {
     auth.require_write()?;
     let row = if let Some(image_id) = body.image_id {
-        sqlx::query_as::<_, RudderImageView>(
+        sqlx::query_as::<_, DyminiPanelImageView>(
             r#"
             SELECT id, service_id, destination_id, tag, image_ref, git_sha, object_key,
                    compression, size_bytes, sha256, r2_present, pushed_by, created_at
-            FROM rudder_images
+            FROM dymini_panel_images
             WHERE id = $1 AND service_id = $2
             "#,
         )
@@ -794,11 +794,11 @@ async fn deploy_service_image_by_selector(
         .await
         .map_err(ApiError::database)?
     } else if let Some(tag) = body.tag.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        sqlx::query_as::<_, RudderImageView>(
+        sqlx::query_as::<_, DyminiPanelImageView>(
             r#"
             SELECT id, service_id, destination_id, tag, image_ref, git_sha, object_key,
                    compression, size_bytes, sha256, r2_present, pushed_by, created_at
-            FROM rudder_images
+            FROM dymini_panel_images
             WHERE service_id = $1 AND tag = $2
             "#,
         )
@@ -808,11 +808,11 @@ async fn deploy_service_image_by_selector(
         .await
         .map_err(ApiError::database)?
     } else {
-        sqlx::query_as::<_, RudderImageView>(
+        sqlx::query_as::<_, DyminiPanelImageView>(
             r#"
             SELECT id, service_id, destination_id, tag, image_ref, git_sha, object_key,
                    compression, size_bytes, sha256, r2_present, pushed_by, created_at
-            FROM rudder_images
+            FROM dymini_panel_images
             WHERE service_id = $1 AND r2_present = TRUE
             ORDER BY created_at DESC
             LIMIT 1
@@ -826,7 +826,7 @@ async fn deploy_service_image_by_selector(
 
     let Some(image) = row else {
         return Err(not_found(
-            "no matching Rudder Image found in Cloudflare R2 for this service",
+            "no matching Dymini Panel Image found in Cloudflare R2 for this service",
         ));
     };
 
@@ -840,11 +840,11 @@ async fn deploy_service_image_by_id(
     Path((service_id, image_id)): Path<(Uuid, Uuid)>,
 ) -> Result<(StatusCode, Json<DeploymentView>), ApiError> {
     auth.require_write()?;
-    let image = sqlx::query_as::<_, RudderImageView>(
+    let image = sqlx::query_as::<_, DyminiPanelImageView>(
         r#"
         SELECT id, service_id, destination_id, tag, image_ref, git_sha, object_key,
                compression, size_bytes, sha256, r2_present, pushed_by, created_at
-        FROM rudder_images
+        FROM dymini_panel_images
         WHERE id = $1 AND service_id = $2
         "#,
     )
@@ -853,7 +853,7 @@ async fn deploy_service_image_by_id(
     .fetch_optional(&state.pool)
     .await
     .map_err(ApiError::database)?
-    .ok_or_else(|| not_found("Rudder Image not found"))?;
+    .ok_or_else(|| not_found("Dymini Panel Image not found"))?;
 
     let view = trigger_r2_deploy(&state, &image, "r2_deploy", Some(auth.id)).await?;
     Ok((StatusCode::ACCEPTED, Json(view)))
@@ -866,11 +866,11 @@ async fn delete_service_image(
     Query(query): Query<DeleteImageQuery>,
 ) -> Result<StatusCode, ApiError> {
     auth.require_write()?;
-    let image = sqlx::query_as::<_, RudderImageView>(
+    let image = sqlx::query_as::<_, DyminiPanelImageView>(
         r#"
         SELECT id, service_id, destination_id, tag, image_ref, git_sha, object_key,
                compression, size_bytes, sha256, r2_present, pushed_by, created_at
-        FROM rudder_images
+        FROM dymini_panel_images
         WHERE id = $1 AND service_id = $2
         "#,
     )
@@ -879,7 +879,7 @@ async fn delete_service_image(
     .fetch_optional(&state.pool)
     .await
     .map_err(ApiError::database)?
-    .ok_or_else(|| not_found("Rudder Image not found"))?;
+    .ok_or_else(|| not_found("Dymini Panel Image not found"))?;
 
     let current_image: Option<String> =
         sqlx::query_scalar("SELECT current_image FROM services WHERE id = $1")
@@ -905,13 +905,13 @@ async fn delete_service_image(
     }
 
     if query.r2_only.unwrap_or(false) {
-        sqlx::query("UPDATE rudder_images SET r2_present = FALSE WHERE id = $1")
+        sqlx::query("UPDATE dymini_panel_images SET r2_present = FALSE WHERE id = $1")
             .bind(image.id)
             .execute(&state.pool)
             .await
             .map_err(ApiError::database)?;
     } else {
-        sqlx::query("DELETE FROM rudder_images WHERE id = $1")
+        sqlx::query("DELETE FROM dymini_panel_images WHERE id = $1")
             .bind(image.id)
             .execute(&state.pool)
             .await

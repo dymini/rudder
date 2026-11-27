@@ -36,13 +36,13 @@ Both redirects land on the web page, not on an API endpoint, so the calls that h
 
 `state` is a blob sealed with the master key (AES-256-GCM) holding the step (`manifest` or `install`), the admin's user id, the provider id, and an expiry one hour out. A forged blob fails to decrypt. A blob from one step is refused at the other. A blob started by one admin is refused for another. The provider id is chosen in step 1 so the webhook URL in the manifest can name it, and a second completion with the same state is a conflict, so a reused code is never exchanged twice.
 
-The address GitHub returns to is `RUDDER_PUBLIC_URL`, else the browser's `Origin`, else the `Host` header. If that address is loopback, private, or `.local`, GitHub cannot deliver webhooks there, so the manifest leaves the webhook out and the UI says so before sending the browser away.
+The address GitHub returns to is `DYMINI_PANEL_PUBLIC_URL`, else the browser's `Origin`, else the `Host` header. If that address is loopback, private, or `.local`, GitHub cannot deliver webhooks there, so the manifest leaves the webhook out and the UI says so before sending the browser away.
 
 The app's webhook is `POST /api/v1/git-providers/{id}/webhook`. It checks `X-Hub-Signature-256` against the app's webhook secret, then starts a build for every application whose source uses this provider, whose repository (`owner/name`, from an HTTPS or SSH URL) matches the event, and whose branch matches the pushed ref. Per-service webhook secrets stay for personal tokens and GitLab.
 
 A pending app cannot be chosen as a service source, and a build that reaches one says the app is not installed yet. `GET /api/v1/git-providers` reports `status`, `app_slug`, and `account`, never secrets. `POST /api/v1/git-providers/{id}/install-link` gives a fresh GitHub link to finish or change an installation.
 
-The GitHub API base is `RUDDER_GITHUB_API_URL` (default `https://api.github.com`), so tests run against a fake. GitHub Enterprise Server is not supported: the github.com web addresses are fixed.
+The GitHub API base is `DYMINI_PANEL_GITHUB_API_URL` (default `https://api.github.com`), so tests run against a fake. GitHub Enterprise Server is not supported: the github.com web addresses are fixed.
 
 ## Alternatives Considered
 

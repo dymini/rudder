@@ -23,7 +23,7 @@ use axum::Json;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use chrono::Utc;
-use rudder_core::{
+use dymini_panel_core::{
     evaluate_hook, github_app_jwt, github_app_manifest, github_repo_full_name, is_private_host,
     validate_app_name, validate_github_login, verify_github_signature, AppManifest, HookInput,
     HookKind, HookOutcome,
@@ -52,7 +52,7 @@ const MAX_RESPONSE_BYTES: usize = 64 * 1024;
 pub struct StartGithubApp {
     /// Create the app under this organization instead of your own account.
     pub organization: Option<String>,
-    /// Name of the app. Defaults to `Rudder-` and four random characters.
+    /// Name of the app. Defaults to `Dymini-Panel-` and four random characters.
     pub name: Option<String>,
 }
 
@@ -178,7 +178,7 @@ fn github_client() -> Result<reqwest::Client, ApiError> {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
         .redirect(reqwest::redirect::Policy::none())
-        .user_agent(format!("rudder/{}", rudder_core::VERSION))
+        .user_agent(format!("dymini-panel/{}", dymini_panel_core::VERSION))
         .build()
         .map_err(|_| github_unreachable())
 }
@@ -225,7 +225,10 @@ async fn start(
             validate_app_name(name).map_err(core_error)?;
             name.to_owned()
         }
-        None => format!("Rudder-{}", hex::encode(rudder_core::random_bytes::<2>())),
+        None => format!(
+            "Dymini-Panel-{}",
+            hex::encode(dymini_panel_core::random_bytes::<2>())
+        ),
     };
     let provider = Uuid::new_v4();
     let base = browser_base(&state, &headers);

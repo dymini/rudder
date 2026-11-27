@@ -2,7 +2,7 @@
 
 ## Dashboard protection and agent paths
 
-Dockside plugin installs default to **Rudder Access enabled**. The plugin settings
+Dockside plugin installs default to **Dymini Panel Access enabled**. The plugin settings
 drawer includes a protection toggle. Configure Access sign-in (portal, Turnstile,
 and email or Google) before opening the dashboard. New policies allow only the
 original panel owner's email and create that Access identity if absent; they do
@@ -77,7 +77,7 @@ targets so the normal UI/API cannot accidentally skip safety orchestration.
 Safety jobs remain disabled and their run stays available for manual management;
 they are not scheduled or automatically deleted with another job's retention.
 If a backup/restore is still active or its completion cannot be established,
-Rudder refuses to clear or restart concurrently. Background orchestration runs in
+Dymini Panel refuses to clear or restart concurrently. Background orchestration runs in
 the panel process: a panel crash requires operator recovery from the retained
 safety run rather than promising crash-resumable transactions. Avoid deployment,
 manual container actions or direct volume writes during recovery. Real Docker,
@@ -90,13 +90,13 @@ in different environments or servers.
 
 ## Install Dockside
 
-Choose a project, environment, server, service name, domain and verified version. Rudder
+Choose a project, environment, server, service name, domain and verified version. Dymini Panel
 generates a 48-character authentication token when left empty and shows it once after
 installation. Secrets are stored encrypted, just like stack environment variables.
 
-Paste an optional `dockside.toml` into the multi-line field. Rudder base64-encodes it into
+Paste an optional `dockside.toml` into the multi-line field. Dymini Panel base64-encodes it into
 `DOCKSIDE_CONFIG_B64`. Empty means the example configuration shipped in the image. Set
-optional R2 credentials for blob write-through, or Rudder/Cloudflare credentials for
+optional R2 credentials for blob write-through, or Dymini Panel/Cloudflare credentials for
 Dockside release targets. Optional secrets are not generated. Verification defaults to on.
 
 Dockside runs on port 7420 behind the domain route; no host port is published. Its compose
@@ -116,7 +116,7 @@ compose volume `<project>_data`, stopping the service for SQLite consistency. Re
 the plugin's backup job disables the old job's schedule; its backup history remains.
 
 **Check for updates** fetches stable, non-draft GitHub releases and verifies each
-`rudder-plugin.json`: schema 1, matching slug and tag version, matching health path/port,
+`dymini-panel-plugin.json`: schema 1, matching slug and tag version, matching health path/port,
 and an image pinned with a SHA-256 digest. This checks descriptor consistency, not a
 cryptographic publisher signature. Trust comes from the curated manifest's GitHub repo
 and HTTPS. Release notes are bounded to 8,000 characters per release. There is no periodic
@@ -151,7 +151,7 @@ All routes use the existing **stacks** scope. Mutations need write permission an
 | POST | `/api/v1/plugin-installs/{id}/update` | Update with `{}` or explicit `{ "version": "0.2.0" }` |
 | POST | `/api/v1/plugin-installs/{id}/backup` | Attach/replace backup with `destination_ids`, optional `schedule`, `keep_last` |
 
-The image variable is managed by Rudder and rejected in user-supplied install values.
+The image variable is managed by Dymini Panel and rejected in user-supplied install values.
 Install returns the service, domain, deployment, generated secrets and install record.
 Without a verified cached release, install/update returns 409; check releases first.
 

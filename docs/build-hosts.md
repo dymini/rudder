@@ -1,6 +1,6 @@
 # Build hosts
 
-A trusted machine at home or elsewhere can build Git applications for Rudder.
+A trusted machine at home or elsewhere can build Git applications for Dymini Panel.
 The panel clones the repository, sends its tracked tree over the existing outbound
 mTLS agent connection, receives the built image and runs the normal health-checked
 deployment. Dockerfile, static and Nixpacks builds share the same build planning.
@@ -22,11 +22,11 @@ Existing services keep building on the panel until their placement is changed.
    the agent bypass keeps open, and the agent session falls back to a
    WebSocket on the panel's HTTPS address when the agent port is unreachable.
 
-   Use the exact command Rudder issues, including its CA fingerprint. The token is
+   Use the exact command Dymini Panel issues, including its CA fingerprint. The token is
    secret, works once and expires in one hour. Do not paste it into tickets or logs.
 3. Append `--with-nixpacks` if the machine should build Nixpacks applications. The
    installer uses the official script with a pinned version (currently 1.41.0).
-4. Run `sudo rudder-agent status`. The Builders page polls automatically; an enrolled
+4. Run `sudo dymini-panel-agent status`. The Builders page polls automatically; an enrolled
    agent becomes online without reloading the page.
 
 The installer needs Linux/systemd. On Debian/Ubuntu it can install missing Docker
@@ -44,10 +44,10 @@ All remote candidates remain listed, including disabled ones.
 ## Status and settings
 
 ```sh
-sudo rudder-agent status
-sudo rudder-agent status --json
-sudo rudder-agent status --data-dir /custom/agent/data --json
-journalctl -u rudder-agent
+sudo dymini-panel-agent status
+sudo dymini-panel-agent status --json
+sudo dymini-panel-agent status --data-dir /custom/agent/data --json
+journalctl -u dymini-panel-agent
 ```
 
 Status reports the panel URL, server ID, enrollment, connection, last connection and
@@ -91,7 +91,7 @@ placement; a second disconnect fails clearly.
 
 ## Cache keys and pruning
 
-Builder workspaces and caches live under `/var/lib/rudder-agent/builder/`, or
+Builder workspaces and caches live under `/var/lib/dymini-panel-agent/builder/`, or
 `<agent-data-dir>/builder/` with a custom agent data directory. They are separate
 from deployment-node files. Buildx exports a local cache per service and opaque
 branch key, with branch then default-branch fallback imports. Successful cache
@@ -129,7 +129,7 @@ last reported catalog; cache mutations require a connected builder.
 
 | Symptom | Check |
 | --- | --- |
-| Host stays offline | Run `rudder-agent status` and inspect `journalctl -u rudder-agent`. Check the panel URL, agent port, CA fingerprint, outbound firewall and clock. |
+| Host stays offline | Run `dymini-panel-agent status` and inspect `journalctl -u dymini-panel-agent`. Check the panel URL, agent port, CA fingerprint, outbound firewall and clock. |
 | Online but Buildx unavailable | Enable builder mode in both panel and agent config; rerun the builder installer. Check `docker info` and `docker buildx version`, then restart the agent. |
 | Nixpacks jobs wait | Install with `--with-nixpacks`, check `nixpacks --version`, then restart the agent to refresh capabilities. |
 | Queued with free slots | Check deployment architecture, selected host, enabled/paused/draining state, strategy capabilities and global build pause. Read the queued deployment's visible waiting reason. |

@@ -27,7 +27,7 @@ export function PluginBackupManagement({ install }: { install: Install }) {
   return <div className="mt-6 min-w-0 space-y-5">
     <section className="space-y-2 border-t border-line pt-4">
       <h3 className="font-semibold">{t("Dashboard protection")}</h3>
-      <label className="flex min-h-10 items-center gap-2"><input type="checkbox" checked={install.access_enabled} disabled={protect.isPending || busy} onChange={(e) => protect.mutate(e.target.checked)} />{t("Protect the dashboard with Rudder Access")}</label>
+      <label className="flex min-h-10 items-center gap-2"><input type="checkbox" checked={install.access_enabled} disabled={protect.isPending || busy} onChange={(e) => protect.mutate(e.target.checked)} />{t("Protect the dashboard with Dymini Panel Access")}</label>
       <p className="text-xs text-muted">{t("All other paths require Access. These API prefixes bypass Access but still require Dockside's bearer token:")}</p>
       <p className="break-all font-mono text-xs">{install.access_bypass_paths.join(", ")}</p>
       <p className="text-xs text-muted">{t("Configure Access sign-in before opening the dashboard. Existing Access rules are preserved.")}</p>
@@ -82,6 +82,6 @@ function PluginJob({ job, install, busy, destinations }: { job: Job; install: In
       <details><summary className="min-h-10 cursor-pointer py-2">{t("Logs")}</summary><LogPre empty={t("No log output yet.")} className="mt-2">{item.logs}</LogPre></details>
     </div>)}</div>
     {runs.data?.length === limit && limit < 500 ? <Button quiet onClick={() => setLimit(Math.min(500, limit + 50))}>{t("Load more")}</Button> : null}
-    {selected ? <Dialog open onClose={() => { if (!restore.isPending) setSelected(null); }} title={t("Restore into this install")}><p className="mb-3 text-sm">{t("Rudder stops the service, saves a separate unfiltered safety backup, replaces the data volume, starts the service and checks health. A failed restore rolls back to the safety copy.")}</p><p className="mb-3 break-all font-mono text-xs">{selected.id}</p><Button disabled={restore.isPending || busy || active} onClick={() => restore.mutate(selected)}>{t("Restore")}</Button></Dialog> : null}
+    {selected ? <Dialog open onClose={() => { if (!restore.isPending) setSelected(null); }} title={t("Restore into this install")}><p className="mb-3 text-sm">{t("Dymini Panel stops the service, saves a separate unfiltered safety backup, replaces the data volume, starts the service and checks health. A failed restore rolls back to the safety copy.")}</p><p className="mb-3 break-all font-mono text-xs">{selected.id}</p><Button disabled={restore.isPending || busy || active} onClick={() => restore.mutate(selected)}>{t("Restore")}</Button></Dialog> : null}
   </article>;
 }

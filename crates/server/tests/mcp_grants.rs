@@ -48,13 +48,16 @@ async fn fixture(
             "DATABASE_URL".into(),
             std::env::var("DATABASE_URL").unwrap(),
         ),
-        ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_PUBLIC_URL".into(), "https://panel.example".into()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        (
+            "DYMINI_PANEL_PUBLIC_URL".into(),
+            "https://panel.example".into(),
+        ),
     ]);
-    let app = rudder_server::router(rudder_server::AppState::new(
+    let app = dymini_panel_server::router(dymini_panel_server::AppState::new(
         pool.clone(),
-        rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap(),
+        dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap(),
     ));
     let user: Uuid = sqlx::query_scalar("INSERT INTO users (email, password_hash, role, display_name) VALUES ('mcp@example.com','unused','admin','MCP owner') RETURNING id").fetch_one(pool).await.unwrap();
     sqlx::query("INSERT INTO oauth_clients(client_id, client_name, redirect_uris) VALUES ('test-client','Test client', ARRAY['http://127.0.0.1/callback'])").execute(pool).await.unwrap();

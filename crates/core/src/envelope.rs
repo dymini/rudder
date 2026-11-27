@@ -10,7 +10,7 @@
 //! The key is Argon2id(passphrase, salt) with m=19456 KiB, t=2, p=1. Frame `n`
 //! uses nonce `prefix || n as u32`, and the associated data is one byte: 1 for
 //! the final frame, 0 otherwise. A stream that ends without a final frame is
-//! rejected, so truncation is detected. `rudder backup decrypt` reverses this.
+//! rejected, so truncation is detected. `dymini-panel backup decrypt` reverses this.
 
 use aes_gcm::aead::array::Array;
 use aes_gcm::aead::{Aead, KeyInit, Payload};
@@ -174,7 +174,7 @@ impl Decryptor {
                     }
                     if &self.buffer[..8] != MAGIC {
                         return Err(Error::Validation(
-                            "object is not a Rudder encrypted backup".into(),
+                            "object is not a Dymini Panel encrypted backup".into(),
                         ));
                     }
                     let mut salt = [0u8; 16];

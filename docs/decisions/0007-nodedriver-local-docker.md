@@ -24,7 +24,7 @@ Every server, including the panel host and later agents, must create containers,
 
 ## Decision
 
-`NodeDriver` is an `async_trait` in `rudder-core`. `LocalDriver` implements it with bollard against the Unix socket. `docker compose` is the only shell-out, and it receives a prebuilt argv (`compose_args`) with the project name validated and the file path as one argument. File writes are confined to the panel data directory. Environment variable values are encrypted and the API returns keys only. The panel inserts one `local` server row on boot. A remote server row stores a one-hour join token as a SHA-256 hash and returns the plaintext once.
+`NodeDriver` is an `async_trait` in `dymini-panel-core`. `LocalDriver` implements it with bollard against the Unix socket. `docker compose` is the only shell-out, and it receives a prebuilt argv (`compose_args`) with the project name validated and the file path as one argument. File writes are confined to the panel data directory. Environment variable values are encrypted and the API returns keys only. The panel inserts one `local` server row on boot. A remote server row stores a one-hour join token as a SHA-256 hash and returns the plaintext once.
 
 ## Alternatives Considered
 

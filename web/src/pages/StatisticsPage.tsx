@@ -192,7 +192,7 @@ export function StatisticsPage() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold">{t("Statistics")}</h1>
           <p className="mt-1 text-sm text-muted">
-            {t("Traffic, resources, and operations across Rudder.")}
+            {t("Traffic, resources, and operations across Dymini Panel.")}
           </p>
         </div>
         <div

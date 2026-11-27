@@ -5,7 +5,7 @@
 //! address. Closing the pull request removes the copy. Forks are ignored: the
 //! head repository must be the same one the service tracks.
 
-use rudder_core::{preview_hostname, validate_branch};
+use dymini_panel_core::{preview_hostname, validate_branch};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -71,7 +71,7 @@ pub async fn handle(
             .spec
             .pointer("/git/repo")
             .and_then(Value::as_str)
-            .and_then(rudder_core::github_repo_full_name);
+            .and_then(dymini_panel_core::github_repo_full_name);
         if git_repo.as_deref() != Some(repo.as_str()) {
             continue;
         }
@@ -332,7 +332,7 @@ async fn remove_app_containers(state: &AppState, id: Uuid, server_id: Uuid) {
         return;
     };
     for container in list {
-        if container.labels.get("rudder.service") == Some(&label) {
+        if container.labels.get("dymini-panel.service") == Some(&label) {
             let _ = driver.remove_container(&container.id, true).await;
         }
     }
@@ -364,7 +364,7 @@ async fn add_preview_domain(
     .await
     .map_err(ApiError::database)?
     .unwrap_or(80);
-    let nonce = hex::encode(rudder_core::random_bytes::<4>());
+    let nonce = hex::encode(dymini_panel_core::random_bytes::<4>());
     let host = preview_hostname(name, &nonce, server.public_ip.as_deref().unwrap_or(""))
         .map_err(|error| bad("invalid", error.to_string()))?;
     let compose_service = match stacks::domain_target(state, service_id, None).await {
@@ -426,7 +426,7 @@ mod tests {
         let name = preview_name(&long, 128);
         assert!(name.len() <= 63);
         assert!(name.ends_with("-pr-128"));
-        rudder_core::validate_name(&name).unwrap();
+        dymini_panel_core::validate_name(&name).unwrap();
         assert_eq!(preview_name("web", 7), "web-pr-7");
     }
 }

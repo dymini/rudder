@@ -1,10 +1,10 @@
 # Remote servers and the agent
 
-A remote server runs `rudder-agent`, a single static binary. The agent dials the panel, runs the panel's Docker calls on its own machine, and ships that machine's logs and metrics back. The panel never connects to the server, so servers behind NAT or a firewall work as long as they can reach the panel.
+A remote server runs `dymini-panel-agent`, a single static binary. The agent dials the panel, runs the panel's Docker calls on its own machine, and ships that machine's logs and metrics back. The panel never connects to the server, so servers behind NAT or a firewall work as long as they can reach the panel.
 
 ```
-panel :7443 (gRPC, mTLS)  ◀── dial out ──  rudder-agent ── Docker Engine
-                                             └─ rudder-traefik, rudder-cache, apps
+panel :7443 (gRPC, mTLS)  ◀── dial out ──  dymini-panel-agent ── Docker Engine
+                                             └─ dymini-panel-traefik, dymini-panel-cache, apps
 ```
 
 When the panel's agent port is unreachable — for example the panel sits behind a
@@ -31,13 +31,13 @@ the end-to-end mTLS handshake is unchanged.
    The panel URL must use `https://`; `http://` is refused unless it points at `localhost`, `127.0.0.1`, or `[::1]`, because enrollment receives the certificate authority the agent trusts from then on. `--ca-sha256` is the SHA-256 fingerprint of the panel's agent CA, and the panel puts it in the command it shows. If the CA the panel returns has a different fingerprint, enrollment stops and nothing is saved.
 
    The installer needs Docker, systemd, `curl`, and `sha256sum`. It:
-   - downloads `rudder-agent` for the machine's architecture from the panel (`/mcp/downloads/...`, then `/downloads/...`), or from the GitHub release when the panel has no bundled copy or a login page answers instead, and checks its SHA-256;
-   - runs `rudder-agent enroll`, which creates a private key on the server and exchanges the token and a certificate request for a client certificate;
-   - creates the `rudder-proxy` network and starts `rudder-traefik` (ports 80 and 443, JSON access log) and `rudder-cache` (admin port on `127.0.0.1:9090` only);
-   - installs and starts the `rudder-agent` systemd unit.
+   - downloads `dymini-panel-agent` for the machine's architecture from the panel (`/mcp/downloads/...`, then `/downloads/...`), or from the GitHub release when the panel has no bundled copy or a login page answers instead, and checks its SHA-256;
+   - runs `dymini-panel-agent enroll`, which creates a private key on the server and exchanges the token and a certificate request for a client certificate;
+   - creates the `dymini-panel-proxy` network and starts `dymini-panel-traefik` (ports 80 and 443, JSON access log) and `dymini-panel-cache` (admin port on `127.0.0.1:9090` only);
+   - installs and starts the `dymini-panel-agent` systemd unit.
 3. The server turns **online** within a few seconds. The Servers page shows the agent version, hostname, OS, Docker version, and last contact.
 
-Options: `--version v1.2.3` pins the GitHub release, `--email` sets the Let's Encrypt account email, and `--no-edge` skips Traefik and the cache. Running the installer again upgrades the binary and keeps the existing identity. To move a server to a new identity, use **Join command** on the server row to get a fresh token, delete `/var/lib/rudder-agent` on the server, and rerun the command. The old certificate stops working as soon as the new one is issued.
+Options: `--version v1.2.3` pins the GitHub release, `--email` sets the Let's Encrypt account email, and `--no-edge` skips Traefik and the cache. Running the installer again upgrades the binary and keeps the existing identity. To move a server to a new identity, use **Join command** on the server row to get a fresh token, delete `/var/lib/dymini-panel-agent` on the server, and rerun the command. The old certificate stops working as soon as the new one is issued.
 
 ## Agent update verification
 
@@ -98,7 +98,7 @@ atomic directory exchange keeps the old cache on failure; LRU runs after every j
 Concurrent builds of different services are supported; overlapping builds of the
 same service are rejected to protect cache imports/exports. Global pruning skips
 active services, so a byte limit can be temporarily exceeded until those jobs finish.
-The configured default limit is 20 GiB. Cache storage is separate from Rudder's HTTP
+The configured default limit is 20 GiB. Cache storage is separate from Dymini Panel's HTTP
 cache.
 
 The panel dispatches jobs concurrently. Panel builds share the configured panel
@@ -138,9 +138,9 @@ instance. It does not prune the default/shared Docker build cache.
 
 ```sh
 stamp=$(date +%s)
-BUILDX_BUILDER="rudder-builder-smoke-$stamp" \
-RUDDER_BUILDER_SMOKE_DIR="$HOME/rudder-builder-smoke-$stamp" \
-cargo test -p rudder-agent --test builder_docker -- --ignored --nocapture
+BUILDX_BUILDER="dymini-panel-builder-smoke-$stamp" \
+DYMINI_PANEL_BUILDER_SMOKE_DIR="$HOME/dymini-panel-builder-smoke-$stamp" \
+cargo test -p dymini-panel-agent --test builder_docker -- --ignored --nocapture
 ```
 
 The evidence directory must not exist. JSON event logs persist there, while test
@@ -157,12 +157,12 @@ listener bound only to the Docker bridge gateway, not a public interface.
 - The join token is stored only as a SHA-256 hash, works once, and expires after an hour. Enrollment is rate limited and audited (`server.enroll`).
 - The agent's private key never leaves the server. The panel signs the request's public key with its own certificate authority, whose key is sealed with the master key.
 - Every gRPC call requires a client certificate from that CA, and the certificate's fingerprint must match the server row. Deleting a server, or enrolling it again, disconnects the old session and rejects its certificate.
-- The agent verifies the panel against the same CA using the name `rudder-panel`, so the panel can be reached by IP address.
-- The panel only sends `NodeDriver` operations. File writes are confined to `/var/lib/rudder` on the server, with mode 0600.
+- The agent verifies the panel against the same CA using the name `dymini-panel`, so the panel can be reached by IP address.
+- The panel only sends `NodeDriver` operations. File writes are confined to `/var/lib/dymini-panel` on the server, with mode 0600.
 
 ## Telemetry and outages
 
-The agent samples host and container stats every 10 seconds and follows the output of Rudder-managed containers, `rudder-traefik`, and `rudder-cache`. It keeps doing this while the panel is unreachable and holds up to 20,000 log lines (4 MiB) and one hour of stats in memory. When the buffer is full the oldest items are dropped; the server row counts them (`telemetry_dropped`). Batches are resent until the panel acknowledges them. Log positions are saved only after acknowledgement, so restarting the agent re-reads missed lines from Docker.
+The agent samples host and container stats every 10 seconds and follows the output of Dymini-Panel-managed containers, `dymini-panel-traefik`, and `dymini-panel-cache`. It keeps doing this while the panel is unreachable and holds up to 20,000 log lines (4 MiB) and one hour of stats in memory. When the buffer is full the oldest items are dropped; the server row counts them (`telemetry_dropped`). Batches are resent until the panel acknowledges them. Log positions are saved only after acknowledgement, so restarting the agent re-reads missed lines from Docker.
 
 The agent reconnects with backoff from 1 to 30 seconds. The panel marks the server offline when the session ends and records `server.online` and `server.offline` events, which the alert rules can notify on.
 
@@ -178,7 +178,7 @@ family that Cloudflare Access's agent bypass keeps open:
   `/mcp/downloads/...`,
 - the session dials a WebSocket at `/mcp/api/v1/agent/tunnel`, which the panel
   pipes to its internal agent listener. The mTLS handshake happens inside the
-  socket, so the tunnel never sees credentials and `RUDDER_AGENT_BIND` can stay
+  socket, so the tunnel never sees credentials and `DYMINI_PANEL_AGENT_BIND` can stay
   bound to the panel host (or a private interface) only.
 
 Agents enrolled before the panel closed its ports keep using the direct
@@ -189,9 +189,9 @@ dial fails. No flag is needed on either side.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `RUDDER_AGENT_BIND` | `0.0.0.0:7443` | gRPC listener for agents, or `off` |
-| `RUDDER_AGENT_URL` | panel host + agent port | Address agents are told to dial (`https://` only), for example when a proxy or NAT changes the port |
-| `RUDDER_DIST_DIR` | `/usr/share/rudder/dist` | Agent binaries served at `/downloads/rudder-agent-<arch>-unknown-linux-musl` with a `.sha256` file |
+| `DYMINI_PANEL_AGENT_BIND` | `0.0.0.0:7443` | gRPC listener for agents, or `off` |
+| `DYMINI_PANEL_AGENT_URL` | panel host + agent port | Address agents are told to dial (`https://` only), for example when a proxy or NAT changes the port |
+| `DYMINI_PANEL_DIST_DIR` | `/usr/share/dymini-panel/dist` | Agent binaries served at `/downloads/dymini-panel-agent-<arch>-unknown-linux-musl` with a `.sha256` file |
 
 ## Agent files and commands
 
@@ -211,15 +211,15 @@ Nixpacks installation script with `NIXPACKS_VERSION=1.41.0` pinned and verifies 
 These installation paths require network access; package conflicts stop with an
 actionable error rather than removing an existing container runtime.
 
-The installer writes `{"builder":true}` to `/var/lib/rudder-agent/config.json`.
-Alternatively set it there or run `rudder-agent run --builder`. Restart the service
+The installer writes `{"builder":true}` to `/var/lib/dymini-panel-agent/config.json`.
+Alternatively set it there or run `dymini-panel-agent run --builder`. Restart the service
 after changing config. Ordinary agents do not advertise builder capabilities or
 accept builder workspace uploads unless builder mode is enabled. Build workspaces
-and caches live in `/var/lib/rudder-agent/builder/`; deployment files remain under
-`/var/lib/rudder/`. The installer prints status and fails clearly if connection
+and caches live in `/var/lib/dymini-panel-agent/builder/`; deployment files remain under
+`/var/lib/dymini-panel/`. The installer prints status and fails clearly if connection
 has not succeeded within 30 seconds. An existing enrollment is preserved on reruns.
 
-`rudder-agent status --json` reads the local credential-free `status.json`, maintained
+`dymini-panel-agent status --json` reads the local credential-free `status.json`, maintained
 with atomic replacement and mode 0600. It includes panel/server identity, enrollment,
 connection, last connect/error, builder mode, Buildx/Nixpacks, architecture, active
 job IDs and aggregate cache bytes. A heartbeat updates it every five seconds;
@@ -266,21 +266,21 @@ also requires the Nixpacks capability. Settings do not cause a build automatical
 
 | Path | Content |
 | --- | --- |
-| `/usr/local/bin/rudder-agent` | The binary |
-| `/var/lib/rudder-agent/` | Identity files, `config.json`, `status.json`, `log-cursors.json` (mode 0600, directory 0700), and `builder/` workspaces/caches |
-| `/var/lib/rudder/` | Files the panel writes: Traefik routes and certificates, cache rules, compose stacks |
-| `/etc/systemd/system/rudder-agent.service` | The unit |
+| `/usr/local/bin/dymini-panel-agent` | The binary |
+| `/var/lib/dymini-panel-agent/` | Identity files, `config.json`, `status.json`, `log-cursors.json` (mode 0600, directory 0700), and `builder/` workspaces/caches |
+| `/var/lib/dymini-panel/` | Files the panel writes: Traefik routes and certificates, cache rules, compose stacks |
+| `/etc/systemd/system/dymini-panel-agent.service` | The unit |
 
 ```
-rudder-agent enroll --server <panel URL> --token <token> [--ca-sha256 <hex>]
-                    [--data-dir /var/lib/rudder-agent]
-rudder-agent run [--data-dir /var/lib/rudder-agent] [--node-dir /var/lib/rudder]
+dymini-panel-agent enroll --server <panel URL> --token <token> [--ca-sha256 <hex>]
+                    [--data-dir /var/lib/dymini-panel-agent]
+dymini-panel-agent run [--data-dir /var/lib/dymini-panel-agent] [--node-dir /var/lib/dymini-panel]
                  [--docker-socket <path>] [--cache-admin-url <url>] [--builder]
-rudder-agent status [--data-dir /var/lib/rudder-agent] [--json]
-rudder-agent --version
+dymini-panel-agent status [--data-dir /var/lib/dymini-panel-agent] [--json]
+dymini-panel-agent --version
 ```
 
-`journalctl -u rudder-agent` shows the agent's JSON log. The same lines appear in the panel's log explorer under source `agent`.
+`journalctl -u dymini-panel-agent` shows the agent's JSON log. The same lines appear in the panel's log explorer under source `agent`.
 
 ## Building the agent
 
@@ -288,7 +288,7 @@ rudder-agent --version
 rustup target add x86_64-unknown-linux-musl
 sudo apt-get install musl-tools
 CC_x86_64_unknown_linux_musl=musl-gcc \
-  cargo build --release -p rudder-agent --target x86_64-unknown-linux-musl
+  cargo build --release -p dymini-panel-agent --target x86_64-unknown-linux-musl
 ```
 
 The result is a static-pie binary of about 11 MB.

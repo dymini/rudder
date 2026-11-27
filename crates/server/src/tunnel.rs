@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use axum::{extract::State, Json};
 use chrono::{DateTime, Utc};
-use rudder_core::{parse_version, GithubRelease, NodeDriver};
+use dymini_panel_core::{parse_version, GithubRelease, NodeDriver};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{Postgres, Transaction};
@@ -179,10 +179,12 @@ pub(crate) async fn check_release(state: &AppState, force: bool) -> Result<Saved
         )
         .await?;
         let releases: Vec<GithubRelease> = serde_json::from_slice(&bytes).map_err(|_| {
-            rudder_core::Error::Node("GitHub returned invalid cloudflared release data".into())
+            dymini_panel_core::Error::Node(
+                "GitHub returned invalid cloudflared release data".into(),
+            )
         })?;
         newest(releases).ok_or_else(|| {
-            rudder_core::Error::Node("GitHub returned no stable cloudflared release".into())
+            dymini_panel_core::Error::Node("GitHub returned no stable cloudflared release".into())
         })
     }
     .await;
@@ -429,17 +431,17 @@ mod tests {
         use std::collections::HashMap;
         let mut vars = HashMap::from([
             ("DATABASE_URL".into(), "postgres://localhost/test".into()),
-            ("RUDDER_MASTER_KEY".into(), "aa".repeat(32)),
+            ("DYMINI_PANEL_MASTER_KEY".into(), "aa".repeat(32)),
         ]);
         let normal = crate::Config::from_map(&vars, |_| unreachable!()).expect("config");
         assert!(!normal.cloudflared_image_overridden);
         vars.insert(
-            "RUDDER_CLOUDFLARED_IMAGE".into(),
-            rudder_core::DEFAULT_CLOUDFLARED_IMAGE.into(),
+            "DYMINI_PANEL_CLOUDFLARED_IMAGE".into(),
+            dymini_panel_core::DEFAULT_CLOUDFLARED_IMAGE.into(),
         );
         let overridden = crate::Config::from_map(&vars, |_| unreachable!()).expect("config");
         assert!(overridden.cloudflared_image_overridden);
-        vars.insert("RUDDER_CLOUDFLARED_IMAGE".into(), String::new());
+        vars.insert("DYMINI_PANEL_CLOUDFLARED_IMAGE".into(), String::new());
         let empty = crate::Config::from_map(&vars, |_| unreachable!()).expect("config");
         assert!(!empty.cloudflared_image_overridden);
     }

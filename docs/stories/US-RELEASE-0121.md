@@ -9,11 +9,11 @@ lane: normal
 notes: null
 platform: 0
 status: implemented
-title: Prepare and verify Rudder 0.12.1 release
+title: Prepare and verify Dymini Panel 0.12.1 release
 type: story
 unit: 1
 updated_at: "2026-11-23T16:11:44.537536060+00:00"
 verify: null
 ---
 
-# Prepare and verify Rudder 0.12.1 release
+# Prepare and verify Dymini Panel 0.12.1 release

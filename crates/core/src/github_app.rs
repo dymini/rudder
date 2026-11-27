@@ -38,7 +38,7 @@ pub fn github_app_manifest(input: &AppManifest<'_>) -> Value {
     let mut manifest = json!({
         "name": input.name,
         "url": base,
-        "description": "Clones repositories for Rudder deployments.",
+        "description": "Clones repositories for Dymini Panel deployments.",
         "redirect_url": landing,
         "setup_url": landing,
         "setup_on_update": true,
@@ -168,7 +168,7 @@ pub(crate) mod tests {
     #[test]
     fn manifest_points_github_back_at_the_panel() {
         let manifest = github_app_manifest(&AppManifest {
-            name: "Rudder-1a2b",
+            name: "Dymini-Panel-1a2b",
             base_url: "https://panel.example/",
             webhook_url: Some("https://panel.example/api/v1/git-providers/x/webhook"),
         });
@@ -184,7 +184,7 @@ pub(crate) mod tests {
     #[test]
     fn manifest_without_a_webhook_subscribes_to_nothing() {
         let manifest = github_app_manifest(&AppManifest {
-            name: "Rudder",
+            name: "Dymini Panel",
             base_url: "http://localhost:3000",
             webhook_url: None,
         });
@@ -194,7 +194,7 @@ pub(crate) mod tests {
 
     #[test]
     fn app_names_and_logins_are_checked() {
-        assert!(validate_app_name("Rudder-1a2b").is_ok());
+        assert!(validate_app_name("Dymini-Panel-1a2b").is_ok());
         assert!(validate_app_name("My Deploy_App").is_ok());
         for bad in ["", " lead", "trail-", "a/b", "quote\"d", &"x".repeat(35)] {
             assert!(validate_app_name(bad).is_err(), "{bad:?}");

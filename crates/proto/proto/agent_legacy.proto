@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package rudder.agent.v1;
+
+// The agent dials the panel over mutual TLS. Its client certificate, issued at
+// enrollment, identifies the server; nothing in the messages does.
+service NodeAgent {
+  // Long-lived control session. The first agent message is `Hello`.
+  rpc Session(stream AgentMessage) returns (stream ServerMessage);
+  // Byte channel for one streaming command (logs, archives, exec, terminal).
+  // The agent opens it after receiving a `Command` with a `stream_id`; the first
+  // frame it sends names that stream.
+  rpc Channel(stream Frame) returns (stream Frame);
+}
+
+message AgentMessage {
+  oneof body {
+    Hello hello = 1;
+    CommandResult result = 2;
+    Telemetry telemetry = 3;
+  }
+}
+
+message ServerMessage {
+  oneof body {
+    Welcome welcome = 1;
+    Command command = 2;
+    TelemetryAck ack = 3;
+  }
+}
+
+message Hello {
+  string agent_version = 1;
+  string hostname = 2;
+  string docker_version = 3;
+  string os_info = 4;
+  uint32 cpu_count = 5;
+  uint64 memory_bytes = 6;
+  string arch = 7;
+  bool builder_buildx = 8;
+  bool builder_nixpacks = 9;
+}
+
+message Welcome {
+  string server_id = 1;
+  string panel_version = 2;
+}
+
+// `op` names a NodeDriver method. `payload_json` is the serde encoding of the
+// request type in `dymini_panel_node::ops`. Streaming ops also carry `stream_id`.
+message Command {
+  uint64 id = 1;
+  string op = 2;
+  bytes payload_json = 3;
+  string stream_id = 4;
+}
+
+message CommandResult {
+  uint64 id = 1;
+  bool ok = 2;
+  string error = 3;
+  bytes payload_json = 4;
+}
+
+// Buffered on the agent until acknowledged, then dropped.
+message Telemetry {
+  uint64 seq = 1;
+  repeated LogRecord logs = 2;
+  repeated StatsSample stats = 3;
+  // Lines or samples the agent dropped because its buffer was full.
+  uint64 dropped = 4;
+}
+
+message TelemetryAck {
+  uint64 seq = 1;
+}
+
+// One raw line of container output. The panel attributes and redacts it.
+message LogRecord {
+  int64 logged_at_unix_ms = 1;
+  string container_id = 2;
+  string container_name = 3;
+  // `dymini-panel.*` labels of the container, as a JSON object.
+  string labels_json = 4;
+  bool stderr = 5;
+  string text = 6;
+  // Set for the agent's own lines; container fields are then empty.
+  string source = 7;
+}
+
+message StatsSample {
+  int64 sampled_at_unix_ms = 1;
+  // dymini_panel_core::HostStats as JSON.
+  bytes host_json = 2;
+  // Vec<dymini_panel_core::ContainerStats> as JSON.
+  bytes containers_json = 3;
+}
+
+message Frame {
+  string stream_id = 1;
+  bytes data = 2;
+  bool eof = 3;
+  string error = 4;
+  // Terminal window size; both zero when unchanged.
+  uint32 cols = 5;
+  uint32 rows = 6;
+}

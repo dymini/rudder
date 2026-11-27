@@ -6,13 +6,13 @@
 use crate::Error;
 
 /// Docker network shared by Traefik and routed containers.
-pub const PROXY_NETWORK: &str = "rudder-proxy";
+pub const PROXY_NETWORK: &str = "dymini-panel-proxy";
 
 /// Name of the per-server Traefik container. Its JSON access log is collected as `proxy` logs.
-pub const TRAEFIK_CONTAINER: &str = "rudder-traefik";
+pub const TRAEFIK_CONTAINER: &str = "dymini-panel-traefik";
 
 /// Path inside the Traefik container. The install mounts the panel data directory here.
-pub const TRAEFIK_CERT_DIR: &str = "/etc/rudder/traefik/certs";
+pub const TRAEFIK_CERT_DIR: &str = "/etc/dymini-panel/traefik/certs";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TlsMode {
@@ -34,7 +34,7 @@ pub struct ProxyRoute {
     pub basic_auth_hash: Option<String>,
     /// Ask the panel before Traefik forwards the request.
     pub gate: bool,
-    /// Also publish `/_rudder` on this host so Access can set a cookie.
+    /// Also publish `/_dymini_panel` on this host so Access can set a cookie.
     pub access_handoff: bool,
 }
 
@@ -211,7 +211,7 @@ pub fn render_dynamic_config_mixed(
         write_tls(&mut routers, tls);
         let mut middleware_names = Vec::new();
         if route.gate {
-            middleware_names.push("rudder-gate".to_owned());
+            middleware_names.push("dymini-panel-gate".to_owned());
         }
         if let (Some(user), Some(hash)) = (&route.basic_auth_user, &route.basic_auth_hash) {
             middleware_names.push(format!("{}-auth", route.name));
@@ -240,11 +240,11 @@ pub fn render_dynamic_config_mixed(
             crate::validate_name(&name)?;
             routers.push_str(&format!("    {name}:\n"));
             routers.push_str(&format!(
-                "      rule: \"Host(`{}`) && PathPrefix(`/_rudder`)\"\n",
+                "      rule: \"Host(`{}`) && PathPrefix(`/_dymini_panel`)\"\n",
                 route.host
             ));
             routers.push_str("      priority: 1000\n");
-            routers.push_str("      service: rudder-panel\n");
+            routers.push_str("      service: dymini-panel\n");
             write_tls(
                 &mut routers,
                 if tunnel { TlsMode::Custom } else { route.tls },
@@ -259,7 +259,7 @@ pub fn render_dynamic_config_mixed(
     }
     if routes.iter().any(|route| route.gate) {
         let gate = gate.expect("checked above");
-        middlewares.push_str("    rudder-gate:\n");
+        middlewares.push_str("    dymini-panel-gate:\n");
         middlewares.push_str("      forwardAuth:\n");
         middlewares.push_str(&format!(
             "        address: \"http://{}:{}/api/v1/edge/gate?k={}\"\n",
@@ -267,21 +267,21 @@ pub fn render_dynamic_config_mixed(
         ));
         middlewares.push_str("        trustForwardHeader: true\n");
         middlewares.push_str("        authResponseHeaders:\n");
-        middlewares.push_str("          - X-Rudder-Access-Email\n");
-        middlewares.push_str("          - X-Rudder-Access-User\n");
-        middlewares.push_str("          - X-Rudder-Access-Departments\n");
-        middlewares.push_str("          - X-Rudder-Access-Ranks\n");
+        middlewares.push_str("          - X-Dymini-Panel-Access-Email\n");
+        middlewares.push_str("          - X-Dymini-Panel-Access-User\n");
+        middlewares.push_str("          - X-Dymini-Panel-Access-Departments\n");
+        middlewares.push_str("          - X-Dymini-Panel-Access-Ranks\n");
     }
     if needs_panel {
         let gate = gate.expect("checked above");
-        services.push_str("    rudder-panel:\n");
+        services.push_str("    dymini-panel:\n");
         services.push_str("      loadBalancer:\n        servers:\n");
         services.push_str(&format!(
             "          - url: \"http://{}:{}\"\n",
             gate.panel_container, gate.panel_port
         ));
     }
-    let mut yaml = String::from("# Written by Rudder. Changes are overwritten.\n");
+    let mut yaml = String::from("# Written by Dymini Panel. Changes are overwritten.\n");
     if !routers.is_empty() {
         yaml.push_str("http:\n  routers:\n");
         yaml.push_str(&routers);
@@ -428,7 +428,7 @@ mod tests {
         gated.access_handoff = true;
         let gate = EdgeGate {
             secret: "ab".repeat(16),
-            panel_container: "rudder".into(),
+            panel_container: "dymini-panel".into(),
             panel_port: 3000,
         };
         let routes = [route(TlsMode::LetsEncrypt), http_only, gated];
@@ -446,7 +446,7 @@ mod tests {
         assert!(!tunneled.contains("-http:"));
         assert_eq!(tunneled.matches("- websecure").count(), 4);
         assert_eq!(tunneled.matches("tls: {}").count(), 4);
-        assert!(tunneled.contains("PathPrefix(`/_rudder`)"));
+        assert!(tunneled.contains("PathPrefix(`/_dymini_panel`)"));
     }
 
     #[test]
@@ -519,21 +519,21 @@ mod tests {
         other.access_handoff = true;
         let gate = EdgeGate {
             secret: "ab".repeat(16),
-            panel_container: "rudder".into(),
+            panel_container: "dymini-panel".into(),
             panel_port: 3000,
         };
         let yaml = render_dynamic_config(&[app, other], &[], Some(&gate)).unwrap();
         assert!(yaml.contains("forwardAuth:"));
         assert!(yaml.contains("/api/v1/edge/gate?k=abababababababababababababababab"));
-        assert!(yaml.contains("PathPrefix(`/_rudder`)"));
-        assert!(yaml.contains("http://rudder:3000"));
-        assert_eq!(yaml.matches("rudder-gate:").count(), 1);
+        assert!(yaml.contains("PathPrefix(`/_dymini_panel`)"));
+        assert!(yaml.contains("http://dymini-panel:3000"));
+        assert_eq!(yaml.matches("dymini-panel-gate:").count(), 1);
         assert!(render_dynamic_config(
             &[route(TlsMode::None)],
             &[],
             Some(&EdgeGate {
                 secret: "not-hex".into(),
-                panel_container: "rudder".into(),
+                panel_container: "dymini-panel".into(),
                 panel_port: 3000,
             })
         )

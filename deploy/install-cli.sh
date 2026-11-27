@@ -1,24 +1,24 @@
 #!/bin/sh
-# Install the native `rudder` CLI on macOS or Linux.
+# Install the native `dymini-panel` CLI on macOS or Linux.
 #
 #   curl -fsSL https://github.com/vantanminh/rudder/releases/latest/download/install-cli.sh | sh
 #
 # Options:
 #   --version VERSION  Release tag to install (default: latest)
-#   --bin-dir DIR      Directory to install `rudder` into (default: /usr/local/bin as root, ~/.local/bin otherwise)
+#   --bin-dir DIR      Directory to install `dymini-panel` into (default: /usr/local/bin as root, ~/.local/bin otherwise)
 set -eu
 
-REPO="${RUDDER_GITHUB_REPO:-vantanminh/rudder}"
+REPO="${DYMINI_PANEL_GITHUB_REPO:-vantanminh/rudder}"
 version="latest"
 bin_dir=""
 
 die() {
-	printf 'rudder-install: %s\n' "$1" >&2
+	printf 'dymini-panel-install: %s\n' "$1" >&2
 	exit 1
 }
 
 info() {
-	printf 'rudder-install: %s\n' "$1"
+	printf 'dymini-panel-install: %s\n' "$1"
 }
 
 while [ $# -gt 0 ]; do
@@ -56,7 +56,7 @@ Darwin) target="${arch}-apple-darwin" ;;
 *) die "unsupported OS: $os_name (use install-cli.ps1 on Windows)" ;;
 esac
 
-asset="rudder-${target}"
+asset="dymini-panel-${target}"
 
 if [ -z "$bin_dir" ]; then
 	if [ "$(id -u)" -eq 0 ] || [ -w "/usr/local/bin" ]; then
@@ -97,8 +97,8 @@ fi
 [ "$expected" = "$actual" ] || die "SHA-256 mismatch for $asset (expected $expected, got $actual)"
 
 mkdir -p "$bin_dir"
-install -m 0755 "$tmp/$asset" "$bin_dir/rudder"
-info "installed rudder to $bin_dir/rudder"
+install -m 0755 "$tmp/$asset" "$bin_dir/dymini-panel"
+info "installed dymini-panel to $bin_dir/dymini-panel"
 
 case ":${PATH}:" in
 *":${bin_dir}:"*) ;;
@@ -108,4 +108,4 @@ case ":${PATH}:" in
 	;;
 esac
 
-"$bin_dir/rudder" --version || true
+"$bin_dir/dymini-panel" --version || true

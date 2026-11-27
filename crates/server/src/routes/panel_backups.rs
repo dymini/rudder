@@ -209,8 +209,8 @@ async fn delete_copy(
 }
 
 pub fn stale_after(cron: &str, timezone: &str, anchor: DateTime<Utc>, now: DateTime<Utc>) -> bool {
-    rudder_core::next_after(cron, timezone, anchor)
-        .and_then(|first| rudder_core::next_after(cron, timezone, first))
+    dymini_panel_core::next_after(cron, timezone, anchor)
+        .and_then(|first| dymini_panel_core::next_after(cron, timezone, first))
         .map_or(true, |deadline| now > deadline)
 }
 
@@ -310,7 +310,7 @@ async fn inventory(
                     encrypted: meta["encrypted"].as_bool().unwrap_or(false),
                     version: manifest
                         .as_ref()
-                        .and_then(|m| m["rudder_version"].as_str())
+                        .and_then(|m| m["dymini_panel_version"].as_str())
                         .map(str::to_owned),
                     manifest,
                     presence: "unavailable".into(),
@@ -399,7 +399,7 @@ async fn verify(
     }
     let destination = s3::load_destination(&state, body.destination_id).await?;
     let compression =
-        rudder_core::Compression::parse(&source.meta.compression).map_err(core_error)?;
+        dymini_panel_core::Compression::parse(&source.meta.compression).map_err(core_error)?;
     let mut lock = state.pool.begin().await.map_err(ApiError::database)?;
     let acquired: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(782644926)")
         .fetch_one(&mut *lock)
@@ -441,7 +441,7 @@ async fn verify(
             .await
             .map_err(|error| {
                 let text = error.to_string().to_lowercase();
-                rudder_core::Error::Validation(
+                dymini_panel_core::Error::Validation(
                     if text.contains("checksum") {
                         "Stored SHA-256 does not match the downloaded object."
                     } else if text.contains("pg_restore") {
@@ -460,7 +460,9 @@ async fn verify(
         .await;
         let (status, manifest, error) = match result {
             Ok(Ok(manifest)) => ("succeeded", Some(manifest), None),
-            Ok(Err(rudder_core::Error::Validation(message))) => ("failed", None, Some(message)),
+            Ok(Err(dymini_panel_core::Error::Validation(message))) => {
+                ("failed", None, Some(message))
+            }
             Ok(Err(_)) => (
                 "failed",
                 None,
@@ -522,9 +524,9 @@ mod tests {
             &std::collections::HashMap::from([
                 (
                     "DATABASE_URL".into(),
-                    "postgres://rudder:rudder@localhost:5432/rudder".into(),
+                    "postgres://dymini-panel:dymini-panel@localhost:5432/dymini-panel".into(),
                 ),
-                ("RUDDER_MASTER_KEY".into(), "ab".repeat(32)),
+                ("DYMINI_PANEL_MASTER_KEY".into(), "ab".repeat(32)),
             ]),
             |_| unreachable!(),
         )
@@ -594,8 +596,8 @@ mod tests {
         assert!(stale_after("invalid", "UTC", anchor, anchor));
         assert!(stale_after("@daily", "invalid", anchor, anchor));
         let anchor = at("2026-03-28T00:00:00Z");
-        let first = rudder_core::next_after("0 9 * * *", "Europe/Berlin", anchor).unwrap();
-        let second = rudder_core::next_after("0 9 * * *", "Europe/Berlin", first).unwrap();
+        let first = dymini_panel_core::next_after("0 9 * * *", "Europe/Berlin", anchor).unwrap();
+        let second = dymini_panel_core::next_after("0 9 * * *", "Europe/Berlin", first).unwrap();
         assert!(!stale_after("0 9 * * *", "Europe/Berlin", anchor, second));
         assert!(stale_after(
             "0 9 * * *",

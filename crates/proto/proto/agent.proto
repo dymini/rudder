@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package rudder.agent.v1;
+package dymini_panel.agent.v1;
 
 // The agent dials the panel over mutual TLS. Its client certificate, issued at
 // enrollment, identifies the server; nothing in the messages does.
@@ -47,7 +47,7 @@ message Welcome {
 }
 
 // `op` names a NodeDriver method. `payload_json` is the serde encoding of the
-// request type in `rudder_node::ops`. Streaming ops also carry `stream_id`.
+// request type in `dymini_panel_node::ops`. Streaming ops also carry `stream_id`.
 message Command {
   uint64 id = 1;
   string op = 2;
@@ -80,7 +80,7 @@ message LogRecord {
   int64 logged_at_unix_ms = 1;
   string container_id = 2;
   string container_name = 3;
-  // `rudder.*` labels of the container, as a JSON object.
+  // `dymini-panel.*` labels of the container, as a JSON object.
   string labels_json = 4;
   bool stderr = 5;
   string text = 6;
@@ -90,9 +90,9 @@ message LogRecord {
 
 message StatsSample {
   int64 sampled_at_unix_ms = 1;
-  // rudder_core::HostStats as JSON.
+  // dymini_panel_core::HostStats as JSON.
   bytes host_json = 2;
-  // Vec<rudder_core::ContainerStats> as JSON.
+  // Vec<dymini_panel_core::ContainerStats> as JSON.
   bytes containers_json = 3;
 }
 

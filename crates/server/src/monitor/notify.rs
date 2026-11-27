@@ -16,7 +16,7 @@ use sha2::Sha256;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use rudder_core::{Cipher, Error};
+use dymini_panel_core::{Cipher, Error};
 
 const SEND_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_ATTEMPTS: i32 = 5;
@@ -47,7 +47,7 @@ pub enum ChannelConfig {
     },
     Webhook {
         url: String,
-        /// Signs the body as `X-Rudder-Signature: sha256=<hex hmac>`.
+        /// Signs the body as `X-Dymini-Panel-Signature: sha256=<hex hmac>`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         secret: Option<String>,
     },
@@ -76,7 +76,7 @@ fn http_url(value: &str, https_only: bool) -> Result<url_host::Parsed, Error> {
 
 /// Minimal URL checks without pulling in a URL crate: scheme, host, no spaces.
 mod url_host {
-    use rudder_core::Error;
+    use dymini_panel_core::Error;
 
     pub struct Parsed {
         pub host: String,
@@ -388,9 +388,14 @@ pub async fn send(config: &ChannelConfig, notice: &Notice) -> Result<(), Error> 
             let mut request = client
                 .post(url)
                 .header("content-type", "application/json")
+                .header("x-dymini-panel-event", &notice.kind)
+                // Pre-rebrand receivers still read the Rudder headers.
                 .header("x-rudder-event", &notice.kind);
             if let Some(secret) = secret {
-                request = request.header("x-rudder-signature", sign(secret, &bytes)?);
+                let signature = sign(secret, &bytes)?;
+                request = request
+                    .header("x-dymini-panel-signature", &signature)
+                    .header("x-rudder-signature", &signature);
             }
             let response =
                 request.body(bytes).send().await.map_err(|error| {
@@ -409,7 +414,7 @@ pub async fn send(config: &ChannelConfig, notice: &Notice) -> Result<(), Error> 
         } => {
             let mut message = Message::builder()
                 .from(from.parse().map_err(|_| Error::Validation("from".into()))?)
-                .subject(truncate(&format!("Rudder: {}", notice.title), 200));
+                .subject(truncate(&format!("Dymini Panel: {}", notice.title), 200));
             for address in to {
                 message = message.to(address
                     .parse()
@@ -499,7 +504,7 @@ async fn channels_for(pool: &PgPool, event: &Pending) -> Result<Vec<Uuid>, sqlx:
             .get("min_severity")
             .and_then(|v| v.as_str())
             .unwrap_or("info");
-        if rudder_core::event_matches(&patterns, &event.kind)
+        if dymini_panel_core::event_matches(&patterns, &event.kind)
             && severity_rank(&event.severity) >= severity_rank(min)
         {
             out.extend(rule.channel_ids);
@@ -638,7 +643,7 @@ mod tests {
         .validate()
         .is_err());
         assert!(ChannelConfig::Webhook {
-            url: "https://hooks.example.com/rudder".into(),
+            url: "https://hooks.example.com/dymini-panel".into(),
             secret: Some("short".into())
         }
         .validate()
@@ -649,7 +654,7 @@ mod tests {
             security: SmtpSecurity::Starttls,
             username: Some("u".into()),
             password: None,
-            from: "Rudder <rudder@example.com>".into(),
+            from: "Dymini Panel <dymini-panel@example.com>".into(),
             to: vec!["ops@example.com".into()],
         };
         assert!(smtp.validate().is_err());

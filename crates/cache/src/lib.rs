@@ -1,4 +1,4 @@
-//! Rudder HTTP cache: a Pingora reverse proxy with an in-memory store, driven by the rules
+//! Dymini Panel HTTP cache: a Pingora reverse proxy with an in-memory store, driven by the rules
 //! file the panel writes.
 
 mod admin;
@@ -52,7 +52,7 @@ pub fn load_or_create_token(path: &Path) -> anyhow::Result<String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let token: String = rudder_core::random_bytes::<32>()
+    let token: String = dymini_panel_core::random_bytes::<32>()
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect();
@@ -120,7 +120,7 @@ pub fn run(config: CacheConfig) -> anyhow::Result<()> {
         proxy::CacheProxy { shared, lock },
     );
     proxy.add_tcp(&config.listen.to_string());
-    let mut admin = Service::new("rudder-cache admin".into(), admin::Admin { shared });
+    let mut admin = Service::new("dymini-panel-cache admin".into(), admin::Admin { shared });
     admin.add_tcp(&config.admin_listen.to_string());
     let reloader = background_service("rules reload", Reloader { shared });
     server.add_service(proxy);
@@ -130,7 +130,7 @@ pub fn run(config: CacheConfig) -> anyhow::Result<()> {
         listen = %config.listen,
         admin = %config.admin_listen,
         rules = %config.rules_path.display(),
-        "rudder-cache starting"
+        "dymini-panel-cache starting"
     );
     server.run_forever()
 }
@@ -154,7 +154,8 @@ mod tests {
 
     #[test]
     fn token_is_created_once_with_private_mode() {
-        let dir = std::env::temp_dir().join(format!("rudder-cache-token-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("dymini-panel-cache-token-{}", std::process::id()));
         let path = dir.join("admin.token");
         let first = load_or_create_token(&path).unwrap();
         assert_eq!(first.len(), 64);

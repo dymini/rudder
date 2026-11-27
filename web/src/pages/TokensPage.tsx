@@ -101,7 +101,7 @@ export function TokensPage() {
       <h1 className="text-2xl font-semibold">{t("API tokens")}</h1>
       {cliRequest.data && cliRequest.data.status === "pending" ? (
         <Card
-          title={t("Authorize rudder CLI in browser")}
+          title={t("Authorize dymini-panel CLI in browser")}
           description={t("Approve this browser sign-in request to connect your terminal.")}
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -121,7 +121,7 @@ export function TokensPage() {
       <Card
         title={t("Authorize CLI with device code")}
         description={t(
-          "Ran `rudder login --device`? Enter the 8-character alphanumeric code shown in your terminal.",
+          "Ran `dymini-panel login --device`? Enter the 8-character alphanumeric code shown in your terminal.",
         )}
       >
         <form

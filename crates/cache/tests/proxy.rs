@@ -1,4 +1,4 @@
-//! Runs the real `rudder-cache` binary in front of an in-process origin.
+//! Runs the real `dymini-panel-cache` binary in front of an in-process origin.
 
 use std::net::{SocketAddr, TcpListener};
 use std::path::Path;
@@ -109,14 +109,14 @@ async fn caches_purges_reloads_and_reports() {
         .with_state(state.clone());
     tokio::spawn(async move { axum::serve(origin_listener, app).await.unwrap() });
 
-    let dir = std::env::temp_dir().join(format!("rudder-cache-it-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("dymini-panel-cache-it-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let rules_path = dir.join("rules.json");
     write(&rules_path, &rules(1, &upstream, &["site.test"]));
     let listen = free_port();
     let admin = free_port();
     let _child = Killed(
-        Command::new(env!("CARGO_BIN_EXE_rudder-cache"))
+        Command::new(env!("CARGO_BIN_EXE_dymini-panel-cache"))
             .args(["--rules", rules_path.to_str().unwrap()])
             .args(["--listen", &listen.to_string()])
             .args(["--admin-listen", &admin.to_string()])
@@ -313,8 +313,10 @@ async fn caches_purges_reloads_and_reports() {
         .text()
         .await
         .unwrap();
-    assert!(metrics.contains("rudder_cache_requests_total{host=\"site.test\",outcome=\"hit\"}"));
-    assert!(metrics.contains("# TYPE rudder_cache_objects gauge"));
+    assert!(
+        metrics.contains("dymini_panel_cache_requests_total{host=\"site.test\",outcome=\"hit\"}")
+    );
+    assert!(metrics.contains("# TYPE dymini_panel_cache_objects gauge"));
 
     write(
         &rules_path,

@@ -1,10 +1,10 @@
-//! Rudder command line client.
+//! Dymini Panel command line client.
 //!
 //! API commands authenticate with a scoped API token (`Authorization: Bearer`).
-//! `rudder login` supports three sign-in methods:
-//! 1. API key (`RUDDER_TOKEN` or stdin)
-//! 2. Browser callback (`rudder login --url <url> --browser`)
-//! 3. 8-character alphanumeric Device Code (`rudder login --url <url> --device`)
+//! `dymini-panel login` supports three sign-in methods:
+//! 1. API key (`DYMINI_PANEL_TOKEN` or stdin)
+//! 2. Browser callback (`dymini-panel login --url <url> --browser`)
+//! 3. 8-character alphanumeric Device Code (`dymini-panel login --url <url> --device`)
 
 pub mod config;
 pub mod decrypt;
@@ -28,23 +28,23 @@ use tokio_util::io::ReaderStream;
 
 pub const HELP: &str = "\
 Usage:
-  rudder login --url <panel URL> [--browser | --device]   sign in with API token, browser, or 8-char device code
-  rudder logout                                           forget the saved token
-  rudder init [<service>] [--file rudder.toml]            create a rudder.toml project config
-  rudder build [<service>] [--tag TAG] [--platform P] [--no-cache] [--progress M] [--build-arg K=V] [--skip-checks]
-  rudder push [TAG] [--service S] [--deploy]              upload a local image archive to Cloudflare R2
-  rudder deploy [<service>] [--image TAG] [--build]       deploy from R2 (or check+build+push+deploy with --build)
-  rudder images [<service>] [list | prune --keep N | rollback TAG | remove TAG [--r2-only]]
-  rudder status [--check]                                 Rudder Image setup, bucket check, push and build statistics
-  rudder whoami                                           show the panel, account, and role this CLI is signed in to
-  rudder services                                         list services
-  rudder logs <service> [-f] [-n LINES] [--since 15m|RFC3339] [--level L] [--source S] [--grep TEXT]
-  rudder cache purge <service> (--all | --path P... | --prefix P) [--domain ID]
-  rudder backup decrypt [--in FILE] [--out FILE]          (passphrase from RUDDER_BACKUP_PASSPHRASE)
-  rudder docs search <words...> [--limit N] | read <guide> | list   search or read the documentation of your panel
-  rudder skills install|list|remove|print [--agent A] [--project]   teach AI coding agents about Rudder
-  rudder update [--check] [--repo OWNER/REPO]             update rudder CLI natively from GitHub releases
-  rudder --version
+  dymini-panel login --url <panel URL> [--browser | --device]             sign in with API token, browser, or 8-char device code
+  dymini-panel logout                                                     forget the saved token
+  dymini-panel init [<service>] [--file dymini-panel.toml]                create a dymini-panel.toml project config
+  dymini-panel build [<service>] [--tag TAG] [--platform P] [--no-cache] [--progress M] [--build-arg K=V] [--skip-checks]
+  dymini-panel push [TAG] [--service S] [--deploy]                        upload a local image archive to Cloudflare R2
+  dymini-panel deploy [<service>] [--image TAG] [--build]                 deploy from R2 (or check+build+push+deploy with --build)
+  dymini-panel images [<service>] [list | prune --keep N | rollback TAG | remove TAG [--r2-only]]
+  dymini-panel status [--check]                                           Dymini Panel Image setup, bucket check, push and build statistics
+  dymini-panel whoami                                                     show the panel, account, and role this CLI is signed in to
+  dymini-panel services                                                   list services
+  dymini-panel logs <service> [-f] [-n LINES] [--since 15m|RFC3339] [--level L] [--source S] [--grep TEXT]
+  dymini-panel cache purge <service> (--all | --path P... | --prefix P) [--domain ID]
+  dymini-panel backup decrypt [--in FILE] [--out FILE]                    (passphrase from DYMINI_PANEL_BACKUP_PASSPHRASE)
+  dymini-panel docs search <words...> [--limit N] | read <guide> | list   search or read the documentation of your panel
+  dymini-panel skills install|list|remove|print [--agent A] [--project]   teach AI coding agents about Dymini Panel
+  dymini-panel update [--check] [--repo OWNER/REPO]                       update dymini-panel CLI natively from GitHub releases
+  dymini-panel --version
 
 <service> is a service id, its name, project/name, or project/environment/name.
 Create or revoke tokens under Account > API tokens; deploy, push, and purge need the write scope.";
@@ -54,7 +54,7 @@ pub struct Context {
     pub config_path: PathBuf,
     pub url: Option<String>,
     pub token: Option<String>,
-    /// Reads a token when `RUDDER_TOKEN` is not set (stdin in the binary).
+    /// Reads a token when `DYMINI_PANEL_TOKEN` is not set (stdin in the binary).
     pub read_token: Box<dyn Fn() -> std::io::Result<String> + Send + Sync>,
     /// Poll interval for `deploy`, `login --device`, and `logs -f`.
     pub poll: Duration,
@@ -65,8 +65,8 @@ impl Context {
         let var = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
         Self {
             config_path: config::default_path(),
-            url: var("RUDDER_URL"),
-            token: var("RUDDER_TOKEN"),
+            url: var("DYMINI_PANEL_URL"),
+            token: var("DYMINI_PANEL_TOKEN"),
             read_token: Box::new(|| {
                 use std::io::{BufRead, IsTerminal};
                 if std::io::stdin().is_terminal() {
@@ -89,11 +89,11 @@ pub async fn run(
     let mut args = args.into_iter();
     match args.next().as_deref() {
         None | Some("--help" | "-h" | "help") => {
-            writeln!(out, "rudder {}\n\n{HELP}", rudder_core::VERSION)?;
+            writeln!(out, "dymini-panel {}\n\n{HELP}", dymini_panel_core::VERSION)?;
             Ok(())
         }
         Some("--version" | "-V") => {
-            writeln!(out, "rudder {}", rudder_core::VERSION)?;
+            writeln!(out, "dymini-panel {}", dymini_panel_core::VERSION)?;
             Ok(())
         }
         Some("backup") => match args.next().as_deref() {
@@ -102,17 +102,20 @@ pub async fn run(
                 if rest.iter().any(|a| a == "--help" || a == "-h") {
                     writeln!(
                         out,
-                        "Usage: rudder backup decrypt [--in FILE] [--out FILE]\n\nDecrypt a client-side encrypted Rudder backup archive.\nSet RUDDER_BACKUP_PASSPHRASE in the environment (or enter it on stdin when --in is used)."
+                        "Usage: dymini-panel backup decrypt [--in FILE] [--out FILE]\n\nDecrypt a client-side encrypted Dymini Panel backup archive.\nSet DYMINI_PANEL_BACKUP_PASSPHRASE in the environment (or enter it on stdin when --in is used)."
                     )?;
                     return Ok(());
                 }
                 decrypt::run(decrypt::parse(rest.into_iter())?)
             }
             Some("--help" | "-h") => {
-                writeln!(out, "Usage: rudder backup decrypt [--in FILE] [--out FILE]")?;
+                writeln!(
+                    out,
+                    "Usage: dymini-panel backup decrypt [--in FILE] [--out FILE]"
+                )?;
                 Ok(())
             }
-            _ => bail!("usage: rudder backup decrypt [--in FILE] [--out FILE]"),
+            _ => bail!("usage: dymini-panel backup decrypt [--in FILE] [--out FILE]"),
         },
         Some("login") => login(args.collect(), ctx, out).await,
         Some("logout") => {
@@ -120,7 +123,7 @@ pub async fn run(
             if rest.iter().any(|a| a == "--help" || a == "-h") {
                 writeln!(
                     out,
-                    "Usage: rudder logout\n\nRemove the saved panel URL and API token from {}.",
+                    "Usage: dymini-panel logout\n\nRemove the saved panel URL and API token from {}.",
                     ctx.config_path.display()
                 )?;
                 return Ok(());
@@ -167,7 +170,7 @@ pub async fn run(
             if rest.iter().any(|a| a == "--help" || a == "-h") {
                 writeln!(
                     out,
-                    "Usage: rudder services\n\nList all services across projects and environments."
+                    "Usage: dymini-panel services\n\nList all services across projects and environments."
                 )?;
                 return Ok(());
             }
@@ -176,7 +179,7 @@ pub async fn run(
         Some("whoami") => {
             let rest: Vec<String> = args.collect();
             if rest.iter().any(|a| a == "--help" || a == "-h") {
-                writeln!(out, "Usage: rudder whoami\n\nShow the panel URL, user email, and role for the active CLI session.")?;
+                writeln!(out, "Usage: dymini-panel whoami\n\nShow the panel URL, user email, and role for the active CLI session.")?;
                 return Ok(());
             }
             whoami(&Api::from_context(ctx)?, out).await
@@ -184,7 +187,7 @@ pub async fn run(
         Some("status") => {
             let rest: Vec<String> = args.collect();
             if rest.iter().any(|a| a == "--help" || a == "-h") {
-                writeln!(out, "Usage: rudder status [--check]\n\nShow Rudder Image store configuration, R2 version counts, push/build statistics, and signed-in clients.\nPass --check to run a live write/read/delete probe against the R2 bucket.")?;
+                writeln!(out, "Usage: dymini-panel status [--check]\n\nShow Dymini Panel Image store configuration, R2 version counts, push/build statistics, and signed-in clients.\nPass --check to run a live write/read/delete probe against the R2 bucket.")?;
                 return Ok(());
             }
             status(&Api::from_context(ctx)?, rest, out).await
@@ -200,7 +203,7 @@ pub async fn run(
         Some("logs") => {
             let rest: Vec<String> = args.collect();
             if rest.iter().any(|a| a == "--help" || a == "-h") {
-                writeln!(out, "Usage: rudder logs <service> [-f] [-n LINES] [--since 15m|RFC3339] [--level L] [--source S] [--grep TEXT]")?;
+                writeln!(out, "Usage: dymini-panel logs <service> [-f] [-n LINES] [--since 15m|RFC3339] [--level L] [--source S] [--grep TEXT]")?;
                 return Ok(());
             }
             logs(&Api::from_context(ctx)?, rest, ctx, out).await
@@ -209,21 +212,23 @@ pub async fn run(
             Some("purge") => {
                 let rest: Vec<String> = args.collect();
                 if rest.iter().any(|a| a == "--help" || a == "-h") {
-                    writeln!(out, "Usage: rudder cache purge <service> (--all | --path P... | --prefix P) [--domain ID]")?;
+                    writeln!(out, "Usage: dymini-panel cache purge <service> (--all | --path P... | --prefix P) [--domain ID]")?;
                     return Ok(());
                 }
                 purge(&Api::from_context(ctx)?, rest, out).await
             }
-            _ => bail!("usage: rudder cache purge <service> (--all | --path P... | --prefix P)"),
+            _ => bail!(
+                "usage: dymini-panel cache purge <service> (--all | --path P... | --prefix P)"
+            ),
         },
-        Some(other) => bail!("unknown command '{other}'; see rudder --help"),
+        Some(other) => bail!("unknown command '{other}'; see dymini-panel --help"),
     }
 }
 
 const DOCS_HELP: &str = "Usage:
-  rudder docs search <words...> [--limit N]   search the documentation of your panel
-  rudder docs read <guide>                    print one guide as Markdown (names come from list or search)
-  rudder docs list                            list the guides
+  dymini-panel docs search <words...> [--limit N]   search the documentation of your panel
+  dymini-panel docs read <guide>                    print one guide as Markdown (names come from list or search)
+  dymini-panel docs list                            list the guides
 
 The documentation is served by your own panel, so it matches the version you run.";
 
@@ -251,7 +256,7 @@ async fn docs_cmd(
             }
             let query = words.join(" ");
             if query.trim().is_empty() {
-                bail!("usage: rudder docs search <words...> [--limit N]");
+                bail!("usage: dymini-panel docs search <words...> [--limit N]");
             }
             let found = api
                 .get(
@@ -263,14 +268,14 @@ async fn docs_cmd(
             if results.is_empty() {
                 writeln!(
                     out,
-                    "No guide matches '{query}'. Try other words or `rudder docs list`."
+                    "No guide matches '{query}'. Try other words or `dymini-panel docs list`."
                 )?;
                 return Ok(());
             }
             for (index, hit) in results.iter().enumerate() {
                 writeln!(
                     out,
-                    "{}. {} > {}   (rudder docs read {})
+                    "{}. {} > {}   (dymini-panel docs read {})
    {}",
                     index + 1,
                     hit["title"].as_str().unwrap_or(""),
@@ -282,12 +287,14 @@ async fn docs_cmd(
             Ok(())
         }
         Some("read") => {
-            let name = args.next().context("usage: rudder docs read <guide>")?;
+            let name = args
+                .next()
+                .context("usage: dymini-panel docs read <guide>")?;
             if !name
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
             {
-                bail!("'{name}' is not a guide name; see rudder docs list");
+                bail!("'{name}' is not a guide name; see dymini-panel docs list");
             }
             let page = api.get(&format!("/api/v1/docs/{name}"), &[]).await?;
             writeln!(out, "{}", page["content"].as_str().unwrap_or(""))?;
@@ -305,7 +312,7 @@ async fn docs_cmd(
             }
             Ok(())
         }
-        _ => bail!("usage: rudder docs search <words...> | read <guide> | list"),
+        _ => bail!("usage: dymini-panel docs search <words...> | read <guide> | list"),
     }
 }
 
@@ -313,24 +320,24 @@ fn print_build_help(out: &mut (dyn Write + Send)) -> anyhow::Result<()> {
     writeln!(
         out,
         "\
-Usage: rudder build [<service>] [options]
+Usage: dymini-panel build [<service>] [options]
 
 Run local CI checks, build the Docker image with BuildKit, auto-inject GIT_SHA and BUILD_TIME,
-and save a compressed archive to the local Rudder Image store (~/.config/rudder/images/).
+and save a compressed archive to the local Dymini Panel Image store (~/.config/dymini-panel/images/).
 
 Options:
   -s, --service <SERVICE>     Target service (id, name, project/name, or project/env/name)
   -t, --tag <TAG>             Image tag (default: YYYYMMDD-HHMMSS-<short-git-sha>)
-      --dockerfile <PATH>     Dockerfile path (default: from rudder.toml or Dockerfile)
-      --context <DIR>         Build context directory (default: from rudder.toml or .)
+      --dockerfile <PATH>     Dockerfile path (default: from dymini-panel.toml or Dockerfile)
+      --context <DIR>         Build context directory (default: from dymini-panel.toml or .)
       --platform <PLATFORM>   Target platform, e.g. linux/amd64 or linux/arm64
       --no-cache              Do not use Docker layer cache when building
       --progress <MODE>       BuildKit progress output: auto, plain, or tty
       --build-arg <KEY=VAL>   Additional Docker build-arg (repeatable; GIT_SHA & BUILD_TIME are passed automatically)
       --check <CMD>           Local check command to run before building (repeatable)
-      --skip-checks           Skip local CI checks configured in rudder.toml
+      --skip-checks           Skip local CI checks configured in dymini-panel.toml
       --local-keep <N>        Number of local image archives to retain
-  -f, --file <PATH>           Path to project config file (default: rudder.toml)
+  -f, --file <PATH>           Path to project config file (default: dymini-panel.toml)
   -h, --help                  Print this help message"
     )?;
     Ok(())
@@ -340,20 +347,20 @@ fn print_push_help(out: &mut (dyn Write + Send)) -> anyhow::Result<()> {
     writeln!(
         out,
         "\
-Usage: rudder push [TAG] [options]
+Usage: dymini-panel push [TAG] [options]
 
-Upload a locally built image archive to the Rudder Image store (Cloudflare R2) via the panel.
+Upload a locally built image archive to the Dymini Panel Image store (Cloudflare R2) via the panel.
 Verifies the SHA-256 digest on upload and skips uploading if the exact tag + digest is already in R2.
 
 Options:
-  -s, --service <SERVICE>     Target service (default: from rudder.toml)
+  -s, --service <SERVICE>     Target service (default: from dymini-panel.toml)
   -t, --tag <TAG>             Tag to push (default: most recently built local image)
       --deploy                Deploy the image immediately after upload completes
       --no-deploy             Store the image in R2 without deploying, even if auto-deploy is enabled
       --no-wait               Return as soon as the deployment is queued
       --timeout <SECONDS>     Maximum time to wait for deployment completion (default: 1800)
       --r2-keep <N>           Retain the newest N versions in R2 (never prunes the deployed image)
-  -f, --file <PATH>           Path to project config file (default: rudder.toml)
+  -f, --file <PATH>           Path to project config file (default: dymini-panel.toml)
   -h, --help                  Print this help message"
     )?;
     Ok(())
@@ -363,14 +370,14 @@ fn print_deploy_help(out: &mut (dyn Write + Send)) -> anyhow::Result<()> {
     writeln!(
         out,
         "\
-Usage: rudder deploy [<service>] [options]
+Usage: dymini-panel deploy [<service>] [options]
 
 Deploy a service from Cloudflare R2, a container registry image, a Git build, or a compose stack.
 
 Options:
       --image <TAG|IMAGE>     Tag in R2 (or full registry image reference) to deploy
-      --build                 Run `rudder build` + `rudder push --deploy` in one step
-      --no-build              Skip building locally even if `deploy_build = true` in rudder.toml
+      --build                 Run `dymini-panel build` + `dymini-panel push --deploy` in one step
+      --no-build              Skip building locally even if `deploy_build = true` in dymini-panel.toml
       --skip-checks           Skip local CI checks when --build is active
       --platform <PLATFORM>   Target platform when --build is active (e.g. linux/amd64)
       --no-cache              Disable Docker cache when --build is active
@@ -378,7 +385,7 @@ Options:
       --build-arg <KEY=VAL>   Pass extra --build-arg when --build is active (repeatable)
       --no-wait               Return as soon as the deployment is queued
       --timeout <SECONDS>     Maximum time to wait for deployment completion (default: 1800)
-  -f, --file <PATH>           Path to project config file (default: rudder.toml)
+  -f, --file <PATH>           Path to project config file (default: dymini-panel.toml)
   -h, --help                  Print this help message"
     )?;
     Ok(())
@@ -389,10 +396,10 @@ fn print_images_help(out: &mut (dyn Write + Send)) -> anyhow::Result<()> {
         out,
         "\
 Usage:
-  rudder images [<service>] [list]
-  rudder images [<service>] prune --keep <N>
-  rudder images [<service>] rollback <TAG>
-  rudder images [<service>] remove <TAG> [--r2-only]
+  dymini-panel images [<service>] [list]
+  dymini-panel images [<service>] prune --keep <N>
+  dymini-panel images [<service>] rollback <TAG>
+  dymini-panel images [<service>] remove <TAG> [--r2-only]
 
 Manage local and Cloudflare R2 image versions for a service."
     )?;
@@ -414,7 +421,7 @@ fn build_http_client(timeout: Duration) -> anyhow::Result<reqwest::Client> {
         }
     });
     Ok(reqwest::Client::builder()
-        .user_agent(format!("rudder-cli/{}", rudder_core::VERSION))
+        .user_agent(format!("dymini-panel-cli/{}", dymini_panel_core::VERSION))
         .connect_timeout(Duration::from_secs(10))
         .timeout(timeout)
         .redirect(policy)
@@ -491,7 +498,7 @@ struct Api {
 impl Api {
     fn new(base: &str, token: &str) -> anyhow::Result<Self> {
         if !token.starts_with("rdr_") {
-            bail!("that is not a Rudder API token (they start with rdr_)");
+            bail!("that is not a Dymini Panel API token (they start with rdr_)");
         }
         Ok(Self {
             http: build_http_client(Duration::from_secs(900))?,
@@ -507,12 +514,14 @@ impl Api {
             .url
             .clone()
             .or_else(|| saved.as_ref().map(|s| s.url.clone()))
-            .ok_or_else(|| anyhow!("not logged in; run `rudder login --url <panel URL>`"))?;
+            .ok_or_else(|| anyhow!("not logged in; run `dymini-panel login --url <panel URL>`"))?;
         let token = ctx
             .token
             .clone()
             .or_else(|| saved.map(|s| s.token))
-            .ok_or_else(|| anyhow!("no API token; run `rudder login` or set RUDDER_TOKEN"))?;
+            .ok_or_else(|| {
+                anyhow!("no API token; run `dymini-panel login` or set DYMINI_PANEL_TOKEN")
+            })?;
         Self::new(&url, &token)
     }
 
@@ -588,8 +597,8 @@ impl Api {
                         && preview.contains("<!doctype html")
                     {
                         bail!(
-                            "Cloudflare Access intercepted `{}{path}`, and the panel at {} is running an older Rudder server version that does not yet route CLI calls through `/mcp/api/v1`.\n\
-                             Update the Rudder panel server (System -> Updates), or set `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`.",
+                            "Cloudflare Access intercepted `{}{path}`, and the panel at {} is running an older Dymini Panel server version that does not yet route CLI calls through `/mcp/api/v1`.\n\
+                             Update the Dymini Panel server (System -> Updates), or set `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`.",
                             self.base,
                             self.base
                         );
@@ -785,18 +794,18 @@ async fn login(
                 writeln!(
                     out,
                     "\
-Usage: rudder login --url <panel URL> [--browser | --device] [--name <client-name>]
+Usage: dymini-panel login --url <panel URL> [--browser | --device] [--name <client-name>]
 
-Sign in to a Rudder panel and save the API token to {}.
+Sign in to a Dymini Panel and save the API token to {}.
 
 Modes:
-  (default)     Read an API token (`rdr_...`) from RUDDER_TOKEN or stdin
+  (default)     Read an API token (`rdr_...`) from DYMINI_PANEL_TOKEN or stdin
   --browser     Open your browser and receive the token via a localhost callback
   --device      Print an 8-character device code to approve in the panel
 
 Options:
-  --url <URL>   Panel base URL (e.g. https://rudder.example.com)
-  --name <NAME> Client label shown under Rudder Image > Signed-in clients",
+  --url <URL>   Panel base URL (e.g. https://dymini-panel.example.com)
+  --name <NAME> Client label shown under Dymini Panel Image > Signed-in clients",
                     ctx.config_path.display()
                 )?;
                 return Ok(());
@@ -806,14 +815,14 @@ Options:
             "--device" => mode = LoginMode::DeviceCode,
             "--name" => client_name = Some(args.next().context("--name needs a value")?),
             "--token" => bail!(
-                "pass the token in RUDDER_TOKEN or on stdin, not as an argument, so it stays out of shell history and ps"
+                "pass the token in DYMINI_PANEL_TOKEN or on stdin, not as an argument, so it stays out of shell history and ps"
             ),
             other => bail!("unknown option {other}"),
         }
     }
     let raw_url = url
         .or_else(|| config::load(&ctx.config_path).ok().flatten().map(|s| s.url))
-        .context("usage: rudder login --url <panel URL> [--browser | --device]")?;
+        .context("usage: dymini-panel login --url <panel URL> [--browser | --device]")?;
     let base = config::normalize_url(&raw_url)?;
 
     let token = match mode {
@@ -888,7 +897,7 @@ async fn start_cli_auth_request(
                 if use_mcp && preview.contains("<!doctype html") {
                     bail!(
                         "Cloudflare Access intercepted `/api/v1/cli/auth/start` on {base}, and the panel server is running an older version that does not yet route CLI login through `/mcp/api/v1`.\n\
-                         Update the Rudder panel server (System -> Updates), or set `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`."
+                         Update the Dymini Panel server (System -> Updates), or set `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`."
                     );
                 }
                 return Err(err).with_context(|| format!("parse {label} login start response"));
@@ -911,7 +920,7 @@ async fn login_via_device(
         base,
         json!({
             "method": "device_code",
-            "client_name": client_name.unwrap_or("rudder-cli"),
+            "client_name": client_name.unwrap_or("dymini-panel-cli"),
         }),
         "device-code",
     )
@@ -935,7 +944,7 @@ async fn login_via_device(
 
     writeln!(
         out,
-        "Open this URL in your browser to authorize rudder CLI:\n  {verify_url}\n\nEnter 8-character device code: {device_code}\nWaiting for approval..."
+        "Open this URL in your browser to authorize dymini-panel CLI:\n  {verify_url}\n\nEnter 8-character device code: {device_code}\nWaiting for approval..."
     )?;
     out.flush()?;
 
@@ -960,7 +969,7 @@ async fn login_via_browser(
         base,
         json!({
             "method": "browser",
-            "client_name": client_name.unwrap_or("rudder-cli"),
+            "client_name": client_name.unwrap_or("dymini-panel-cli"),
             "callback_url": callback_url,
         }),
         "browser",
@@ -979,11 +988,11 @@ async fn login_via_browser(
 
     writeln!(
         out,
-        "Open this URL in your browser to authorize rudder CLI:\n  {authorize_url}\nCallback listener: {callback_url}"
+        "Open this URL in your browser to authorize dymini-panel CLI:\n  {authorize_url}\nCallback listener: {callback_url}"
     )?;
     out.flush()?;
 
-    if std::env::var("RUDDER_NO_BROWSER").as_deref() != Ok("1") {
+    if std::env::var("DYMINI_PANEL_NO_BROWSER").as_deref() != Ok("1") {
         let _ = open_browser(&authorize_url);
     }
 
@@ -1011,7 +1020,7 @@ async fn accept_browser_callback(listener: tokio::net::TcpListener) -> anyhow::R
         let path = first_line.split_whitespace().nth(1).unwrap_or("/");
         if let Ok(parsed) = url::Url::parse(&format!("http://127.0.0.1{path}")) {
             if let Some((_, token)) = parsed.query_pairs().find(|(k, _)| k == "token") {
-                let body = "<html><body style=\"font-family:sans-serif;padding:2rem\"><h2>Rudder CLI authorized</h2><p>You can close this window and return to your terminal.</p></body></html>";
+                let body = "<html><body style=\"font-family:sans-serif;padding:2rem\"><h2>Dymini Panel CLI authorized</h2><p>You can close this window and return to your terminal.</p></body></html>";
                 let reply = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                     body.len()
@@ -1099,7 +1108,7 @@ fn init_project(args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Resu
             "--help" | "-h" => {
                 writeln!(
                     out,
-                    "Usage: rudder init [<service>] [--file rudder.toml] [--r2-keep N] [--local-keep N] [--force]"
+                    "Usage: dymini-panel init [<service>] [--file dymini-panel.toml] [--r2-keep N] [--local-keep N] [--force]"
                 )?;
                 return Ok(());
             }
@@ -1254,7 +1263,7 @@ async fn build_cmd(
     let cfg = loaded.map(|(_, c)| c).unwrap_or_default();
     let service = service
         .or_else(|| (!cfg.service.is_empty()).then_some(cfg.service.clone()))
-        .context("specify a <service> or set `service = \"...\"` in rudder.toml")?;
+        .context("specify a <service> or set `service = \"...\"` in dymini-panel.toml")?;
     let dockerfile = dockerfile.unwrap_or_else(|| cfg.dockerfile.clone());
     let context_path = PathBuf::from(context_dir.unwrap_or_else(|| cfg.context.clone()));
     let effective_platform = platform.or(cfg.platform);
@@ -1356,7 +1365,7 @@ async fn push_cmd(
     let cfg = loaded.map(|(_, c)| c).unwrap_or_default();
     let service_spec = service_spec
         .or_else(|| (!cfg.service.is_empty()).then_some(cfg.service.clone()))
-        .context("specify --service <service> or set `service = \"...\"` in rudder.toml")?;
+        .context("specify --service <service> or set `service = \"...\"` in dymini-panel.toml")?;
     let r2_keep = r2_keep.or(cfg.r2_keep_count);
 
     let service = resolve(api, &service_spec).await?;
@@ -1370,7 +1379,7 @@ async fn push_cmd(
     }
     if local_records.is_empty() {
         bail!(
-            "no local built images found for '{}'; run `rudder build` first",
+            "no local built images found for '{}'; run `dymini-panel build` first",
             service.path()
         );
     }
@@ -1381,7 +1390,7 @@ async fn push_cmd(
             .find(|r| r.tag == requested)
             .ok_or_else(|| {
                 anyhow!(
-                    "local image tag '{requested}' not found for {}; see `rudder images {}`",
+                    "local image tag '{requested}' not found for {}; see `dymini-panel images {}`",
                     service.path(),
                     service.path()
                 )
@@ -1440,7 +1449,7 @@ async fn push_cmd(
         }
         writeln!(
             out,
-            "Image {} is stored in R2 (auto-deploy is off; run `rudder deploy {}` when ready).",
+            "Image {} is stored in R2 (auto-deploy is off; run `dymini-panel deploy {}` when ready).",
             record.tag,
             service.path()
         )?;
@@ -1526,7 +1535,7 @@ async fn push_cmd(
     } else {
         writeln!(
             out,
-            "Image {} is stored in R2 (auto-deploy is off; run `rudder deploy {}` when ready).",
+            "Image {} is stored in R2 (auto-deploy is off; run `dymini-panel deploy {}` when ready).",
             record.tag,
             service.path()
         )?;
@@ -1585,7 +1594,7 @@ async fn images_cmd(
     let cfg = loaded.map(|(_, c)| c).unwrap_or_default();
     let service_spec = service_spec
         .or_else(|| (!cfg.service.is_empty()).then_some(cfg.service.clone()))
-        .context("specify <service> or set `service = \"...\"` in rudder.toml")?;
+        .context("specify <service> or set `service = \"...\"` in dymini-panel.toml")?;
     let service = resolve(api, &service_spec).await?;
     let images_root = config::images_dir(&ctx.config_path);
 
@@ -1593,7 +1602,7 @@ async fn images_cmd(
         "prune" => {
             let keep = keep_count
                 .or(cfg.local_keep_count)
-                .context("specify --keep <N> or set local_keep_count in rudder.toml")?;
+                .context("specify --keep <N> or set local_keep_count in dymini-panel.toml")?;
             let protected_tag = fetch_deployed_tag_best_effort(ctx, &service_spec).await;
             let mut removed = image::prune_local_store(
                 &images_root,
@@ -1618,8 +1627,8 @@ async fn images_cmd(
             Ok(())
         }
         "remove" => {
-            let tag =
-                target_tag.context("usage: rudder images <service> remove <tag> [--r2-only]")?;
+            let tag = target_tag
+                .context("usage: dymini-panel images <service> remove <tag> [--r2-only]")?;
             let remote = api
                 .get(&format!("/api/v1/services/{}/images", service.id), &[])
                 .await?;
@@ -1656,7 +1665,7 @@ async fn images_cmd(
             Ok(())
         }
         "rollback" => {
-            let tag = target_tag.context("usage: rudder images <service> rollback <tag>")?;
+            let tag = target_tag.context("usage: dymini-panel images <service> rollback <tag>")?;
             deploy_or_repush_r2_image(
                 api,
                 &service,
@@ -1893,17 +1902,17 @@ fn human_bytes(bytes: i64) -> String {
     }
 }
 
-/// `rudder status [--check]`: the same facts as the panel's Rudder Image page.
+/// `dymini-panel status [--check]`: the same facts as the panel's Dymini Panel Image page.
 async fn status(api: &Api, args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Result<()> {
     let mut check = false;
     for arg in args {
         match arg.as_str() {
             "--check" => check = true,
-            other => bail!("unknown option {other}; usage: rudder status [--check]"),
+            other => bail!("unknown option {other}; usage: dymini-panel status [--check]"),
         }
     }
     let overview = api.get("/api/v1/image-store/overview", &[]).await?;
-    writeln!(out, "Rudder Image on {}", api.base)?;
+    writeln!(out, "Dymini Panel Image on {}", api.base)?;
     match overview["destination"]["name"].as_str() {
         Some(name) => writeln!(
             out,
@@ -1912,7 +1921,7 @@ async fn status(api: &Api, args: Vec<String>, out: &mut (dyn Write + Send)) -> a
         )?,
         None => writeln!(
             out,
-            "  Bucket:      not set (panel: S3 > Rudder Image > Setup)"
+            "  Bucket:      not set (panel: S3 > Dymini Panel Image > Setup)"
         )?,
     }
     if check {
@@ -2014,7 +2023,7 @@ async fn resolve(api: &Api, spec: &str) -> anyhow::Result<Service> {
         .collect();
     match matches.as_slice() {
         [one] => Ok((*one).clone()),
-        [] => bail!("no service matches '{spec}'; see `rudder services`"),
+        [] => bail!("no service matches '{spec}'; see `dymini-panel services`"),
         many => bail!(
             "'{spec}' matches {} services ({}); use project/environment/name or the id",
             many.len(),
@@ -2088,7 +2097,7 @@ async fn deploy(
     let cfg = loaded.map(|(_, c)| c).unwrap_or_default();
     let spec = spec
         .or_else(|| (!cfg.service.is_empty()).then_some(cfg.service.clone()))
-        .context("usage: rudder deploy <service> [--image IMAGE] [--build]")?;
+        .context("usage: dymini-panel deploy <service> [--image IMAGE] [--build]")?;
     let should_build = build_flag.unwrap_or(cfg.deploy_build);
 
     if should_build {
@@ -2172,7 +2181,7 @@ async fn deploy(
                 .to_owned()
         }
         "application" => {
-            // Check if this service has Rudder Images stored in R2 (or if --image matches a tag in R2/local)
+            // Check if this service has Dymini Panel Images stored in R2 (or if --image matches a tag in R2/local)
             let r2_images = api
                 .get(&format!("/api/v1/services/{id}/images"), &[])
                 .await
@@ -2396,7 +2405,7 @@ async fn logs(
             other => bail!("unexpected argument {other}"),
         }
     }
-    let spec = spec.context("usage: rudder logs <service> [-f] [-n LINES]")?;
+    let spec = spec.context("usage: dymini-panel logs <service> [-f] [-n LINES]")?;
     let service = resolve(api, &spec).await?;
     let mut query = filters.clone();
     query.push(("service_id", service.id.clone()));
@@ -2475,8 +2484,8 @@ async fn purge(api: &Api, args: Vec<String>, out: &mut (dyn Write + Send)) -> an
             other => bail!("unexpected argument {other}"),
         }
     }
-    let spec =
-        spec.context("usage: rudder cache purge <service> (--all | --path P... | --prefix P)")?;
+    let spec = spec
+        .context("usage: dymini-panel cache purge <service> (--all | --path P... | --prefix P)")?;
     if !all && paths.is_empty() && prefix.is_none() {
         bail!("say what to purge: --all, --path P (repeatable), or --prefix P");
     }
@@ -2520,7 +2529,7 @@ mod tests {
     }
 
     #[test]
-    fn tokens_must_look_like_rudder_tokens() {
+    fn tokens_must_look_like_dymini_panel_tokens() {
         assert!(Api::new("http://127.0.0.1:3000", "rdr_abc").is_ok());
         assert!(Api::new("http://127.0.0.1:3000", "ghp_abc").is_err());
         assert!(Api::new("not a url", "rdr_abc").is_err());
@@ -2528,14 +2537,14 @@ mod tests {
 
     #[test]
     fn version_constant_matches_the_product() {
-        assert_eq!(rudder_core::PRODUCT, "rudder");
-        assert!(!rudder_core::VERSION.is_empty());
+        assert_eq!(dymini_panel_core::PRODUCT, "dymini-panel");
+        assert!(!dymini_panel_core::VERSION.is_empty());
     }
 
     #[tokio::test]
     async fn subcommand_help_flags_succeed_without_login() {
         let ctx = Context {
-            config_path: std::env::temp_dir().join("nonexistent-rudder-config.json"),
+            config_path: std::env::temp_dir().join("nonexistent-dymini-panel-config.json"),
             url: None,
             token: None,
             read_token: Box::new(|| Ok(String::new())),
@@ -2547,11 +2556,11 @@ mod tests {
             let mut out = Vec::new();
             run(vec![cmd.into(), "--help".into()], &ctx, &mut out)
                 .await
-                .unwrap_or_else(|e| panic!("`rudder {cmd} --help` failed: {e}"));
+                .unwrap_or_else(|e| panic!("`dymini-panel {cmd} --help` failed: {e}"));
             let text = String::from_utf8(out).unwrap();
             assert!(
                 text.contains("Usage:"),
-                "`rudder {cmd} --help` missing Usage: {text}"
+                "`dymini-panel {cmd} --help` missing Usage: {text}"
             );
         }
     }
@@ -2561,7 +2570,7 @@ mod tests {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::LOCATION,
-            "https://knotree.cloudflareaccess.com/cdn-cgi/access/login/rudder.dymini.com?kid=abc"
+            "https://dymini-panel.cloudflareaccess.com/cdn-cgi/access/login/dymini-panel.dymini.com?kid=abc"
                 .parse()
                 .unwrap(),
         );
@@ -2570,7 +2579,7 @@ mod tests {
             "Cloudflare-Access".parse().unwrap(),
         );
         let err = check_cloudflare_access_interception(
-            "https://rudder.dymini.com",
+            "https://dymini-panel.dymini.com",
             "/api/v1/services",
             reqwest::StatusCode::FOUND,
             &headers,
@@ -2600,7 +2609,7 @@ mod tests {
                     let first_line = req.lines().next().unwrap_or_default();
                     let path = first_line.split_whitespace().nth(1).unwrap_or("/");
                     let reply = if path.starts_with("/api/v1/") {
-                        "HTTP/1.1 302 Found\r\nLocation: https://knotree.cloudflareaccess.com/cdn-cgi/access/login/rudder.dymini.com?kid=1\r\nWww-Authenticate: Cloudflare-Access\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()
+                        "HTTP/1.1 302 Found\r\nLocation: https://dymini-panel.cloudflareaccess.com/cdn-cgi/access/login/dymini-panel.dymini.com?kid=1\r\nWww-Authenticate: Cloudflare-Access\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()
                     } else if path == "/mcp/api/v1/cli/auth/start" {
                         let body = r#"{"request_id":"req-1","poll_secret":"sec-1","device_code":"ABCD1234","verification_path":"/tokens?device=1"}"#;
                         format!(
@@ -2630,7 +2639,7 @@ mod tests {
         });
 
         let dir = std::env::temp_dir().join(format!(
-            "rudder-cf-bypass-test-{}",
+            "dymini-panel-cf-bypass-test-{}",
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or(1)
         ));
         std::fs::create_dir_all(&dir).unwrap();
@@ -2697,7 +2706,7 @@ mod tests {
                     let (status, body) = match (method, path) {
                         ("GET", "/api/v1/services") => (
                             "200 OK",
-                            r#"[{"id":"svc-1","name":"knotree-api","kind":"compose","status":"running","project_name":"knotree","environment_name":"prod"}]"#.to_owned(),
+                            r#"[{"id":"svc-1","name":"dymini-panel-api","kind":"compose","status":"running","project_name":"dymini-panel","environment_name":"prod"}]"#.to_owned(),
                         ),
                         ("GET", "/api/v1/services/svc-1/images") => (
                             "200 OK",
@@ -2705,19 +2714,19 @@ mod tests {
                         ),
                         ("POST", "/api/v1/services/svc-1/images/deploy") => (
                             "202 Accepted",
-                            r#"{"id":"dep-1","status":"queued","image_ref":"rudder-image/knotree-api:prod-20261114-abc","logs":"queued behind running stack action\n"}"#.to_owned(),
+                            r#"{"id":"dep-1","status":"queued","image_ref":"dymini-panel-image/dymini-panel-api:prod-20261114-abc","logs":"queued behind running stack action\n"}"#.to_owned(),
                         ),
                         ("GET", "/api/v1/services/svc-1/deployments") => {
                             let count = polls_req.fetch_add(1, Ordering::SeqCst);
                             if count == 0 {
                                 (
                                     "200 OK",
-                                    r#"[{"id":"dep-1","status":"running","image_ref":"rudder-image/knotree-api:prod-20261114-abc","logs":"queued behind running stack action\nwrote rudder-compose.yml and .env\n"}]"#.to_owned(),
+                                    r#"[{"id":"dep-1","status":"running","image_ref":"dymini-panel-image/dymini-panel-api:prod-20261114-abc","logs":"queued behind running stack action\nwrote dymini-panel-compose.yml and .env\n"}]"#.to_owned(),
                                 )
                             } else {
                                 (
                                     "200 OK",
-                                    r#"[{"id":"dep-1","status":"succeeded","image_ref":"rudder-image/knotree-api:prod-20261114-abc","logs":"queued behind running stack action\nwrote rudder-compose.yml and .env\nContainer started\n","finished_at":"2026-11-14T10:00:00Z"}]"#.to_owned(),
+                                    r#"[{"id":"dep-1","status":"succeeded","image_ref":"dymini-panel-image/dymini-panel-api:prod-20261114-abc","logs":"queued behind running stack action\nwrote dymini-panel-compose.yml and .env\nContainer started\n","finished_at":"2026-11-14T10:00:00Z"}]"#.to_owned(),
                                 )
                             }
                         }
@@ -2734,7 +2743,7 @@ mod tests {
         });
 
         let dir = std::env::temp_dir().join(format!(
-            "rudder-compose-deploy-test-{}",
+            "dymini-panel-compose-deploy-test-{}",
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or(1)
         ));
         std::fs::create_dir_all(&dir).unwrap();
@@ -2749,7 +2758,7 @@ mod tests {
         run(
             vec![
                 "deploy".into(),
-                "knotree/prod/knotree-api".into(),
+                "dymini-panel/prod/dymini-panel-api".into(),
                 "--image".into(),
                 "prod-20261114-abc".into(),
             ],
@@ -2761,15 +2770,18 @@ mod tests {
         let text = String::from_utf8(out).unwrap();
         assert!(
             text.contains(
-                "Deploying knotree/prod/knotree-api from Cloudflare R2 (prod-20261114-abc)"
+                "Deploying dymini-panel/prod/dymini-panel-api from Cloudflare R2 (prod-20261114-abc)"
             ),
             "{text}"
         );
-        assert!(text.contains("wrote rudder-compose.yml and .env"), "{text}");
+        assert!(
+            text.contains("wrote dymini-panel-compose.yml and .env"),
+            "{text}"
+        );
         assert!(text.contains("Container started"), "{text}");
         assert!(
             text.contains(
-                "Deployment dep-1 succeeded (rudder-image/knotree-api:prod-20261114-abc)"
+                "Deployment dep-1 succeeded (dymini-panel-image/dymini-panel-api:prod-20261114-abc)"
             ),
             "{text}"
         );

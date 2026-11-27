@@ -1,7 +1,7 @@
 //! Structured tracing setup.
 //!
 //! Panel logs are JSON by default so the log pipeline can ingest them without
-//! a second parser. `RUDDER_LOG_FORMAT=pretty` is for local terminals.
+//! a second parser. `DYMINI_PANEL_LOG_FORMAT=pretty` is for local terminals.
 
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;

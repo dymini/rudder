@@ -7,17 +7,17 @@
 //! [`PANEL_TLS_NAME`], so they can dial any address the panel is reachable on.
 
 use chrono::{Datelike, Duration, Utc};
+use dymini_panel_core::Cipher;
 use rcgen::{
     BasicConstraints, CertificateParams, CertificateSigningRequestParams, DnType,
     ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair, KeyUsagePurpose, SanType,
 };
-use rudder_core::Cipher;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 /// Name in the panel's gRPC certificate. Agents set it as the TLS server name.
-pub const PANEL_TLS_NAME: &str = "rudder-panel";
+pub const PANEL_TLS_NAME: &str = "dymini-panel";
 const CLIENT_CERT_YEARS: i32 = 10;
 
 pub struct AgentCa {
@@ -55,7 +55,7 @@ impl AgentCa {
         let mut params = CertificateParams::new(Vec::new())?;
         params
             .distinguished_name
-            .push(DnType::CommonName, "Rudder agent CA");
+            .push(DnType::CommonName, "Dymini Panel agent CA");
         params.is_ca = IsCa::Ca(BasicConstraints::Constrained(0));
         params.key_usages = vec![
             KeyUsagePurpose::KeyCertSign,
@@ -111,7 +111,7 @@ impl AgentCa {
             .distinguished_name
             .push(DnType::CommonName, server_id.to_string());
         params.subject_alt_names = vec![SanType::DnsName(
-            format!("{server_id}.agent.rudder").try_into()?,
+            format!("{server_id}.agent.dymini-panel").try_into()?,
         )];
         params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
         params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
@@ -202,7 +202,7 @@ mod tests {
         );
         let text = format!("{:?}", cert.subject_alternative_name().unwrap());
         assert!(!text.contains("panel.example.com"), "{text}");
-        assert!(text.contains(&format!("{id}.agent.rudder")), "{text}");
+        assert!(text.contains(&format!("{id}.agent.dymini-panel")), "{text}");
     }
 
     #[test]

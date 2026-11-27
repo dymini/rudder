@@ -1,12 +1,12 @@
 # Logs and terminal
 
-Rudder stores logs from every source in the panel's Postgres database, so search, live tail, and export work without a separate log stack.
+Dymini Panel stores logs from every source in the panel's Postgres database, so search, live tail, and export work without a separate log stack.
 
 | Source | Where it comes from |
 | --- | --- |
-| `app` | stdout and stderr of containers labelled `rudder.managed=true`: applications, databases, and compose stack services. |
-| `proxy` | The JSON access log of the `rudder-traefik` container. The request host is matched against your domains, so proxy lines appear on the service they belong to. |
-| `cache` | Output of the `rudder-cache` container. |
+| `app` | stdout and stderr of containers labelled `dymini-panel.managed=true`: applications, databases, and compose stack services. |
+| `proxy` | The JSON access log of the `dymini-panel-traefik` container. The request host is matched against your domains, so proxy lines appear on the service they belong to. |
+| `cache` | Output of the `dymini-panel-cache` container. |
 | `panel` | The control plane's own events at INFO and above. |
 | `agent` | Lines shipped by remote agents. |
 | `system` | Anything sent to the ingest API as `system`. |
@@ -59,12 +59,12 @@ Each source keeps its lines for its own number of days (default 14, maximum 365)
 
 ## Terminal
 
-The **Terminal** tab of a service opens an interactive shell in its running container. Rudder runs `bash -l` if the image has bash, otherwise `sh -l`, as the container's default user. For a compose stack, pick the compose service first. The terminal follows the browser window's size.
+The **Terminal** tab of a service opens an interactive shell in its running container. Dymini Panel runs `bash -l` if the image has bash, otherwise `sh -l`, as the container's default user. For a compose stack, pick the compose service first. The terminal follows the browser window's size.
 
-Only admins can open a terminal (an admin token needs the `write` scope). Every session is written to the audit log as `service.terminal`. Rudder does not record keystrokes or output.
+Only admins can open a terminal (an admin token needs the `write` scope). Every session is written to the audit log as `service.terminal`. Dymini Panel does not record keystrokes or output.
 
 ## Limits
 
 - Logs are an operational aid, not an audit trail. If the panel's in-memory queue (20,000 lines) fills up or the panel stops in the middle of a batch, lines can be lost.
-- Docker reports times to the second when Rudder resumes following a container, so a few lines written in the same second as a restart can be skipped.
+- Docker reports times to the second when Dymini Panel resumes following a container, so a few lines written in the same second as a restart can be skipped.
 - Lines from remote servers arrive through the agent. The panel never connects to a remote Docker daemon to read logs.

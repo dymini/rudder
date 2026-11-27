@@ -3,7 +3,7 @@
 //! A panel backup is a tar of `manifest.json`, `master.key`, `database.pgdump`
 //! (`pg_dump --format=custom`), and `settings.json`. It carries the master key,
 //! so it is always encrypted with a passphrase before it leaves the panel.
-//! [`restore`] runs before the panel starts, from `rudder-server restore`.
+//! [`restore`] runs before the panel starts, from `dymini-panel-server restore`.
 
 use std::io::Write as _;
 #[cfg(unix)]
@@ -13,8 +13,8 @@ use std::process::Stdio;
 
 use anyhow::{bail, Context};
 use chrono::{DateTime, Utc};
+use dymini_panel_core::{ByteStream, Compression, Error};
 use futures_util::{StreamExt, TryStreamExt};
-use rudder_core::{ByteStream, Compression, Error};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::PgPool;
@@ -27,7 +27,10 @@ use crate::backup::tarfilter::{tokio_stream_from, ChannelWriter};
 use crate::config::Config;
 use crate::error::ApiError;
 
-pub const FORMAT: &str = "rudder-panel-backup";
+pub const FORMAT: &str = "dymini-panel-backup";
+/// Format marker written before the Dymini Panel rebrand; still accepted on restore.
+pub const LEGACY_FORMAT: &str = "rudder-panel-backup";
+pub const LEGACY_SETTINGS_FORMAT: &str = "rudder-panel-settings-export";
 pub const FORMAT_VERSION: u32 = 1;
 pub const MIN_PASSPHRASE: usize = 12;
 
@@ -50,7 +53,8 @@ const HISTORY_TABLES: [&str; 4] = [
 pub struct Manifest {
     pub format: String,
     pub version: u32,
-    pub rudder_version: String,
+    #[serde(alias = "rudder_version")]
+    pub dymini_panel_version: String,
     pub created_at: DateTime<Utc>,
     /// Highest applied schema migration when the dump was taken.
     pub migration: i64,
@@ -103,9 +107,12 @@ pub async fn settings_export(pool: &PgPool) -> Result<Value, ApiError> {
     .map_err(ApiError::database)?;
     strip_secrets(&mut export);
     let mut document = serde_json::Map::new();
-    document.insert("format".into(), Value::from("rudder-settings-export"));
+    document.insert("format".into(), Value::from("dymini-panel-settings-export"));
     document.insert("version".into(), Value::from(1));
-    document.insert("rudder_version".into(), Value::from(rudder_core::VERSION));
+    document.insert(
+        "dymini_panel_version".into(),
+        Value::from(dymini_panel_core::VERSION),
+    );
     document.insert("exported_at".into(), Value::from(Utc::now().to_rfc3339()));
     if let Value::Object(tables) = export {
         document.extend(tables);
@@ -214,7 +221,7 @@ async fn run_pg_tool(
         .map(|(_, value)| value.as_str())
         .collect();
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let stderr = rudder_core::redact(stderr.trim(), &secrets);
+    let stderr = dymini_panel_core::redact(stderr.trim(), &secrets);
     let tail: String = stderr
         .chars()
         .rev()
@@ -321,7 +328,7 @@ pub(crate) async fn archive_with_manifest(
     let manifest = Manifest {
         format: FORMAT.into(),
         version: FORMAT_VERSION,
-        rudder_version: rudder_core::VERSION.into(),
+        dymini_panel_version: dymini_panel_core::VERSION.into(),
         created_at: Utc::now(),
         migration: applied_migration(pool).await?,
         includes_history: include_history,
@@ -395,7 +402,11 @@ pub(crate) async fn verify_backup(
                 bail!("settings export exceeds 16 MiB");
             }
             let settings: Value = serde_json::from_slice(&bytes)?;
-            if settings["format"] != "rudder-settings-export" || settings["version"] != 1 {
+            if !matches!(
+                settings["format"].as_str(),
+                Some("dymini-panel-settings-export") | Some(LEGACY_SETTINGS_FORMAT)
+            ) || settings["version"] != 1
+            {
                 bail!("invalid settings export");
             }
             write_private(&dir.join(SETTINGS), &bytes)?;
@@ -442,18 +453,22 @@ pub(crate) async fn verify_backup(
     })
     .await??;
     let settings: Value = serde_json::from_slice(&std::fs::read(work.file(SETTINGS))?)?;
-    if settings["format"] != "rudder-settings-export" || settings["version"] != 1 {
+    if !matches!(
+        settings["format"].as_str(),
+        Some("dymini-panel-settings-export") | Some(LEGACY_SETTINGS_FORMAT)
+    ) || settings["version"] != 1
+    {
         bail!("invalid settings export");
     }
     if settings_only {
         return Ok(
-            serde_json::json!({"format":"rudder-settings-export","version":1,"rudder_version":settings["rudder_version"],"contents":[SETTINGS],"sql_check":"not_applicable"}),
+            serde_json::json!({"format":"dymini-panel-settings-export","version":1,"dymini_panel_version":settings.get("dymini_panel_version").or_else(|| settings.get("rudder_version")).cloned().unwrap_or(serde_json::Value::Null),"contents":[SETTINGS],"sql_check":"not_applicable"}),
         );
     }
     let manifest: Manifest = serde_json::from_slice(&std::fs::read(work.file(MANIFEST))?)?;
-    if manifest.format != FORMAT
+    if !matches!(manifest.format.as_str(), FORMAT | LEGACY_FORMAT)
         || manifest.version != FORMAT_VERSION
-        || manifest.rudder_version.is_empty()
+        || manifest.dymini_panel_version.is_empty()
         || manifest.migration < 0
     {
         bail!("unsupported panel manifest");
@@ -511,7 +526,7 @@ pub fn seal(archive: ByteStream, passphrase: &str) -> Result<ByteStream, Error> 
 }
 
 pub fn file_name(at: DateTime<Utc>) -> String {
-    format!("rudder-panel-{}.tar.zst.enc", at.format("%Y%m%d-%H%M%S"))
+    format!("dymini-panel-{}.tar.zst.enc", at.format("%Y%m%d-%H%M%S"))
 }
 
 /// Inputs of an offline restore.
@@ -560,7 +575,7 @@ async fn open_plain(path: &Path, passphrase: Option<&str>) -> anyhow::Result<Byt
     let mut stream: ByteStream = Box::pin(
         ReaderStream::new(file).map_err(|error| Error::Node(format!("read archive: {error}"))),
     );
-    if read == magic.len() && &magic == rudder_core::ENVELOPE_MAGIC {
+    if read == magic.len() && &magic == dymini_panel_core::ENVELOPE_MAGIC {
         let passphrase = passphrase
             .filter(|value| !value.is_empty())
             .context("the backup is encrypted; provide its passphrase")?;
@@ -661,7 +676,7 @@ fn existing_key(path: &Path) -> anyhow::Result<Option<[u8; 32]>> {
 /// Start the panel afterwards; it applies newer migrations and republishes every
 /// server's proxy configuration.
 pub async fn restore(options: RestoreOptions) -> anyhow::Result<RestoreReport> {
-    let work = WorkDir::create(&std::env::temp_dir(), "rudder-restore")
+    let work = WorkDir::create(&std::env::temp_dir(), "dymini-panel-restore")
         .context("create a scratch directory")?;
     let stream = open_plain(&options.archive, options.passphrase.as_deref()).await?;
     extract(stream, &work).await?;
@@ -672,7 +687,9 @@ pub async fn restore(options: RestoreOptions) -> anyhow::Result<RestoreReport> {
     }
     let manifest: Manifest = serde_json::from_slice(&std::fs::read(work.file(MANIFEST))?)
         .context("manifest.json is not valid")?;
-    if manifest.format != FORMAT || manifest.version > FORMAT_VERSION {
+    if !matches!(manifest.format.as_str(), FORMAT | LEGACY_FORMAT)
+        || manifest.version > FORMAT_VERSION
+    {
         bail!(
             "unsupported backup format {} v{}",
             manifest.format,
@@ -681,8 +698,8 @@ pub async fn restore(options: RestoreOptions) -> anyhow::Result<RestoreReport> {
     }
     if manifest.migration > options.known_migration {
         bail!(
-            "the backup was taken by Rudder {} (schema {}), newer than this binary (schema {}); install that version and restore again",
-            manifest.rudder_version,
+            "the backup was taken by Dymini Panel {} (schema {}), newer than this binary (schema {}); install that version and restore again",
+            manifest.dymini_panel_version,
             manifest.migration,
             options.known_migration
         );
@@ -962,7 +979,7 @@ fn tool_failure(
         .map(|(_, value)| value.as_str())
         .collect();
     let stderr = String::from_utf8_lossy(stderr);
-    let stderr = rudder_core::redact(stderr.trim(), &secrets);
+    let stderr = dymini_panel_core::redact(stderr.trim(), &secrets);
     let tail: String = stderr
         .chars()
         .rev()
@@ -990,15 +1007,19 @@ mod tests {
         pool: PgPool,
     ) {
         let work = WorkDir::create(&std::env::temp_dir(), "panel-verify-test").unwrap();
-        let base = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://rudder:rudder@localhost:5432/rudder".into());
+        let base = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            "postgres://dymini-panel:dymini-panel@localhost:5432/dymini-panel".into()
+        });
         let mut url = url::Url::parse(&base).unwrap();
         url.set_path(pool.connect_options().get_database().unwrap());
         let config = Config::from_map(
             &std::collections::HashMap::from([
                 ("DATABASE_URL".into(), url.to_string()),
-                ("RUDDER_MASTER_KEY".into(), "ab".repeat(32)),
-                ("RUDDER_DATA_DIR".into(), work.path.display().to_string()),
+                ("DYMINI_PANEL_MASTER_KEY".into(), "ab".repeat(32)),
+                (
+                    "DYMINI_PANEL_DATA_DIR".into(),
+                    work.path.display().to_string(),
+                ),
             ]),
             |_| unreachable!(),
         )
@@ -1129,7 +1150,8 @@ mod tests {
     #[test]
     fn database_urls_become_libpq_environment() {
         let env =
-            pg_env("postgres://rud%40der:p%2Fss@db.internal:6543/rudder?sslmode=require").unwrap();
+            pg_env("postgres://rud%40der:p%2Fss@db.internal:6543/dymini-panel?sslmode=require")
+                .unwrap();
         assert_eq!(
             env,
             vec![
@@ -1137,11 +1159,11 @@ mod tests {
                 ("PGPORT", "6543".to_owned()),
                 ("PGUSER", "rud@der".to_owned()),
                 ("PGPASSWORD", "p/ss".to_owned()),
-                ("PGDATABASE", "rudder".to_owned()),
+                ("PGDATABASE", "dymini-panel".to_owned()),
                 ("PGSSLMODE", "require".to_owned()),
             ]
         );
-        let socket = pg_env("postgresql:///rudder?host=/run/postgresql&user=me").unwrap();
+        let socket = pg_env("postgresql:///dymini-panel?host=/run/postgresql&user=me").unwrap();
         assert!(socket.contains(&("PGHOST", "/run/postgresql".to_owned())));
         assert!(socket.contains(&("PGUSER", "me".to_owned())));
         assert!(pg_env("mysql://x@y/z").is_err());
@@ -1174,7 +1196,7 @@ mod tests {
         if admin_url.is_empty() {
             return;
         }
-        let name = format!("rudder_to_{}", Uuid::new_v4().simple());
+        let name = format!("dymini_panel_to_{}", Uuid::new_v4().simple());
         let admin = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&admin_url)
@@ -1191,7 +1213,7 @@ mod tests {
         let mut url = url::Url::parse(&admin_url).unwrap();
         url.set_path(&name);
         let script = std::env::temp_dir().join(format!(
-            "rudder-fake-pg-restore-{}",
+            "dymini-panel-fake-pg-restore-{}",
             Uuid::new_v4().simple()
         ));
         std::fs::write(

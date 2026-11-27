@@ -208,7 +208,7 @@ async fn origin(state: &AppState) -> Result<String, ApiError> {
         )
     } else {
         return Err(bad(
-            "Configure the panel domain or RUDDER_PUBLIC_URL before using passkeys",
+            "Configure the panel domain or DYMINI_PANEL_PUBLIC_URL before using passkeys",
         ));
     };
     let url = Url::parse(&raw).map_err(|_| bad("The panel public URL is invalid"))?;
@@ -225,7 +225,7 @@ async fn webauthn(state: &AppState) -> Result<(Webauthn, String), ApiError> {
         .ok_or_else(|| bad("The panel URL needs a hostname"))?;
     let webauthn = WebauthnBuilder::new(rp, &url)
         .map_err(|_| bad("The panel origin cannot be used for WebAuthn"))?
-        .rp_name("Rudder")
+        .rp_name("Dymini Panel")
         .build()
         .map_err(|_| bad("Could not initialize WebAuthn"))?;
     Ok((webauthn, origin))
@@ -673,7 +673,7 @@ async fn send_email(state: &AppState, u: &MfaUser, purpose: &str) -> Result<(), 
     }
     sqlx::query("INSERT INTO mfa_email_codes(user_id,purpose,code_hash) VALUES ($1,$2,$3) ON CONFLICT(user_id,purpose) DO UPDATE SET code_hash=$3,attempts=0,created_at=now(),expires_at=now()+interval '10 minutes'").bind(u.id).bind(purpose).bind(&hash).execute(&mut *tx).await.map_err(ApiError::database)?;
     tx.commit().await.map_err(ApiError::database)?;
-    if let Err(error)=crate::mailer::send_text(&reqwest::Client::new(),&config,&from,&u.email,"Your Rudder MFA code",&format!("Your Rudder {purpose} code is {code}. It expires in 10 minutes. Do not share this code.")).await {
+    if let Err(error)=crate::mailer::send_text(&reqwest::Client::new(),&config,&from,&u.email,"Your Dymini Panel MFA code",&format!("Your Dymini Panel {purpose} code is {code}. It expires in 10 minutes. Do not share this code.")).await {
         sqlx::query("UPDATE mfa_email_codes SET attempts=5 WHERE user_id=$1 AND purpose=$2 AND code_hash=$3").bind(u.id).bind(purpose).bind(hash).execute(&state.pool).await.map_err(ApiError::database)?;
         return Err(error)
     }

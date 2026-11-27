@@ -68,15 +68,15 @@ const REQUIRED_TABLES: &[&str] = &[
     "cloudflare_settings",
 ];
 
-fn test_config(database_url: &str) -> rudder_server::Config {
+fn test_config(database_url: &str) -> dymini_panel_server::Config {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), database_url.to_owned()),
-        ("RUDDER_MASTER_KEY".into(), "aa".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_LOG_FORMAT".into(), "pretty".into()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "aa".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        ("DYMINI_PANEL_LOG_FORMAT".into(), "pretty".into()),
     ]);
-    rudder_server::Config::from_map(&vars, |_| unreachable!("no key file")).expect("config")
+    dymini_panel_server::Config::from_map(&vars, |_| unreachable!("no key file")).expect("config")
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -107,7 +107,7 @@ async fn migration_creates_required_tables(pool: PgPool) {
     assert_eq!(settings.github_repo, "vantanminh/rudder");
     assert!(!settings.auto_update);
 
-    rudder_server::ensure_partitions(&pool).await.unwrap();
+    dymini_panel_server::ensure_partitions(&pool).await.unwrap();
     let partition: String = sqlx::query_scalar(
         r#"
         SELECT inhrelid::regclass::text
@@ -127,10 +127,10 @@ async fn migration_creates_required_tables(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn health_endpoint_reports_ok(pool: PgPool) {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
-    let state = rudder_server::AppState::new(pool, test_config(&url));
-    let app = rudder_server::router(state);
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
+    let state = dymini_panel_server::AppState::new(pool, test_config(&url));
+    let app = dymini_panel_server::router(state);
     let response = app
         .oneshot(
             Request::builder()
@@ -159,6 +159,6 @@ async fn health_endpoint_reports_ok(pool: PgPool) {
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let json: Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(json["status"], "ok");
-    assert_eq!(json["product"], "rudder");
-    assert_eq!(json["version"], rudder_core::VERSION);
+    assert_eq!(json["product"], "dymini-panel");
+    assert_eq!(json["version"], dymini_panel_core::VERSION);
 }

@@ -16,7 +16,7 @@ use bollard::query_parameters::{
     CreateContainerOptionsBuilder, RemoveContainerOptionsBuilder, RenameContainerOptionsBuilder,
     StopContainerOptionsBuilder,
 };
-use rudder_core::{
+use dymini_panel_core::{
     validate_image_ref, validate_name, Error, NodeDriver, ReadyProbe, ReplaceContainer,
     ReplaceReport, CONTROL_PLANE_CPU_SHARES, CONTROL_PLANE_OOM_SCORE_ADJ,
 };
@@ -609,31 +609,31 @@ mod tests {
                 image: Some("ghcr.io/acme/panel:1".into()),
                 env: Some(vec![
                     "PATH=/usr/bin".into(),
-                    "DATABASE_URL=postgres://db/rudder".into(),
+                    "DATABASE_URL=postgres://db/dymini-panel".into(),
                 ]),
-                cmd: Some(vec!["rudder-server".into()]),
+                cmd: Some(vec!["dymini-panel-server".into()]),
                 labels: Some(HashMap::from([
                     ("org.opencontainers.image.version".into(), "1".into()),
-                    ("rudder.role".into(), "panel".into()),
+                    ("dymini-panel.role".into(), "panel".into()),
                 ])),
                 ..ContainerConfig::default()
             }),
             host_config: Some(HostConfig {
-                network_mode: Some("rudder-internal".into()),
+                network_mode: Some("dymini-panel-internal".into()),
                 binds: Some(vec!["/var/run/docker.sock:/var/run/docker.sock".into()]),
                 ..HostConfig::default()
             }),
             network_settings: Some(NetworkSettings {
                 networks: Some(HashMap::from([
                     (
-                        "rudder-internal".into(),
+                        "dymini-panel-internal".into(),
                         EndpointSettings {
                             aliases: Some(vec!["0123456789ab".into(), "panel".into()]),
                             ip_address: Some("172.18.0.5".into()),
                             ..EndpointSettings::default()
                         },
                     ),
-                    ("rudder-proxy".into(), EndpointSettings::default()),
+                    ("dymini-panel-proxy".into(), EndpointSettings::default()),
                 ])),
                 ..NetworkSettings::default()
             }),
@@ -641,7 +641,7 @@ mod tests {
         };
         let defaults = ImageConfig {
             env: Some(vec!["PATH=/usr/bin".into()]),
-            cmd: Some(vec!["rudder-server".into()]),
+            cmd: Some(vec!["dymini-panel-server".into()]),
             labels: Some(HashMap::from([(
                 "org.opencontainers.image.version".into(),
                 "1".into(),
@@ -652,22 +652,22 @@ mod tests {
         assert_eq!(body.image.as_deref(), Some("ghcr.io/acme/panel@sha256:abc"));
         assert_eq!(
             body.env,
-            Some(vec!["DATABASE_URL=postgres://db/rudder".into()])
+            Some(vec!["DATABASE_URL=postgres://db/dymini-panel".into()])
         );
         assert_eq!(body.cmd, None);
         assert_eq!(body.hostname, None);
         let labels = body.labels.unwrap();
         assert_eq!(labels.len(), 1);
-        assert_eq!(labels["rudder.role"], "panel");
+        assert_eq!(labels["dymini-panel.role"], "panel");
         assert_eq!(
             body.host_config.unwrap().binds.unwrap(),
             vec!["/var/run/docker.sock:/var/run/docker.sock".to_owned()]
         );
         let endpoints = body.networking_config.unwrap().endpoints_config.unwrap();
-        let primary = &endpoints["rudder-internal"];
+        let primary = &endpoints["dymini-panel-internal"];
         assert_eq!(primary.aliases, Some(vec!["panel".to_owned()]));
         assert_eq!(primary.ip_address, None);
         assert_eq!(extra.len(), 1);
-        assert_eq!(extra[0].0, "rudder-proxy");
+        assert_eq!(extra[0].0, "dymini-panel-proxy");
     }
 }

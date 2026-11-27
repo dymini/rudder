@@ -1,4 +1,4 @@
-//! Local Rudder Image store on the developer's machine (`~/.config/rudder/images/<service>/`),
+//! Local Dymini Panel Image store on the developer's machine (`~/.config/dymini-panel/images/<service>/`),
 //! local CI checks runner, and Docker build/save compressor.
 
 use std::collections::BTreeMap;
@@ -9,13 +9,13 @@ use std::time::Instant;
 
 use anyhow::{bail, Context as _};
 use chrono::{DateTime, SecondsFormat, Utc};
+use dymini_panel_core::{select_images_to_prune_protecting, validate_image_tag, ImageVersionEntry};
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use rudder_core::{select_images_to_prune_protecting, validate_image_tag, ImageVersionEntry};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-/// Threshold (200 MiB) above which `rudder build` warns about a large Docker build context.
+/// Threshold (200 MiB) above which `dymini-panel build` warns about a large Docker build context.
 pub const CONTEXT_WARN_BYTES: u64 = 200 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -415,7 +415,7 @@ pub fn build_and_store_local(
     let build_args = effective_build_args(git_sha.as_deref(), &build_time, params.build_args);
 
     let short_service = params.service.rsplit('/').next().unwrap_or(params.service);
-    let image_ref = format!("rudder-image/{short_service}:{tag}");
+    let image_ref = format!("dymini-panel-image/{short_service}:{tag}");
 
     let dir = service_dir(params.images_root, params.service);
     std::fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
@@ -461,7 +461,7 @@ pub fn build_and_store_local(
     let (size_bytes, sha256, image_id, detected_platform, uncompressed_bytes) = if let Ok(
         fake_payload,
     ) =
-        std::env::var("RUDDER_FAKE_DOCKER_ARCHIVE")
+        std::env::var("DYMINI_PANEL_FAKE_DOCKER_ARCHIVE")
     {
         let (sz, sha) = write_gzip_and_hash(fake_payload.as_bytes(), &dest_path)?;
         (sz, sha, None, params.platform.map(str::to_owned), None)
@@ -474,7 +474,7 @@ pub fn build_and_store_local(
         }
         if !resolved_dockerfile.is_file() {
             bail!(
-                    "Dockerfile '{}' was not found (checked '{}' and '{}'); verify `dockerfile` in rudder.toml or pass --dockerfile <path>",
+                    "Dockerfile '{}' was not found (checked '{}' and '{}'); verify `dockerfile` in dymini-panel.toml or pass --dockerfile <path>",
                     params.dockerfile,
                     Path::new(params.dockerfile).display(),
                     params.context_dir.join(params.dockerfile).display()
@@ -616,7 +616,7 @@ pub fn build_and_store_local(
     writeln!(out, "  Duration:    {:.1}s", elapsed.as_secs_f64())?;
     writeln!(
         out,
-        "  Next step:   `rudder push` (or `rudder push --deploy` to deploy immediately)"
+        "  Next step:   `dymini-panel push` (or `dymini-panel push --deploy` to deploy immediately)"
     )?;
     if !pruned.is_empty() {
         writeln!(out, "Pruned local archives: {}", pruned.join(", "))?;
@@ -750,7 +750,7 @@ mod tests {
     #[test]
     fn dockerignore_respects_dockerfile_specific_ignore_and_negations() {
         let tmp = std::env::temp_dir().join(format!(
-            "rudder-ctx-test-{}",
+            "dymini-panel-ctx-test-{}",
             Utc::now().timestamp_nanos_opt().unwrap_or(1)
         ));
         let rust_dir = tmp.join("rust");

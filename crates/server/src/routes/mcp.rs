@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::Json;
 use chrono::{DateTime, Utc};
-use rudder_core::{validate_agent_scopes, MCP_SCOPES, MCP_TEMPLATES};
+use dymini_panel_core::{validate_agent_scopes, MCP_SCOPES, MCP_TEMPLATES};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use utoipa::ToSchema;
@@ -222,7 +222,7 @@ async fn catalog(auth: AuthUser) -> Result<Json<McpCatalog>, ApiError> {
                 id: template.id.into(),
                 name: template.name.into(),
                 summary: template.summary.into(),
-                scopes: rudder_core::scopes_for_template(template.id)
+                scopes: dymini_panel_core::scopes_for_template(template.id)
                     .unwrap_or_default()
                     .into_iter()
                     .map(str::to_owned)

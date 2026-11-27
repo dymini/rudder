@@ -9,7 +9,7 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::Json;
 use base64::Engine as _;
-use rudder_core::{
+use dymini_panel_core::{
     connection_string, database_runtime, validate_name, ContainerSpec, DatabaseRequest, Engine,
     NodeDriver, PortMapping, VolumeMount, PROXY_NETWORK,
 };
@@ -132,7 +132,7 @@ async fn engines(_auth: AuthUser) -> Json<Vec<DatabaseEngineView>> {
 /// URL-safe password with no shell or URL metacharacters: 32 characters.
 pub fn generate_password() -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .encode(rudder_core::random_bytes::<24>())
+        .encode(dymini_panel_core::random_bytes::<24>())
         .replace(['-', '_'], "x")
 }
 
@@ -156,8 +156,8 @@ pub struct DatabaseInfo {
 }
 
 impl DatabaseInfo {
-    pub fn credentials(&self) -> rudder_core::DumpCredentials {
-        rudder_core::DumpCredentials {
+    pub fn credentials(&self) -> dymini_panel_core::DumpCredentials {
+        dymini_panel_core::DumpCredentials {
             engine: self.engine,
             database: self.database.clone(),
             username: self.username.clone(),
@@ -304,10 +304,10 @@ fn container_spec(info: &DatabaseInfo) -> Result<ContainerSpec, ApiError> {
         restart: "unless-stopped".into(),
         network: Some(PROXY_NETWORK.into()),
         labels: vec![
-            ("rudder.managed".into(), "true".into()),
-            ("rudder.service".into(), info.service_id.to_string()),
-            ("rudder.kind".into(), "database".into()),
-            ("rudder.engine".into(), info.engine.as_str().into()),
+            ("dymini-panel.managed".into(), "true".into()),
+            ("dymini-panel.service".into(), info.service_id.to_string()),
+            ("dymini-panel.kind".into(), "database".into()),
+            ("dymini-panel.engine".into(), info.engine.as_str().into()),
         ],
     })
 }
@@ -653,7 +653,7 @@ async fn create_database_container(
             })
         }
         Err(error) => {
-            let message = rudder_core::redact(&error.to_string(), &info.secrets());
+            let message = dymini_panel_core::redact(&error.to_string(), &info.secrets());
             let _ = set_status(state, info.service_id, "failed", None).await;
             Err(ApiError::new(StatusCode::BAD_GATEWAY, "node", message))
         }
@@ -803,7 +803,7 @@ async fn logs(
         .map_err(core_error)?;
     let logs = if row.kind == "database" {
         match load_database(&state, id).await {
-            Ok(info) => rudder_core::redact(&logs, &info.secrets()),
+            Ok(info) => dymini_panel_core::redact(&logs, &info.secrets()),
             Err(_) => logs,
         }
     } else {

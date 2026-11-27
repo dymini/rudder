@@ -1,11 +1,12 @@
 //! Remote servers: enrollment, the mTLS gRPC listener, and live sessions.
 
+pub mod legacy;
 pub mod pki;
 mod registry;
 pub mod service;
 
 use chrono::Utc;
-use rudder_proto::NodeAgentServer;
+use dymini_panel_proto::NodeAgentServer;
 use tokio::net::TcpListener;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
@@ -31,7 +32,14 @@ pub async fn serve(state: AppState, listener: TcpListener) -> anyhow::Result<()>
         .tls_config(tls)?
         .http2_keepalive_interval(Some(std::time::Duration::from_secs(30)))
         .http2_keepalive_timeout(Some(std::time::Duration::from_secs(20)))
-        .add_service(NodeAgentServer::new(service::AgentService::new(state)))
+        .add_service(NodeAgentServer::new(service::AgentService::new(
+            state.clone(),
+        )))
+        .add_service(
+            dymini_panel_proto::legacy::node_agent_server::NodeAgentServer::new(
+                legacy::LegacyAgentService::new(service::AgentService::new(state)),
+            ),
+        )
         .serve_with_incoming(TcpListenerStream::new(listener))
         .await?;
     Ok(())

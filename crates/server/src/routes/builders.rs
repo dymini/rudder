@@ -5,7 +5,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, patch, post};
 use axum::Json;
 use chrono::{DateTime, Duration, Utc};
-use rudder_node::ops::{BuildCachePrune, BuildCachePruned, Request};
+use dymini_panel_node::ops::{BuildCachePrune, BuildCachePruned, Request};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::FromRow;
@@ -180,7 +180,7 @@ async fn create(
     Json(body): Json<CreateBuilder>,
 ) -> Result<(StatusCode, Json<CreatedBuilder>), ApiError> {
     auth.require_write()?;
-    rudder_core::validate_name(&body.name).map_err(core_error)?;
+    dymini_panel_core::validate_name(&body.name).map_err(core_error)?;
     let description = body.description.unwrap_or_default();
     if description.len() > 4096 {
         return Err(bad(

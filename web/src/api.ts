@@ -1,6 +1,6 @@
 import { currentLanguage, translate } from "./i18n";
 
-const CSRF_KEY = "rudder_csrf";
+const CSRF_KEY = "dymini_panel_csrf";
 
 let csrfToken = sessionStorage.getItem(CSRF_KEY);
 

@@ -17,16 +17,16 @@ use bollard::query_parameters::{
     RemoveContainerOptionsBuilder, StopContainerOptionsBuilder,
 };
 use bollard::Docker;
-use futures_util::StreamExt;
-use rudder_core::{
+use dymini_panel_core::{
     compose_args, docker_config_with_logins, validate_env_key, validate_image_ref, validate_name,
     ArchiveSource, ByteStream, ComposeAction, ComposeOptions, ContainerSpec, DockerInfo, Error,
     ExecOutput, ExecSpec, HealthState, LogSink, NodeDriver, RegistryAuth, VolumeMount,
     CACHE_TOKEN_FILE, PROXY_NETWORK,
 };
-use rudder_core::{
+use dymini_panel_core::{
     ContainerInfo, LogLine, LogLineStream, LogStreamKind, TerminalInput, TerminalInputStream,
 };
+use futures_util::StreamExt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
@@ -49,7 +49,7 @@ pub struct LocalDriver {
     socket: Option<PathBuf>,
     cache_admin: String,
     host_proc: PathBuf,
-    cpu_previous: std::sync::Mutex<Option<rudder_core::CpuTimes>>,
+    cpu_previous: std::sync::Mutex<Option<dymini_panel_core::CpuTimes>>,
 }
 
 impl LocalDriver {
@@ -104,7 +104,7 @@ impl LocalDriver {
         &self,
         method: reqwest::Method,
         path: &str,
-        body: Option<&rudder_core::CachePurge>,
+        body: Option<&dymini_panel_core::CachePurge>,
     ) -> Result<Vec<u8>, Error> {
         let token = tokio::fs::read_to_string(confined_path(&self.root, CACHE_TOKEN_FILE)?)
             .await
@@ -247,7 +247,7 @@ impl NodeDriver for LocalDriver {
                 memory: spec.memory_bytes,
                 nano_cpus: spec.nano_cpus,
                 // Under memory pressure the kernel kills workloads before the panel.
-                oom_score_adj: Some(rudder_core::WORKLOAD_OOM_SCORE_ADJ),
+                oom_score_adj: Some(dymini_panel_core::WORKLOAD_OOM_SCORE_ADJ),
                 binds: if binds.is_empty() { None } else { Some(binds) },
                 port_bindings: if bindings.is_empty() {
                     None
@@ -321,7 +321,7 @@ impl NodeDriver for LocalDriver {
             return Ok(None);
         };
         let address = networks
-            .get(rudder_core::PROXY_NETWORK)
+            .get(dymini_panel_core::PROXY_NETWORK)
             .and_then(|network| network.ip_address.clone())
             .or_else(|| {
                 networks
@@ -863,19 +863,30 @@ impl NodeDriver for LocalDriver {
         tokio::fs::read(&path).await.map_err(Self::node)
     }
 
-    async fn container_stats(&self) -> Result<Vec<rudder_core::ContainerStats>, Error> {
+    async fn container_stats(&self) -> Result<Vec<dymini_panel_core::ContainerStats>, Error> {
         let docker = self.docker()?;
-        let mut filters = HashMap::new();
-        filters.insert("label".to_owned(), vec!["rudder.managed=true".to_owned()]);
+        // No server-side label filter: pre-rebrand containers carry the Rudder-era
+        // `rudder.managed` label, so membership is decided client-side below.
         let options = bollard::query_parameters::ListContainersOptionsBuilder::new()
             .all(false)
-            .filters(&filters)
             .build();
         let summaries = docker
             .list_containers(Some(options))
             .await
             .map_err(Self::node)?;
         let reads = summaries.into_iter().filter_map(|summary| {
+            let labels: Vec<(String, String)> = summary
+                .labels
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
+            let managed = labels.iter().any(|(key, value)| {
+                value == "true" && (key == "dymini-panel.managed" || key == "rudder.managed")
+            });
+            if !managed {
+                return None;
+            }
             let id = summary.id?;
             let name = summary
                 .names
@@ -883,8 +894,6 @@ impl NodeDriver for LocalDriver {
                 .and_then(|names| names.first())
                 .map(|name| name.trim_start_matches('/').to_owned())
                 .unwrap_or_default();
-            let labels: Vec<(String, String)> =
-                summary.labels.unwrap_or_default().into_iter().collect();
             Some(async move {
                 let options = bollard::query_parameters::StatsOptionsBuilder::new()
                     .stream(false)
@@ -927,7 +936,7 @@ impl NodeDriver for LocalDriver {
         Ok(u64::try_from(reclaimed).unwrap_or(0))
     }
 
-    async fn host_stats(&self) -> Result<rudder_core::HostStats, Error> {
+    async fn host_stats(&self) -> Result<dymini_panel_core::HostStats, Error> {
         let proc_root = self.host_proc.clone();
         let disk = self.root.clone();
         let previous = *self
@@ -941,7 +950,8 @@ impl NodeDriver for LocalDriver {
             } else {
                 PathBuf::from("/")
             };
-            rudder_core::read_host_stats(&proc_root, &disk, &mut previous).map(|s| (s, previous))
+            dymini_panel_core::read_host_stats(&proc_root, &disk, &mut previous)
+                .map(|s| (s, previous))
         })
         .await
         .map_err(Self::node)??;
@@ -1003,7 +1013,7 @@ impl NodeDriver for LocalDriver {
                         .map(|line| {
                             let (timestamp, text) = match line.split_once(' ') {
                                 Some((ts, rest))
-                                    if rudder_core::parse_docker_timestamp(ts).is_some() =>
+                                    if dymini_panel_core::parse_docker_timestamp(ts).is_some() =>
                                 {
                                     (Some(ts.to_owned()), rest.to_owned())
                                 }
@@ -1112,15 +1122,15 @@ impl NodeDriver for LocalDriver {
 
     async fn cache_purge(
         &self,
-        request: &rudder_core::CachePurge,
-    ) -> Result<rudder_core::CachePurgeResult, Error> {
+        request: &dymini_panel_core::CachePurge,
+    ) -> Result<dymini_panel_core::CachePurgeResult, Error> {
         let bytes = self
             .cache_request(reqwest::Method::POST, "/purge", Some(request))
             .await?;
         serde_json::from_slice(&bytes).map_err(Self::node)
     }
 
-    async fn cache_stats(&self) -> Result<rudder_core::CacheStats, Error> {
+    async fn cache_stats(&self) -> Result<dymini_panel_core::CacheStats, Error> {
         let bytes = self
             .cache_request(reqwest::Method::GET, "/stats", None)
             .await?;
@@ -1139,8 +1149,8 @@ impl NodeDriver for LocalDriver {
 
     async fn replace_container(
         &self,
-        request: &rudder_core::ReplaceContainer,
-    ) -> Result<rudder_core::ReplaceReport, Error> {
+        request: &dymini_panel_core::ReplaceContainer,
+    ) -> Result<dymini_panel_core::ReplaceReport, Error> {
         self.replace(request).await
     }
 }
@@ -1276,8 +1286,8 @@ impl LocalDriver {
             ArchiveSource::HostPath { path } => path.clone(),
         };
         let name = format!(
-            "rudder-helper-{}",
-            hex::encode(rudder_core::random_bytes::<6>())
+            "dymini-panel-helper-{}",
+            hex::encode(dymini_panel_core::random_bytes::<6>())
         );
         let spec = ContainerSpec {
             name,
@@ -1294,7 +1304,7 @@ impl LocalDriver {
             nano_cpus: None,
             restart: "no".into(),
             network: Some("none".into()),
-            labels: vec![("rudder.helper".into(), "true".into())],
+            labels: vec![("dymini-panel.helper".into(), "true".into())],
         };
         let id = self.create_container(&spec).await?;
         let helper = Helper {
@@ -1434,7 +1444,7 @@ impl TempDockerConfig {
             .or_else(|_| docker_config_with_logins(None, logins, &plugin_dirs))?;
         let dir = root.join("tmp").join(format!(
             "docker-{}",
-            hex::encode(rudder_core::random_bytes::<8>())
+            hex::encode(dymini_panel_core::random_bytes::<8>())
         ));
         std::fs::create_dir_all(&dir).map_err(LocalDriver::node)?;
         // From here the directory is removed on every exit path.
@@ -1484,7 +1494,7 @@ fn container_stats_from(
     labels: Vec<(String, String)>,
     restart_count: i64,
     stats: bollard::models::ContainerStatsResponse,
-) -> rudder_core::ContainerStats {
+) -> dymini_panel_core::ContainerStats {
     let cpu = stats.cpu_stats.as_ref();
     let precpu = stats.precpu_stats.as_ref();
     let total = |c: Option<&bollard::models::ContainerCpuStats>| {
@@ -1532,10 +1542,10 @@ fn container_stats_from(
             })
         })
         .unwrap_or((0, 0));
-    rudder_core::ContainerStats {
+    dymini_panel_core::ContainerStats {
         id,
         name,
-        cpu_percent: rudder_core::container_cpu_percent(
+        cpu_percent: dymini_panel_core::container_cpu_percent(
             total(cpu),
             total(precpu),
             system(cpu),
@@ -1558,10 +1568,10 @@ mod tests {
 
     #[test]
     fn file_writes_stay_inside_the_data_directory() {
-        let root = Path::new("/var/lib/rudder");
+        let root = Path::new("/var/lib/dymini-panel");
         assert_eq!(
             confined_path(root, "traefik/dynamic/app.yml").unwrap(),
-            PathBuf::from("/var/lib/rudder/traefik/dynamic/app.yml")
+            PathBuf::from("/var/lib/dymini-panel/traefik/dynamic/app.yml")
         );
         assert!(confined_path(root, "../etc/passwd").is_err());
         assert!(confined_path(root, "/etc/passwd").is_err());

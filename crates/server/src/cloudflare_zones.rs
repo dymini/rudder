@@ -1,4 +1,4 @@
-use rudder_core::{host_in_zone, validate_host};
+use dymini_panel_core::{host_in_zone, validate_host};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use utoipa::ToSchema;

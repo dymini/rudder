@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use axum::extract::{Query, State};
 use axum::Json;
+use dymini_panel_core::DnsRecord;
 use futures_util::{stream, StreamExt};
-use rudder_core::DnsRecord;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use utoipa::ToSchema;
@@ -126,7 +126,7 @@ pub async fn check_conflicts(
         if matches!(record.kind.as_str(), "A" | "AAAA" | "CNAME")
             && !cf::owned_record_or_legacy(state, &client, &zone.zone_id, &record).await?
         {
-            return Err(conflict("dns_conflict", format!("DNS for {host} is not managed by Rudder. Use overwrite_dns to explicitly replace it.")));
+            return Err(conflict("dns_conflict", format!("DNS for {host} is not managed by Dymini Panel. Use overwrite_dns to explicitly replace it.")));
         }
     }
     Ok(())
@@ -224,7 +224,7 @@ async fn reconcile_settings(
         let (kind, content) = if row.get::<String, _>("kind") == "local" && tunnel.is_some() {
             (
                 "CNAME",
-                rudder_core::tunnel_cname(tunnel.unwrap_or_default()),
+                dymini_panel_core::tunnel_cname(tunnel.unwrap_or_default()),
             )
         } else {
             let ip = match public_ip(row.get::<Option<String>, _>("public_ip").as_deref()) {
@@ -268,7 +268,7 @@ async fn reconcile_settings(
             || zones::resolve(&available, &host).is_err()
             || (row.get::<String, _>("kind") == "CNAME"
                 && tunnel.is_some_and(|id| {
-                    row.get::<String, _>("content") == rudder_core::tunnel_cname(id)
+                    row.get::<String, _>("content") == dymini_panel_core::tunnel_cname(id)
                 })
                 && keep_tunnel_hosts.contains(&host));
         if !keep {
@@ -345,7 +345,7 @@ async fn reconcile_address(
         .collect();
     for record in &addresses {
         if !owned(state, zone, record).await? && !overwrite {
-            return Err(conflict("dns_conflict",format!("DNS for {host} is not managed by Rudder. Use overwrite_dns to explicitly replace it.")));
+            return Err(conflict("dns_conflict",format!("DNS for {host} is not managed by Dymini Panel. Use overwrite_dns to explicitly replace it.")));
         }
     }
     let matching = addresses
@@ -584,7 +584,10 @@ pub async fn inventory(
             }),
             routing_options: Some(options(&state, service, &host).await?),
             dns: pending_dns(if tunnel {
-                settings.tunnel_id.as_deref().map(rudder_core::tunnel_cname)
+                settings
+                    .tunnel_id
+                    .as_deref()
+                    .map(dymini_panel_core::tunnel_cname)
             } else {
                 row.get("public_ip")
             }),
@@ -641,7 +644,10 @@ pub async fn inventory(
                 certificate_status: None,
                 routing_options: None,
                 dns: pending_dns(if tunnel {
-                    settings.tunnel_id.as_deref().map(rudder_core::tunnel_cname)
+                    settings
+                        .tunnel_id
+                        .as_deref()
+                        .map(dymini_panel_core::tunnel_cname)
                 } else {
                     ip
                 }),
@@ -694,12 +700,12 @@ mod tests {
                 "DATABASE_URL".into(),
                 std::env::var("DATABASE_URL").unwrap(),
             ),
-            ("RUDDER_MASTER_KEY".into(), "bb".repeat(32)),
-            ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
+            ("DYMINI_PANEL_MASTER_KEY".into(), "bb".repeat(32)),
+            ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
             (
-                "RUDDER_DATA_DIR".into(),
+                "DYMINI_PANEL_DATA_DIR".into(),
                 std::env::temp_dir()
-                    .join(format!("rudder-dns-lock-{}", Uuid::new_v4()))
+                    .join(format!("dymini-panel-dns-lock-{}", Uuid::new_v4()))
                     .display()
                     .to_string(),
             ),

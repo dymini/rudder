@@ -1,4 +1,4 @@
-//! Integration tests for Rudder Image Store (Cloudflare R2 / S3), per-service
+//! Integration tests for Dymini Panel Image Store (Cloudflare R2 / S3), per-service
 //! auto-deploy vs notify-only policy, R2 retention pruning, and re-pushing pruned images.
 
 use std::collections::HashMap;
@@ -14,22 +14,28 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 
 fn app(pool: PgPool, data_dir: &Path) -> axum::Router {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
-        ("RUDDER_MASTER_KEY".into(), "dd".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_PUBLIC_URL".into(), "https://panel.example".into()),
-        ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "dd".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
         (
-            "RUDDER_DOCKER_SOCKET".into(),
+            "DYMINI_PANEL_PUBLIC_URL".into(),
+            "https://panel.example".into(),
+        ),
+        (
+            "DYMINI_PANEL_DATA_DIR".into(),
+            data_dir.display().to_string(),
+        ),
+        (
+            "DYMINI_PANEL_DOCKER_SOCKET".into(),
             data_dir.join("no-docker.sock").display().to_string(),
         ),
     ]);
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::router(rudder_server::AppState::new(pool, config))
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    dymini_panel_server::router(dymini_panel_server::AppState::new(pool, config))
 }
 
 struct Reply {
@@ -48,7 +54,7 @@ async fn call(
     let mut builder = Request::builder().method(method).uri(path);
     if let Some((cookie, csrf)) = session {
         builder = builder
-            .header("cookie", format!("rudder_session={cookie}"))
+            .header("cookie", format!("dymini_panel_session={cookie}"))
             .header("x-csrf-token", csrf);
     }
     let request = match body {
@@ -65,7 +71,7 @@ async fn call(
         .get("set-cookie")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.split(';').next())
-        .and_then(|v| v.strip_prefix("rudder_session="))
+        .and_then(|v| v.strip_prefix("dymini_panel_session="))
         .map(str::to_owned);
     let raw = response
         .into_body()
@@ -84,7 +90,8 @@ async fn call(
 
 #[sqlx::test(migrations = "./migrations")]
 async fn r2_image_store_push_retention_notify_and_repush(pool: PgPool) {
-    let dir = std::env::temp_dir().join(format!("rudder-images-test-{}", uuid::Uuid::new_v4()));
+    let dir =
+        std::env::temp_dir().join(format!("dymini-panel-images-test-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
     let router = app(pool, &dir);
 
@@ -146,7 +153,7 @@ async fn r2_image_store_push_retention_notify_and_repush(pool: PgPool) {
             "name": "api",
             "kind": "application",
             "server_id": server.body["id"],
-            "spec": { "image": "rudder-image/api:initial" }
+            "spec": { "image": "dymini-panel-image/api:initial" }
         })),
     )
     .await;
@@ -182,7 +189,7 @@ async fn r2_image_store_push_retention_notify_and_repush(pool: PgPool) {
             "name": "cloudflare-r2",
             "endpoint": "http://local.r2.internal",
             "region": "auto",
-            "bucket": "rudder-images",
+            "bucket": "dymini-panel-images",
             "access_key_id": "R2ACCESSKEY1234",
             "secret_access_key": "R2SECRETKEY567890",
             "path_style": true
@@ -200,7 +207,7 @@ async fn r2_image_store_push_retention_notify_and_repush(pool: PgPool) {
         session,
         Some(json!({
             "destination_id": dest_id,
-            "path_prefix": "rudder-images",
+            "path_prefix": "dymini-panel-images",
             "r2_keep_count": 10
         })),
     )
@@ -361,7 +368,8 @@ async fn r2_image_store_push_retention_notify_and_repush(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn compose_service_accepts_image_push(pool: PgPool) {
-    let dir = std::env::temp_dir().join(format!("rudder-images-test-{}", uuid::Uuid::new_v4()));
+    let dir =
+        std::env::temp_dir().join(format!("dymini-panel-images-test-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
     let router = app(pool, &dir);
 
@@ -422,7 +430,7 @@ async fn compose_service_accepts_image_push(pool: PgPool) {
             "name": "shop",
             "server_id": server.body["id"],
             "source": "inline",
-            "compose_yaml": "services:\n  web:\n    image: rudder-image/shop:v1\n"
+            "compose_yaml": "services:\n  web:\n    image: dymini-panel-image/shop:v1\n"
         })),
     )
     .await;
@@ -438,7 +446,7 @@ async fn compose_service_accepts_image_push(pool: PgPool) {
             "name": "cloudflare-r2",
             "endpoint": "http://local.r2.internal",
             "region": "auto",
-            "bucket": "rudder-images",
+            "bucket": "dymini-panel-images",
             "access_key_id": "R2ACCESSKEY1234",
             "secret_access_key": "R2SECRETKEY567890",
             "path_style": true
@@ -451,7 +459,7 @@ async fn compose_service_accepts_image_push(pool: PgPool) {
         "PUT",
         "/api/v1/image-store/settings",
         session,
-        Some(json!({ "destination_id": dest.body["id"], "path_prefix": "rudder-images" })),
+        Some(json!({ "destination_id": dest.body["id"], "path_prefix": "dymini-panel-images" })),
     )
     .await;
     assert_eq!(store.status, StatusCode::OK);

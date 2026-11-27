@@ -1,4 +1,4 @@
-//! The Rudder Image dashboard: setup status, push and build statistics, connected
+//! The Dymini Panel Image dashboard: setup status, push and build statistics, connected
 //! command-line clients, and a live check of the Cloudflare R2 / S3 bucket.
 
 use axum::extract::State;
@@ -47,7 +47,7 @@ pub struct ImageTotals {
     pub r2_images: i64,
     /// Versions pruned from the bucket by retention.
     pub pruned_images: i64,
-    /// Bytes the bucket holds for Rudder Images.
+    /// Bytes the bucket holds for Dymini Panel Images.
     pub r2_bytes: i64,
     pub services: i64,
     pub pushes_24h: i64,
@@ -64,7 +64,7 @@ pub struct BuildTotals {
     pub failed_30d: i64,
     pub running: i64,
     pub queued: i64,
-    /// Deployments rolled out from a Rudder Image in the last 30 days.
+    /// Deployments rolled out from a Dymini Panel Image in the last 30 days.
     pub image_deploys_30d: i64,
     pub image_deploy_failures_30d: i64,
 }
@@ -168,7 +168,7 @@ async fn overview(
                COUNT(*) FILTER (WHERE created_at > now() - interval '30 days')::bigint AS pushes_30d,
                COALESCE(SUM(size_bytes) FILTER (WHERE created_at > now() - interval '30 days'), 0)::bigint
                    AS pushed_bytes_30d
-        FROM rudder_images
+        FROM dymini_panel_images
         "#,
     )
     .fetch_one(pool)
@@ -212,7 +212,7 @@ async fn overview(
                  (now()::date - ($1::int - 1)), now()::date, interval '1 day') AS d(day)
         LEFT JOIN (
             SELECT created_at::date AS day, COUNT(*) AS pushes, SUM(size_bytes) AS bytes
-            FROM rudder_images GROUP BY 1
+            FROM dymini_panel_images GROUP BY 1
         ) p ON p.day = d.day::date
         LEFT JOIN (
             SELECT created_at::date AS day, COUNT(*) AS builds,
@@ -244,7 +244,7 @@ async fn overview(
         FROM services s
         JOIN environments e ON e.id = s.environment_id
         JOIN projects p ON p.id = e.project_id
-        LEFT JOIN rudder_images i ON i.service_id = s.id
+        LEFT JOIN dymini_panel_images i ON i.service_id = s.id
         WHERE s.kind IN ('application', 'compose')
         GROUP BY s.id, p.name, e.name, s.name, s.image_auto_deploy
         HAVING COUNT(i.id) > 0 OR s.image_auto_deploy
@@ -261,7 +261,7 @@ async fn overview(
                p.name || '/' || e.name || '/' || s.name AS path,
                i.tag, i.git_sha, i.size_bytes, i.compression, i.r2_present,
                u.email AS pushed_by, i.created_at
-        FROM rudder_images i
+        FROM dymini_panel_images i
         JOIN services s ON s.id = i.service_id
         JOIN environments e ON e.id = s.environment_id
         JOIN projects p ON p.id = e.project_id
@@ -321,7 +321,7 @@ async fn overview(
             ImageSetupStep {
                 key: "client".into(),
                 state: "todo".into(),
-                detail: "No command-line client has signed in yet (rudder login).".into(),
+                detail: "No command-line client has signed in yet (dymini-panel login).".into(),
             }
         } else {
             ImageSetupStep {
@@ -340,7 +340,7 @@ async fn overview(
             ImageSetupStep {
                 key: "first_push".into(),
                 state: "todo".into(),
-                detail: "Nothing pushed yet (rudder build, then rudder push).".into(),
+                detail: "Nothing pushed yet (dymini-panel build, then dymini-panel push).".into(),
             }
         },
         if auto_deploy_services > 0 {
@@ -382,7 +382,7 @@ async fn test_store(
     let Some(destination_id) = settings.destination_id else {
         return Err(conflict(
             "image_store_unconfigured",
-            "no Cloudflare R2 / S3 destination is configured for Rudder Images",
+            "no Cloudflare R2 / S3 destination is configured for Dymini Panel Images",
         ));
     };
     let destination = s3::load_destination(&state, destination_id).await?;

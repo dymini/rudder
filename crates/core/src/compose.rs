@@ -147,7 +147,7 @@ mod tests {
     fn up_is_detached_and_paths_stay_one_argument() {
         let args = compose_args(
             "blog",
-            "/var/lib/rudder/stacks/blog/compose.yml",
+            "/var/lib/dymini-panel/stacks/blog/compose.yml",
             ComposeAction::Up,
         )
         .unwrap();
@@ -158,7 +158,7 @@ mod tests {
                 "-p",
                 "blog",
                 "-f",
-                "/var/lib/rudder/stacks/blog/compose.yml",
+                "/var/lib/dymini-panel/stacks/blog/compose.yml",
                 "up",
                 "-d",
                 "--remove-orphans",

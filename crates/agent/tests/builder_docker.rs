@@ -1,6 +1,6 @@
 //! Opt-in Linux smoke test. Uses a dedicated BuildKit instance, never a shared cache prune.
-//! Set BUILDX_BUILDER=rudder-builder-smoke-<unique> and RUDDER_BUILDER_SMOKE_DIR=<empty-dir>.
-//! cargo test -p rudder-agent --test builder_docker -- --ignored --nocapture
+//! Set BUILDX_BUILDER=dymini-panel-builder-smoke-<unique> and DYMINI_PANEL_BUILDER_SMOKE_DIR=<empty-dir>.
+//! cargo test -p dymini-panel-agent --test builder_docker -- --ignored --nocapture
 
 #![cfg(target_os = "linux")]
 
@@ -13,10 +13,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use dymini_panel_agent::builder::Builder;
+use dymini_panel_core::{BuildPlan, BuildStrategy};
+use dymini_panel_node::ops::{BuildCachePrune, BuildEvent, BuildRequest, BuildStatus};
 use futures_util::StreamExt;
-use rudder_agent::builder::Builder;
-use rudder_core::{BuildPlan, BuildStrategy};
-use rudder_node::ops::{BuildCachePrune, BuildEvent, BuildRequest, BuildStatus};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 use tokio::sync::watch;
@@ -47,11 +47,11 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        let root = PathBuf::from(std::env::var("RUDDER_BUILDER_SMOKE_DIR").unwrap());
+        let root = PathBuf::from(std::env::var("DYMINI_PANEL_BUILDER_SMOKE_DIR").unwrap());
         assert!(!root.exists(), "use a fresh smoke evidence directory");
         fs::create_dir_all(&root).unwrap();
         let buildkit = std::env::var("BUILDX_BUILDER").unwrap();
-        assert!(buildkit.starts_with("rudder-builder-smoke-"));
+        assert!(buildkit.starts_with("dymini-panel-builder-smoke-"));
         assert!(!docker(&["buildx", "inspect", &buildkit]).status.success());
         docker_ok(&[
             "buildx",
@@ -75,7 +75,7 @@ impl Fixture {
         let src = self.root.join(format!("builder/workspaces/{job}/src"));
         fs::create_dir_all(&src).unwrap();
         fs::write(src.join("Dockerfile"), dockerfile).unwrap();
-        let image = format!("rudder-builder-smoke:{}-{job}", std::process::id());
+        let image = format!("dymini-panel-builder-smoke:{}-{job}", std::process::id());
         self.images.push(image.clone());
         BuildRequest {
             job_id: job.into(),
@@ -342,7 +342,7 @@ fn execution_pids(
             "inspect",
             "--format",
             "{{.State.Pid}}",
-            &format!("rudder-build-test-{job}"),
+            &format!("dymini-panel-build-test-{job}"),
         ])
         .trim()
         .parse::<u32>()
@@ -504,11 +504,13 @@ async fn real_docker_build_cache_tests_cancel_timeout_and_prune() {
         );
         processes_stopped(job, &pids).await;
         heartbeat.stopped(job).await;
-        assert!(
-            !docker(&["container", "inspect", &format!("rudder-build-test-{job}")])
-                .status
-                .success()
-        );
+        assert!(!docker(&[
+            "container",
+            "inspect",
+            &format!("dymini-panel-build-test-{job}")
+        ])
+        .status
+        .success());
         fixture.cleaned(job);
     }
 

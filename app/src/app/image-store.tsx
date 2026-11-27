@@ -23,7 +23,7 @@ export default function ImageStore() {
 
   return (
     <Screen refreshing={overview.isRefetching} onRefresh={() => overview.refetch()}>
-      <Stack.Screen options={{ title: "Rudder Image" }} />
+      <Stack.Screen options={{ title: "Dymini Panel Image" }} />
       <ErrorBox error={error ?? overview.error ?? (test.data?.error ? new Error(test.data.error) : null)} />
       {overview.isLoading ? (
         <Loading />

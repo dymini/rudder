@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use rudder_core::{
+use dymini_panel_core::{
     percent, rate, step_alert, AlertState, AlertTransition, ContainerStats, HostStats, NodeDriver,
     SAMPLE_INTERVAL_SECS,
 };
@@ -93,10 +93,10 @@ fn container_service(index: &ServiceIndex, stats: &ContainerStats) -> Option<Uui
             .find(|(k, _)| k == key)
             .map(|(_, v)| v.as_str())
     };
-    if let Some(project) = label("rudder.project") {
+    if let Some(project) = label("dymini-panel.project") {
         return index.projects.get(project).copied();
     }
-    label("rudder.service")
+    label("dymini-panel.service")
         .and_then(|value| Uuid::parse_str(value).ok())
         .filter(|id| index.ids.contains(id))
 }
@@ -569,26 +569,26 @@ mod tests {
             labels: labels.into_iter().map(|(k, v)| (k.to_owned(), v)).collect(),
         };
         let containers = vec![
-            container("a", vec![("rudder.service", app.to_string())], 100),
+            container("a", vec![("dymini-panel.service", app.to_string())], 100),
             container(
                 "b",
                 vec![
-                    ("rudder.project", "shop-abc123".into()),
-                    ("rudder.service", "web".into()),
+                    ("dymini-panel.project", "shop-abc123".into()),
+                    ("dymini-panel.service", "web".into()),
                 ],
                 0,
             ),
             container(
                 "c",
                 vec![
-                    ("rudder.project", "shop-abc123".into()),
-                    ("rudder.service", "db".into()),
+                    ("dymini-panel.project", "shop-abc123".into()),
+                    ("dymini-panel.service", "db".into()),
                 ],
                 0,
             ),
             container(
                 "stray",
-                vec![("rudder.service", Uuid::new_v4().to_string())],
+                vec![("dymini-panel.service", Uuid::new_v4().to_string())],
                 0,
             ),
         ];

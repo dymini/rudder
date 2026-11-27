@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use bollard::query_parameters::{ListContainersOptionsBuilder, RenameContainerOptionsBuilder};
-use rudder_core::{validate_name, Error, CLOUDFLARED_LABEL};
+use dymini_panel_core::{validate_name, Error, CLOUDFLARED_LABEL};
 
 use crate::LocalDriver;
 

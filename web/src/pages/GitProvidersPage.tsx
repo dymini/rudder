@@ -67,7 +67,7 @@ export function GitProvidersPage() {
     <>
       <PageHeader
         title={t("Git providers")}
-        description={t("The accounts Rudder clones your code from. Services pick one as their source.")}
+        description={t("The accounts Dymini Panel clones your code from. Services pick one as their source.")}
       />
       {isAdmin ? <ConnectGitHubCard /> : null}
       <Card
@@ -197,7 +197,7 @@ function ConnectGitHubCard() {
 
   const steps = [
     t("Confirm the new app on GitHub"),
-    t("Choose the repositories Rudder may read"),
+    t("Choose the repositories Dymini Panel may read"),
     t("Come back here, ready to deploy"),
   ];
 
@@ -205,7 +205,7 @@ function ConnectGitHubCard() {
     <Card
       title={t("Connect GitHub")}
       description={t(
-        "Rudder creates a GitHub App for you. There is no key or id to copy, and it only gets read access to code.",
+        "Dymini Panel creates a GitHub App for you. There is no key or id to copy, and it only gets read access to code.",
       )}
     >
       <div className="grid gap-4">
@@ -233,7 +233,7 @@ function ConnectGitHubCard() {
             }
           >
             {t(
-              "Its address is private, so pushes will not start builds on their own. Set RUDDER_PUBLIC_URL to a public address to turn that on; you can still build by hand.",
+              "Its address is private, so pushes will not start builds on their own. Set DYMINI_PANEL_PUBLIC_URL to a public address to turn that on; you can still build by hand.",
             )}
           </Alert>
         ) : null}

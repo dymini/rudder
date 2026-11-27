@@ -8,7 +8,7 @@ import type { Schemas } from "../types";
 
 type Overview = Schemas["ImageStoreOverview"];
 
-/** Dashboard card: is Rudder Image set up, and how much is it used. */
+/** Dashboard card: is Dymini Panel Image set up, and how much is it used. */
 export function ImageStatusCard() {
   const t = useT();
   const overview = useQuery({
@@ -23,9 +23,9 @@ export function ImageStatusCard() {
 
   return (
     <Card
-      title={t("Rudder Image")}
+      title={t("Dymini Panel Image")}
       actions={
-        <Link to="/rudder-image" className="text-sm text-muted hover:text-ink hover:underline">
+        <Link to="/dymini-panel-image" className="text-sm text-muted hover:text-ink hover:underline">
           {t("Open")}
         </Link>
       }
@@ -33,7 +33,7 @@ export function ImageStatusCard() {
       {overview.isLoading ? (
         <Skeleton className="h-16 w-full" />
       ) : !data ? (
-        <p className="text-sm text-muted">{t("Could not load Rudder Image")}</p>
+        <p className="text-sm text-muted">{t("Could not load Dymini Panel Image")}</p>
       ) : (
         <dl className="space-y-2.5 text-sm">
           <div className="flex items-center justify-between gap-3">

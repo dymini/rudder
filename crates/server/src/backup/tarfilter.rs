@@ -4,9 +4,9 @@
 //! bounded by one entry buffer regardless of archive size.
 
 use bytes::Bytes;
+use dymini_panel_core::{ByteStream, Error};
 use futures_util::TryStreamExt;
 use globset::{Glob, GlobSet, GlobSetBuilder};
-use rudder_core::{ByteStream, Error};
 use tokio::sync::mpsc;
 use tokio_util::io::{StreamReader, SyncIoBridge};
 

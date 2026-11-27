@@ -24,7 +24,7 @@ use axum::{
     Json, Router,
 };
 use chrono::{DateTime, Utc};
-use rudder_core::{parse_version, Consistency, Plugin, RetentionSpec};
+use dymini_panel_core::{parse_version, Consistency, Plugin, RetentionSpec};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
@@ -322,7 +322,7 @@ async fn select_release(
             )
         })?;
     // Revalidate stored descriptors before using a cached image.
-    rudder_core::PluginDescriptor {
+    dymini_panel_core::PluginDescriptor {
         schema: 1,
         plugin: plugin.template.slug.clone(),
         version: release.version.clone(),
@@ -403,7 +403,7 @@ async fn install(
     if body.values.contains_key(&plugin.image_variable) {
         return Err(bad(
             "reserved_variable",
-            "the plugin image is managed by Rudder",
+            "the plugin image is managed by Dymini Panel",
         ));
     }
     let release = select_release(&state, plugin, body.version.as_deref()).await?;

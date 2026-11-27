@@ -61,8 +61,8 @@ const ProjectsPage = lazy(() =>
 const RegistriesPage = lazy(() =>
   import("./pages/RegistriesPage").then((m) => ({ default: m.RegistriesPage })),
 );
-const RudderImagePage = lazy(() =>
-  import("./pages/RudderImagePage").then((m) => ({ default: m.RudderImagePage })),
+const DyminiPanelImagePage = lazy(() =>
+  import("./pages/DyminiPanelImagePage").then((m) => ({ default: m.DyminiPanelImagePage })),
 );
 const S3DestinationsPage = lazy(() =>
   import("./pages/S3DestinationsPage").then((m) => ({ default: m.S3DestinationsPage })),
@@ -98,13 +98,13 @@ function Guard({ children }: { children: ReactNode }) {
   const t = useT();
   const location = useLocation();
   if (loading) {
-    return <p className="p-6 text-sm text-muted">{t("Loading Rudder…")}</p>;
+    return <p className="p-6 text-sm text-muted">{t("Loading Dymini Panel…")}</p>;
   }
   if (needsSetup) {
     return <Navigate to="/setup" replace />;
   }
   if (!user) {
-    // `rudder login` sends people to /tokens?cli_request=…; bring them back there after sign-in.
+    // `dymini-panel login` sends people to /tokens?cli_request=…; bring them back there after sign-in.
     const target = location.pathname + location.search;
     const next = target !== "/" ? `?next=${encodeURIComponent(target)}` : "";
     return <Navigate to={`/login${next}`} replace />;
@@ -146,7 +146,7 @@ function AppRoutes() {
         <Route path="logs" element={<LogsPage />} />
         <Route path="backups" element={<BackupsPage />} />
         <Route path="s3-destinations" element={<S3DestinationsPage />} />
-        <Route path="rudder-image" element={<RudderImagePage />} />
+        <Route path="dymini-panel-image" element={<DyminiPanelImagePage />} />
         <Route path="cache" element={<CachePoliciesPage />} />
         <Route path="certificates" element={<CertificatesPage />} />
         <Route path="domains" element={<DomainsPage />} />

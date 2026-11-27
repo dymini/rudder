@@ -11,7 +11,7 @@
 .ansi-text { color: var(--ansi-light, inherit); }
 .dark .ansi-text, .ansi-console .ansi-text { color: var(--ansi-dark, inherit); }
 
-/* Knotree design system: warm paper neutrals, one deep-pine accent. */
+/* Dymini Panel design system: warm paper neutrals, one deep-pine accent. */
 :root {
   color-scheme: light;
   --paper: #f6f5f2;

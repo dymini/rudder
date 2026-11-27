@@ -1,4 +1,4 @@
-//! The `rudder` CLI against a real panel listener: login, services, deploy, logs, and cache purge.
+//! The `dymini-panel` CLI against a real panel listener: login, services, deploy, logs, and cache purge.
 //!
 //! Docker is not available to the panel here, so deploys fail; the test checks that the
 //! CLI waits for them and reports the failure. The cache admin API is a small in-test server.
@@ -44,7 +44,7 @@ impl Panel {
         let mut request = self
             .http
             .request(method.parse().unwrap(), format!("{}{path}", self.base))
-            .header("cookie", format!("rudder_session={}", self.cookie))
+            .header("cookie", format!("dymini_panel_session={}", self.cookie))
             .header("x-csrf-token", &self.csrf);
         if let Some(body) = body {
             request = request.json(&body);
@@ -73,31 +73,40 @@ impl Panel {
 }
 
 fn docker_tests() -> bool {
-    std::env::var("RUDDER_DOCKER_TESTS").as_deref() == Ok("1")
+    std::env::var("DYMINI_PANEL_DOCKER_TESTS").as_deref() == Ok("1")
 }
 
 async fn start(pool: PgPool, cache_admin: &str) -> Panel {
-    let dir = std::env::temp_dir().join(format!("rudder-cli-test-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("dymini-panel-cli-test-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
     let mut vars = HashMap::from([
         ("DATABASE_URL".to_owned(), url),
-        ("RUDDER_MASTER_KEY".to_owned(), "ee".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".to_owned(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".to_owned(), "false".to_owned()),
-        ("RUDDER_DATA_DIR".to_owned(), dir.display().to_string()),
-        ("RUDDER_CACHE_ADMIN_URL".to_owned(), cache_admin.to_owned()),
-        ("RUDDER_UPDATE_CHECK_SECS".to_owned(), "0".to_owned()),
+        ("DYMINI_PANEL_MASTER_KEY".to_owned(), "ee".repeat(32)),
+        (
+            "DYMINI_PANEL_SETUP_TOKEN".to_owned(),
+            "test-setup-token".into(),
+        ),
+        ("DYMINI_PANEL_COOKIE_SECURE".to_owned(), "false".to_owned()),
+        (
+            "DYMINI_PANEL_DATA_DIR".to_owned(),
+            dir.display().to_string(),
+        ),
+        (
+            "DYMINI_PANEL_CACHE_ADMIN_URL".to_owned(),
+            cache_admin.to_owned(),
+        ),
+        ("DYMINI_PANEL_UPDATE_CHECK_SECS".to_owned(), "0".to_owned()),
     ]);
     if !docker_tests() {
         vars.insert(
-            "RUDDER_DOCKER_SOCKET".to_owned(),
+            "DYMINI_PANEL_DOCKER_SOCKET".to_owned(),
             dir.join("no-docker.sock").display().to_string(),
         );
     }
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    let app = rudder_server::router(rudder_server::AppState::new(pool, config));
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    let app = dymini_panel_server::router(dymini_panel_server::AppState::new(pool, config));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move {
@@ -126,7 +135,7 @@ async fn start(pool: PgPool, cache_admin: &str) -> Panel {
         .get("set-cookie")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.split(';').next())
-        .and_then(|v| v.strip_prefix("rudder_session="))
+        .and_then(|v| v.strip_prefix("dymini_panel_session="))
         .unwrap()
         .to_owned();
     let body: Value = response.json().await.unwrap();
@@ -143,8 +152,8 @@ fn context(
     config: &std::path::Path,
     token: Option<String>,
     url: Option<String>,
-) -> rudder_cli::Context {
-    rudder_cli::Context {
+) -> dymini_panel_cli::Context {
+    dymini_panel_cli::Context {
         config_path: config.to_path_buf(),
         url,
         token,
@@ -153,9 +162,10 @@ fn context(
     }
 }
 
-async fn cli(ctx: &rudder_cli::Context, args: &[&str]) -> Result<String, String> {
+async fn cli(ctx: &dymini_panel_cli::Context, args: &[&str]) -> Result<String, String> {
     let mut out = Output::default();
-    let result = rudder_cli::run(args.iter().map(|a| a.to_string()).collect(), ctx, &mut out).await;
+    let result =
+        dymini_panel_cli::run(args.iter().map(|a| a.to_string()).collect(), ctx, &mut out).await;
     match result {
         Ok(()) => Ok(out.text()),
         Err(error) => Err(format!("{error:#}")),
@@ -222,7 +232,8 @@ async fn cli_logs_in_deploys_reads_logs_and_purges(pool: PgPool) {
         .await;
     let blog_id = blog["service"]["id"].as_str().unwrap().to_owned();
 
-    let dir = std::env::temp_dir().join(format!("rudder-cli-config-{}", uuid::Uuid::new_v4()));
+    let dir =
+        std::env::temp_dir().join(format!("dymini-panel-cli-config-{}", uuid::Uuid::new_v4()));
     let config = dir.join("config.json");
 
     let anonymous = context(&config, None, None);
@@ -249,7 +260,7 @@ async fn cli_logs_in_deploys_reads_logs_and_purges(pool: PgPool) {
     )
     .await
     .unwrap_err();
-    assert!(error.contains("RUDDER_TOKEN"), "{error}");
+    assert!(error.contains("DYMINI_PANEL_TOKEN"), "{error}");
 
     let login = cli(
         &context(&config, Some(write_token.clone()), None),
@@ -365,7 +376,7 @@ async fn cli_logs_in_deploys_reads_logs_and_purges(pool: PgPool) {
         let mut out = follow_out.clone();
         tokio::spawn(async move {
             let ctx = context(&config, None, None);
-            let _ = rudder_cli::run(
+            let _ = dymini_panel_cli::run(
                 vec![
                     "logs".into(),
                     "web".into(),
@@ -517,7 +528,7 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
                 "preset": "cloudflare_r2",
                 "endpoint": "http://local.r2.internal",
                 "region": "auto",
-                "bucket": "rudder-images",
+                "bucket": "dymini-panel-images",
                 "access_key_id": "test-key",
                 "secret_access_key": "test-secret",
                 "path_style": true
@@ -530,7 +541,7 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
             "/api/v1/image-store/settings",
             json!({
                 "destination_id": r2["id"],
-                "path_prefix": "rudder-images",
+                "path_prefix": "dymini-panel-images",
                 "r2_keep_count": 2
             }),
         )
@@ -546,11 +557,11 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
         )
         .await;
 
-    let dir = std::env::temp_dir().join(format!("rudder-cli-img-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("dymini-panel-cli-img-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
     let config = dir.join("config.json");
 
-    // 1. Test `rudder login --url <base> --device` (8-char alphanumeric device code)
+    // 1. Test `dymini-panel login --url <base> --device` (8-char alphanumeric device code)
     let login_out = Output::default();
     let login_task = {
         let config = config.clone();
@@ -558,7 +569,7 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
         let mut out = login_out.clone();
         tokio::spawn(async move {
             let ctx = context(&config, None, None);
-            rudder_cli::run(
+            dymini_panel_cli::run(
                 vec!["login".into(), "--url".into(), base, "--device".into()],
                 &ctx,
                 &mut out,
@@ -603,11 +614,11 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
 
     let ctx = context(&config, None, None);
 
-    // 2. Test `rudder init`, `rudder build`, `rudder push`, and `rudder images list`
-    let project_file = dir.join("rudder.toml");
+    // 2. Test `dymini-panel init`, `dymini-panel build`, `dymini-panel push`, and `dymini-panel images list`
+    let project_file = dir.join("dymini-panel.toml");
     let fake_archive = dir.join("fake-docker.tar");
     std::fs::write(&fake_archive, b"fake docker save tar payload v1").unwrap();
-    std::env::set_var("RUDDER_FAKE_DOCKER_ARCHIVE", &fake_archive);
+    std::env::set_var("DYMINI_PANEL_FAKE_DOCKER_ARCHIVE", &fake_archive);
 
     let init_out = cli(
         &ctx,
@@ -641,7 +652,7 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
     .await
     .unwrap();
     assert!(
-        build_v1.contains("Built rudder-image/web:v1.0.0"),
+        build_v1.contains("Built dymini-panel-image/web:v1.0.0"),
         "{build_v1}"
     );
 
@@ -693,7 +704,7 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
     assert!(images_out.contains("v1.0.0"), "{images_out}");
     assert!(images_out.contains("local only"), "{images_out}");
 
-    // `rudder whoami` and `rudder status` read the same data as the panel's Rudder Image page.
+    // `dymini-panel whoami` and `dymini-panel status` read the same data as the panel's Dymini Panel Image page.
     let whoami_out = cli(&ctx, &["whoami"]).await.unwrap();
     assert!(whoami_out.contains("Account:"), "{whoami_out}");
     let status_out = cli(&ctx, &["status", "--check"]).await.unwrap();
@@ -703,7 +714,7 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
     assert!(status_out.contains("[x] first_push"), "{status_out}");
     assert!(status_out.contains("shop/prod/web"), "{status_out}");
 
-    // `rudder images remove` frees the bucket copy, then forgets the version.
+    // `dymini-panel images remove` frees the bucket copy, then forgets the version.
     let freed = cli(
         &ctx,
         &[
@@ -744,12 +755,12 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
     .await;
     assert!(gone.is_err(), "removing a forgotten version should fail");
 
-    std::env::remove_var("RUDDER_FAKE_DOCKER_ARCHIVE");
+    std::env::remove_var("DYMINI_PANEL_FAKE_DOCKER_ARCHIVE");
 
-    // 3. Test `rudder update` against a mock GitHub release server
-    let asset_name = rudder_cli::update::current_target_asset().unwrap();
-    let new_binary = b"#!/bin/sh\necho rudder-0.99.0\n".to_vec();
-    let sha = rudder_core::sha256_hex(&new_binary);
+    // 3. Test `dymini-panel update` against a mock GitHub release server
+    let asset_name = dymini_panel_cli::update::current_target_asset().unwrap();
+    let new_binary = b"#!/bin/sh\necho dymini-panel-0.99.0\n".to_vec();
+    let sha = dymini_panel_core::sha256_hex(&new_binary);
     let sums_body = format!("{sha}  {asset_name}\n");
 
     let gh_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -796,7 +807,7 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
         );
     tokio::spawn(async move { axum::serve(gh_listener, gh_router).await.unwrap() });
 
-    let target_bin = dir.join("rudder-bin");
+    let target_bin = dir.join("dymini-panel-bin");
     std::fs::write(&target_bin, b"old-binary").unwrap();
 
     let check_out = cli(
@@ -813,7 +824,7 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
     .await
     .unwrap();
     assert!(
-        check_out.contains("Update available: rudder 0.5.1 -> 0.99.0"),
+        check_out.contains("Update available: dymini-panel 0.5.1 -> 0.99.0"),
         "{check_out}"
     );
 
@@ -832,7 +843,7 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
     .await
     .unwrap();
     assert!(
-        update_out.contains("Updated rudder to 0.99.0"),
+        update_out.contains("Updated dymini-panel to 0.99.0"),
         "{update_out}"
     );
     assert_eq!(std::fs::read(&target_bin).unwrap(), new_binary);

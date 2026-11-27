@@ -358,7 +358,7 @@ export const SERVER_KINDS: PickOption[] = [
   {
     label: msg("remote"),
     value: "remote",
-    hint: msg("Another machine that runs the Rudder agent"),
+    hint: msg("Another machine that runs the Dymini Panel agent"),
   },
 ];
 

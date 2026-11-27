@@ -1,6 +1,6 @@
 # Monitoring and alerts
 
-Rudder samples every server and every running service every 10 seconds. The samples are stored in the panel's Postgres database, rolled up for charts, and checked against your alert rules.
+Dymini Panel samples every server and every running service every 10 seconds. The samples are stored in the panel's Postgres database, rolled up for charts, and checked against your alert rules.
 
 ## Global statistics
 
@@ -58,9 +58,9 @@ queries share a repeatable-read database snapshot.
 | Service | `cpu_percent`, `memory_bytes`, `memory_percent` (when a memory limit is set), `net_rx_bps`, `net_tx_bps`, `restarts`, `containers` |
 | Service, from the proxy | `requests` and `http_5xx` per minute, counted from the Traefik access log |
 
-Server metrics come from `/proc` (`stat`, `meminfo`, `loadavg`, `net/dev`) and from `statvfs` on the data directory. When the panel runs in a container, mount the host's `/proc` read-only and set `RUDDER_HOST_PROC=/host/proc`, otherwise you see the container's own view. The installer does this for you. Loopback, `veth`, Docker bridge, and CNI interfaces are left out of the network totals.
+Server metrics come from `/proc` (`stat`, `meminfo`, `loadavg`, `net/dev`) and from `statvfs` on the data directory. When the panel runs in a container, mount the host's `/proc` read-only and set `DYMINI_PANEL_HOST_PROC=/host/proc`, otherwise you see the container's own view. The installer does this for you. Loopback, `veth`, Docker bridge, and CNI interfaces are left out of the network totals.
 
-Service metrics come from the Docker stats API for containers labelled `rudder.managed=true`. A compose stack's containers are added together. CPU is a share of the whole server, like the server's own CPU, so a service that keeps one core of a 4-core server busy shows 25%.
+Service metrics come from the Docker stats API for containers labelled `dymini-panel.managed=true`. A compose stack's containers are added together. CPU is a share of the whole server, like the server's own CPU, so a service that keeps one core of a 4-core server busy shows 25%.
 
 The panel measures its own server. Remote servers send theirs through the agent.
 
@@ -112,7 +112,7 @@ Admins change these on the Monitoring page or with `PUT /api/v1/settings/retenti
 | `http_errors` | service | more than the threshold 5xx responses arrived within the duration (at least 60 seconds) |
 | `event` | event patterns | a panel event matches, such as `deploy.failed`, `backup.*`, or `alert.*`, at or above a minimum severity |
 
-A rule moves from `ok` to `pending` when the condition first holds, and to `firing` once it has held for the whole duration. When the condition clears, the rule goes back to `ok` and Rudder sends a "resolved" notice. Each firing and each resolution is stored as an event, which you can see under **Alerts → Recent events** or with `GET /api/v1/events`.
+A rule moves from `ok` to `pending` when the condition first holds, and to `firing` once it has held for the whole duration. When the condition clears, the rule goes back to `ok` and Dymini Panel sends a "resolved" notice. Each firing and each resolution is stored as an event, which you can see under **Alerts → Recent events** or with `GET /api/v1/events`.
 
 Events from deploys (`deploy.succeeded`, `deploy.failed`), builds (`build.failed`), backups, and alerts can all be forwarded with an `event` rule.
 
@@ -145,12 +145,12 @@ Notices are sent every 5 seconds. A notice that fails on one channel is retried 
 }
 ```
 
-The request carries `X-Rudder-Event: <kind>`. With a secret, it also carries `X-Rudder-Signature: sha256=<hex>`, the HMAC-SHA256 of the raw body. Check it like this:
+The request carries `X-Dymini-Panel-Event: <kind>`. With a secret, it also carries `X-Dymini-Panel-Signature: sha256=<hex>`, the HMAC-SHA256 of the raw body. Check it like this:
 
 ```python
 import hmac, hashlib
 expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-assert hmac.compare_digest(expected, request.headers["X-Rudder-Signature"])
+assert hmac.compare_digest(expected, request.headers["X-Dymini-Panel-Signature"])
 ```
 
 ## Docker cleanup

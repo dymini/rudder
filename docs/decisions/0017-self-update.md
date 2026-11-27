@@ -14,7 +14,7 @@ verify: null
 
 ## Context
 
-Operators should not have to SSH into every host to upgrade Rudder. An update
+Operators should not have to SSH into every host to upgrade Dymini Panel. An update
 mechanism is also a remote-code-execution channel, so it must accept only builds
 the project signed. It must also survive a bad release that migrates the
 database and then fails to start. Agents run under systemd on hosts the panel
@@ -23,11 +23,11 @@ reaches only through their session, and caches run as containers on every server
 ## Decision
 
 - Releases are GitHub Releases. Each one carries `release.json` (format
-  `rudder-release`, the version, the panel and cache images pinned by
+  `dymini-panel-release`, the version, the panel and cache images pinned by
   `@sha256` digest, and the sha256 of every agent build), `SHA256SUMS` over all
   assets, and `SHA256SUMS.minisig`, a minisign signature (Ed25519, legacy
   signatures refused).
-- The trusted public key is compiled in from `RUDDER_UPDATE_PUBKEY` by the
+- The trusted public key is compiled in from `DYMINI_PANEL_UPDATE_PUBKEY` by the
   release workflow and can be overridden by the same variable at runtime.
   Without a key, releases are shown but cannot be applied.
 - A release is verified when the signature covers `SHA256SUMS`, `SHA256SUMS`
@@ -38,14 +38,14 @@ reaches only through their session, and caches run as containers on every server
 - A panel update takes a process lock. It re-checks the release and records an
   `update_history` row. It then writes an encrypted pre-update backup to
   `data_dir/updates/` (sealed with the master key, mode 0600, last three kept)
-  and pulls the image by digest. Finally it starts a one-off `rudder-updater`
+  and pulls the image by digest. Finally it starts a one-off `dymini-panel-updater`
   container, a clone of the panel container on the new image.
 - The updater does the following:
-  - Renames `rudder` to `rudder-previous` and starts a copy of it on the new
+  - Renames `dymini-panel` to `dymini-panel-previous` and starts a copy of it on the new
     image. The copy keeps the environment, mounts, ports, restart policy, and
     networks.
   - Waits up to 180 s for `/api/health` inside the new container to report the
-    new version. On success it removes `rudder-previous`.
+    new version. On success it removes `dymini-panel-previous`.
   - On failure it stops the new container. If the schema moved past the
     recorded migration, it restores the database from the pre-update backup.
     It then renames the old container back and waits for the old version.
@@ -60,7 +60,7 @@ reaches only through their session, and caches run as containers on every server
   - **Caches:** the cache container is replaced with the manifest's cache image
     behind an HTTP probe on `:9090/health`, and the old container is restored
     if the probe fails.
-- A background task checks every `RUDDER_UPDATE_CHECK_SECS` (default 6 h,
+- A background task checks every `DYMINI_PANEL_UPDATE_CHECK_SECS` (default 6 h,
   `0` disables it). It applies updates only when auto-update is on and the time
   is inside the UTC maintenance window.
 - The release workflow builds musl binaries for x86_64 and aarch64, pushes
@@ -79,6 +79,6 @@ reaches only through their session, and caches run as containers on every server
   must be reinstalled once with `install-agent.sh`.
 - Restarting agents relies on a supervisor (systemd `Restart=always`). Agents
   run by hand stay down after exit 75.
-- A panel that is not a Docker container named `rudder` (for example a binary
+- A panel that is not a Docker container named `dymini-panel` (for example a binary
   run directly) cannot self-update; it reports why, and is upgraded with
   `install.sh --version`.

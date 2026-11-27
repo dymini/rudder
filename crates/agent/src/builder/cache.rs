@@ -2,12 +2,12 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use rudder_core::Error;
-use rudder_node::ops::{BuildCacheEntry, BuildCachePrune, BuildCachePruned, BuildRequest};
+use dymini_panel_core::Error;
+use dymini_panel_node::ops::{BuildCacheEntry, BuildCachePrune, BuildCachePruned, BuildRequest};
 
 use super::{checked, identifier, invalid, node, path_string};
 
-const META: &str = "rudder-cache.json";
+const META: &str = "dymini-panel-cache.json";
 
 fn service_dir(root: &Path, service: &str) -> Result<PathBuf, Error> {
     identifier(service)?;
@@ -33,7 +33,7 @@ fn read_entry(path: &Path, service: &str, key: &str) -> Result<BuildCacheEntry, 
 
 fn write_entry(path: &Path, entry: &BuildCacheEntry) -> Result<(), Error> {
     let bytes = serde_json::to_vec(entry).map_err(|_| node("could not encode cache metadata"))?;
-    let temp = checked(path, "rudder-cache.json.tmp")?;
+    let temp = checked(path, "dymini-panel-cache.json.tmp")?;
     fs::write(&temp, bytes).map_err(|_| node("could not write cache metadata"))?;
     fs::rename(temp, checked(path, META)?).map_err(|_| node("could not publish cache metadata"))
 }

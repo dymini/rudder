@@ -23,7 +23,7 @@ pub struct PanelLayer;
 
 const SKIPPED_TARGETS: [&str; 6] = [
     "sqlx",
-    "rudder_server::logs",
+    "dymini_panel_server::logs",
     "hyper",
     "h2",
     "tower",

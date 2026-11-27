@@ -1259,6 +1259,213 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
+name = "dymini-panel-agent"
+version = "0.15.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "chrono",
+ "dymini-panel-core",
+ "dymini-panel-node",
+ "dymini-panel-proto",
+ "futures-util",
+ "hex",
+ "hyper-util",
+ "rcgen",
+ "reqwest",
+ "rustix",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2 0.11.2",
+ "tempfile",
+ "tokio",
+ "tokio-stream",
+ "tokio-tungstenite",
+ "tonic",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "dymini-panel-cache"
+version = "0.15.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "bytes",
+ "dymini-panel-core",
+ "hex",
+ "http",
+ "pingora-cache",
+ "pingora-core",
+ "pingora-http",
+ "pingora-proxy",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.2",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "dymini-panel-cli"
+version = "0.15.0"
+dependencies = [
+ "anyhow",
+ "base64 0.23.1",
+ "bytes",
+ "chrono",
+ "dymini-panel-core",
+ "flate2",
+ "hex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.2",
+ "tokio",
+ "tokio-util",
+ "url",
+]
+
+[[package]]
+name = "dymini-panel-core"
+version = "0.15.0"
+dependencies = [
+ "aes-gcm",
+ "argon2",
+ "async-trait",
+ "base64 0.23.1",
+ "bytes",
+ "chrono",
+ "chrono-tz",
+ "cron",
+ "futures-core",
+ "hex",
+ "hmac 0.13.0",
+ "minisign",
+ "minisign-verify",
+ "p256 0.14.0",
+ "rand 0.10.3",
+ "rcgen",
+ "rsa 0.10.0",
+ "rustix",
+ "semver",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "sha2 0.11.2",
+ "subtle",
+ "thiserror 2.0.21",
+ "tokio",
+ "utoipa",
+ "x509-parser 0.18.1",
+]
+
+[[package]]
+name = "dymini-panel-node"
+version = "0.15.0"
+dependencies = [
+ "async-trait",
+ "bollard",
+ "bytes",
+ "dymini-panel-core",
+ "futures-util",
+ "hex",
+ "reqwest",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tar",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "dymini-panel-proto"
+version = "0.15.0"
+dependencies = [
+ "prost",
+ "protoc-bin-vendored",
+ "tonic",
+ "tonic-build",
+ "tonic-prost",
+ "tonic-prost-build",
+]
+
+[[package]]
+name = "dymini-panel-server"
+version = "0.15.0"
+dependencies = [
+ "anyhow",
+ "argon2",
+ "async-compression",
+ "async-trait",
+ "axum",
+ "axum-extra",
+ "base64 0.23.1",
+ "bcrypt",
+ "bollard",
+ "bytes",
+ "chrono",
+ "cookie",
+ "dymini-panel-agent",
+ "dymini-panel-cli",
+ "dymini-panel-core",
+ "dymini-panel-node",
+ "dymini-panel-proto",
+ "futures-util",
+ "globset",
+ "governor",
+ "hex",
+ "hmac 0.13.0",
+ "http-body-util",
+ "lettre",
+ "mime_guess",
+ "minisign",
+ "object_store",
+ "openssl",
+ "percent-encoding",
+ "rand_core 0.6.4",
+ "rcgen",
+ "reqwest",
+ "rust-embed",
+ "rustls",
+ "semver",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "sha2 0.11.2",
+ "sqlx",
+ "ssh-key",
+ "subtle",
+ "tar",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+ "tokio-stream",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tonic",
+ "totp-rs",
+ "tower",
+ "tower-http 0.7.1",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "utoipa",
+ "utoipa-swagger-ui",
+ "uuid",
+ "webauthn-authenticator-rs",
+ "webauthn-rs",
+ "x509-parser 0.18.1",
+]
+
+[[package]]
 name = "ecdsa"
 version = "0.16.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4031,213 +4238,6 @@ checksum = "9a1efe12a1469752d0e6ff5ebec0b6ef4924cc5c4c71046b0ec730040535819d"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "rudder-agent"
-version = "0.15.0"
-dependencies = [
- "anyhow",
- "bytes",
- "chrono",
- "futures-util",
- "hex",
- "hyper-util",
- "rcgen",
- "reqwest",
- "rudder-core",
- "rudder-node",
- "rudder-proto",
- "rustix",
- "rustls",
- "serde",
- "serde_json",
- "sha2 0.11.2",
- "tempfile",
- "tokio",
- "tokio-stream",
- "tokio-tungstenite",
- "tonic",
- "tower",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "rudder-cache"
-version = "0.15.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "bytes",
- "hex",
- "http",
- "pingora-cache",
- "pingora-core",
- "pingora-http",
- "pingora-proxy",
- "reqwest",
- "rudder-core",
- "serde",
- "serde_json",
- "sha2 0.11.2",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "rudder-cli"
-version = "0.15.0"
-dependencies = [
- "anyhow",
- "base64 0.23.1",
- "bytes",
- "chrono",
- "flate2",
- "hex",
- "reqwest",
- "rudder-core",
- "serde",
- "serde_json",
- "sha2 0.11.2",
- "tokio",
- "tokio-util",
- "url",
-]
-
-[[package]]
-name = "rudder-core"
-version = "0.15.0"
-dependencies = [
- "aes-gcm",
- "argon2",
- "async-trait",
- "base64 0.23.1",
- "bytes",
- "chrono",
- "chrono-tz",
- "cron",
- "futures-core",
- "hex",
- "hmac 0.13.0",
- "minisign",
- "minisign-verify",
- "p256 0.14.0",
- "rand 0.10.3",
- "rcgen",
- "rsa 0.10.0",
- "rustix",
- "semver",
- "serde",
- "serde_json",
- "serde_yaml_ng",
- "sha2 0.11.2",
- "subtle",
- "thiserror 2.0.21",
- "tokio",
- "utoipa",
- "x509-parser 0.18.1",
-]
-
-[[package]]
-name = "rudder-node"
-version = "0.15.0"
-dependencies = [
- "async-trait",
- "bollard",
- "bytes",
- "futures-util",
- "hex",
- "reqwest",
- "rudder-core",
- "rustix",
- "serde",
- "serde_json",
- "tar",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "rudder-proto"
-version = "0.15.0"
-dependencies = [
- "prost",
- "protoc-bin-vendored",
- "tonic",
- "tonic-build",
- "tonic-prost",
- "tonic-prost-build",
-]
-
-[[package]]
-name = "rudder-server"
-version = "0.15.0"
-dependencies = [
- "anyhow",
- "argon2",
- "async-compression",
- "async-trait",
- "axum",
- "axum-extra",
- "base64 0.23.1",
- "bcrypt",
- "bollard",
- "bytes",
- "chrono",
- "cookie",
- "futures-util",
- "globset",
- "governor",
- "hex",
- "hmac 0.13.0",
- "http-body-util",
- "lettre",
- "mime_guess",
- "minisign",
- "object_store",
- "openssl",
- "percent-encoding",
- "rand_core 0.6.4",
- "rcgen",
- "reqwest",
- "rudder-agent",
- "rudder-cli",
- "rudder-core",
- "rudder-node",
- "rudder-proto",
- "rust-embed",
- "rustls",
- "semver",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "sha2 0.11.2",
- "sqlx",
- "ssh-key",
- "subtle",
- "tar",
- "thiserror 2.0.21",
- "time",
- "tokio",
- "tokio-stream",
- "tokio-tungstenite",
- "tokio-util",
- "tonic",
- "totp-rs",
- "tower",
- "tower-http 0.7.1",
- "tracing",
- "tracing-subscriber",
- "url",
- "utoipa",
- "utoipa-swagger-ui",
- "uuid",
- "webauthn-authenticator-rs",
- "webauthn-rs",
- "x509-parser 0.18.1",
 ]
 
 [[package]]

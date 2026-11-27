@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use axum::routing::{get, post, put};
 use axum::Json;
 use chrono::{DateTime, Duration, Utc};
-use rudder_core::{
+use dymini_panel_core::{
     alert_needs_threshold, resolution_for, validate_alert_kind, Resolution, ALERT_KINDS,
 };
 use serde::{Deserialize, Serialize};
@@ -826,7 +826,7 @@ async fn test_channel(
         kind: "test".into(),
         severity: "info".into(),
         title: format!("Test notification for {}", row.name),
-        message: "If you can read this, Rudder can reach this channel.".into(),
+        message: "If you can read this, Dymini Panel can reach this channel.".into(),
         server_id: None,
         service_id: None,
         created_at: Utc::now(),

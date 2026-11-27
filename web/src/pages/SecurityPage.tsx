@@ -151,7 +151,7 @@ function Checks() {
   return (
     <Card
       title={t("Exposed files")}
-      description={t("Rudder requests a short list of well-known paths on your domains and reports the ones that answer. The response body is not saved.")}
+      description={t("Dymini Panel requests a short list of well-known paths on your domains and reports the ones that answer. The response body is not saved.")}
       actions={
         <Button disabled={scan.isPending} onClick={() => scan.mutate()}>
           {t("Run check")}

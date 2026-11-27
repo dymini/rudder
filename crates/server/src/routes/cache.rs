@@ -4,7 +4,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post, put};
 use axum::Json;
-use rudder_core::{
+use dymini_panel_core::{
     cache_preset, CacheHostStats, CachePolicy, CachePurge, CachePurgeResult, CacheRule, CacheStats,
     CACHE_PRESETS,
 };
@@ -736,7 +736,7 @@ async fn settings_view(state: &AppState) -> Result<CacheSettingsView, ApiError> 
     .map_err(ApiError::database)?;
     let host = std::fs::read_to_string(state.config.host_proc.join("meminfo"))
         .ok()
-        .and_then(|text| rudder_core::parse_meminfo(&text))
+        .and_then(|text| dymini_panel_core::parse_meminfo(&text))
         .map(|(total, _)| i64::try_from(total).unwrap_or(i64::MAX));
     let cap = crate::cache::memory_cap(&state.pool, &state.config.host_proc).await?;
     Ok(CacheSettingsView {
@@ -834,7 +834,7 @@ pub async fn sample_cache(state: &AppState) -> Result<usize, ApiError> {
         let Ok(stats) = fetch_stats(state, server_id).await else {
             continue;
         };
-        let fold = |pick: fn(&rudder_core::CacheHostStats) -> u64| {
+        let fold = |pick: fn(&dymini_panel_core::CacheHostStats) -> u64| {
             i64::try_from(stats.hosts.iter().map(pick).fold(0u64, u64::saturating_add))
                 .unwrap_or(i64::MAX)
         };

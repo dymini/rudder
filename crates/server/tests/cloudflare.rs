@@ -440,24 +440,30 @@ async fn fake_cloudflare() -> (String, Shared) {
 }
 
 fn app(pool: PgPool, data_dir: &std::path::Path, cloudflare: &str) -> axum::Router {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
-        ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
-        ("RUDDER_CLOUDFLARE_API_URL".into(), cloudflare.to_owned()),
-        ("RUDDER_GITHUB_API_URL".into(), cloudflare.to_owned()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        (
+            "DYMINI_PANEL_DATA_DIR".into(),
+            data_dir.display().to_string(),
+        ),
+        (
+            "DYMINI_PANEL_CLOUDFLARE_API_URL".into(),
+            cloudflare.to_owned(),
+        ),
+        ("DYMINI_PANEL_GITHUB_API_URL".into(), cloudflare.to_owned()),
         // These assertions describe a host without Docker, even when one is running.
         (
-            "RUDDER_DOCKER_SOCKET".into(),
+            "DYMINI_PANEL_DOCKER_SOCKET".into(),
             data_dir.join("no-docker.sock").display().to_string(),
         ),
     ]);
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::router(rudder_server::AppState::new(pool.clone(), config)).layer(
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    dymini_panel_server::router(dymini_panel_server::AppState::new(pool.clone(), config)).layer(
         axum::middleware::from_fn_with_state(pool, finish_mutation_request),
     )
 }
@@ -522,7 +528,7 @@ async fn call_with(
     let mut builder = Request::builder().method(method).uri(path);
     if let Some((cookie, csrf)) = session {
         builder = builder
-            .header("cookie", format!("rudder_session={cookie}"))
+            .header("cookie", format!("dymini_panel_session={cookie}"))
             .header("x-csrf-token", csrf);
     }
     if let Some(host) = host {
@@ -581,7 +587,7 @@ async fn owner(app: &axum::Router) -> (String, String) {
         .get("set-cookie")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .and_then(|pair| pair.strip_prefix("rudder_session="))
+        .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
         .unwrap()
         .to_owned();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
@@ -590,7 +596,7 @@ async fn owner(app: &axum::Router) -> (String, String) {
 }
 
 fn scratch_dir() -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("rudder-cloudflare-{}", Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("dymini-panel-cloudflare-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -1329,7 +1335,7 @@ async fn multi_zone_portal_keeps_plugin_access_and_dns_ownership_on_partial_fail
             .as_array()
             .unwrap()
             .iter()
-            .find(|c| c["id"] == "rudder_access_portal")
+            .find(|c| c["id"] == "dymini_panel_access_portal")
             .unwrap()["ok"],
         true
     );
@@ -1342,7 +1348,7 @@ async fn multi_zone_portal_keeps_plugin_access_and_dns_ownership_on_partial_fail
         .as_array()
         .unwrap()
         .iter()
-        .any(|check| check["id"] == "rudder_access_portal_cloudflare"));
+        .any(|check| check["id"] == "dymini_panel_access_portal_cloudflare"));
     let routes = std::fs::read_to_string(data_dir.join("traefik/dynamic/routes.yml")).unwrap();
     let protected = routes
         .lines()
@@ -1350,7 +1356,7 @@ async fn multi_zone_portal_keeps_plugin_access_and_dns_ownership_on_partial_fail
         .take_while(|line| line.starts_with("      "))
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(protected.contains("- rudder-gate"), "{protected}");
+    assert!(protected.contains("- dymini-panel-gate"), "{protected}");
     assert!(protected.contains("- websecure"), "{protected}");
     let secret: Vec<u8> =
         sqlx::query_scalar("SELECT gate_secret_enc FROM access_settings WHERE id=TRUE")
@@ -1358,7 +1364,7 @@ async fn multi_zone_portal_keeps_plugin_access_and_dns_ownership_on_partial_fail
             .await
             .unwrap();
     let secret = String::from_utf8(
-        rudder_core::Cipher::new([0xcc; 32])
+        dymini_panel_core::Cipher::new([0xcc; 32])
             .decrypt(&secret)
             .unwrap(),
     )
@@ -1394,7 +1400,7 @@ async fn multi_zone_portal_keeps_plugin_access_and_dns_ownership_on_partial_fail
     let wrong_host = call_with(
         &callback_app,
         "GET",
-        "/_rudder/callback?code=cross-zone-handoff",
+        "/_dymini_panel/callback?code=cross-zone-handoff",
         None,
         None,
         Some("access.second.net"),
@@ -1405,7 +1411,7 @@ async fn multi_zone_portal_keeps_plugin_access_and_dns_ownership_on_partial_fail
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/_rudder/callback?code=cross-zone-handoff")
+                .uri("/_dymini_panel/callback?code=cross-zone-handoff")
                 .header("host", "dockside.example.com")
                 .body(Body::empty())
                 .unwrap(),
@@ -1826,7 +1832,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     let ingress = config["config"]["ingress"].as_array().unwrap();
     assert_eq!(ingress.len(), 3);
     assert_eq!(ingress[0]["hostname"], "app.example.com");
-    assert_eq!(ingress[0]["service"], "https://rudder-traefik:443");
+    assert_eq!(ingress[0]["service"], "https://dymini-panel-traefik:443");
     assert_eq!(ingress[2]["service"], "http_status:404");
     let tunnelled = std::fs::read_to_string(&routes_path).unwrap();
     assert_eq!(tunnelled.matches("certResolver").count(), 1, "{tunnelled}");
@@ -1855,7 +1861,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
         .as_array()
         .unwrap()
         .iter()
-        .find(|check| check["id"] == "rudder_access_portal")
+        .find(|check| check["id"] == "dymini_panel_access_portal")
         .unwrap();
     assert_eq!(portal["ok"], false);
     assert_eq!(portal["required"], true);
@@ -1883,7 +1889,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
             .as_array()
             .unwrap()
             .iter()
-            .find(|check| check["id"] == "rudder_access_portal")
+            .find(|check| check["id"] == "dymini_panel_access_portal")
             .unwrap()["ok"],
         true
     );
@@ -1905,9 +1911,9 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     .await;
     assert_eq!(protected.status, StatusCode::OK, "{}", protected.body);
     let routes = std::fs::read_to_string(&routes_path).unwrap();
-    assert!(routes.contains("- rudder-gate"));
+    assert!(routes.contains("- dymini-panel-gate"));
     assert!(routes.contains("forwardAuth:"));
-    assert!(routes.contains("PathPrefix(`/_rudder`)"));
+    assert!(routes.contains("PathPrefix(`/_dymini_panel`)"));
 
     // Reproduce an upgraded install whose default flag disagrees with its old policy.
     let service_uuid = Uuid::parse_str(&service_id).unwrap();
@@ -1940,7 +1946,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
             .await
             .unwrap();
     let secret = String::from_utf8(
-        rudder_core::Cipher::new([0xcc; 32])
+        dymini_panel_core::Cipher::new([0xcc; 32])
             .decrypt(&secret)
             .unwrap(),
     )
@@ -1953,7 +1959,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(protected.contains("- websecure"), "{protected}");
-    assert!(protected.contains("- rudder-gate"), "{protected}");
+    assert!(protected.contains("- dymini-panel-gate"), "{protected}");
     assert!(protected.contains("tls: {}"), "{protected}");
     for (path, expected) in [
         ("/", StatusCode::TEMPORARY_REDIRECT),
@@ -1990,7 +1996,9 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     let callback_app = self::app(pool.clone(), &data_dir, &cloudflare);
     let callback_route = routes
         .lines()
-        .skip_while(|line| !line.contains("Host(`app.example.com`) && PathPrefix(`/_rudder`)"))
+        .skip_while(|line| {
+            !line.contains("Host(`app.example.com`) && PathPrefix(`/_dymini_panel`)")
+        })
         .take_while(|line| line.starts_with("      "))
         .collect::<Vec<_>>()
         .join("\n");
@@ -1999,16 +2007,19 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
         "{callback_route}"
     );
     assert!(
-        callback_route.contains("service: rudder-panel"),
+        callback_route.contains("service: dymini-panel"),
         "{callback_route}"
     );
     assert!(callback_route.contains("- websecure"), "{callback_route}");
-    assert!(!callback_route.contains("rudder-gate"), "{callback_route}");
+    assert!(
+        !callback_route.contains("dymini-panel-gate"),
+        "{callback_route}"
+    );
     sqlx::query("INSERT INTO access_codes(email,code_hash,purpose,return_host,return_path,expires_at) VALUES('admin@example.com',encode(digest('tunnel-handoff','sha256'),'hex'),'handoff','app.example.com','/dashboard?view=files',now()+interval '2 minutes')").execute(&pool).await.unwrap();
     let wrong = call_with(
         &callback_app,
         "GET",
-        "/_rudder/callback?code=tunnel-handoff",
+        "/_dymini_panel/callback?code=tunnel-handoff",
         None,
         None,
         Some("other.example.com"),
@@ -2019,7 +2030,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/_rudder/callback?code=tunnel-handoff")
+                .uri("/_dymini_panel/callback?code=tunnel-handoff")
                 .header("host", "app.example.com")
                 .header("x-forwarded-proto", "http")
                 .body(Body::empty())
@@ -2053,7 +2064,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     let replay = call_with(
         &callback_app,
         "GET",
-        "/_rudder/callback?code=tunnel-handoff",
+        "/_dymini_panel/callback?code=tunnel-handoff",
         None,
         None,
         Some("app.example.com"),
@@ -2063,7 +2074,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     let missing = call_with(
         &callback_app,
         "GET",
-        "/_rudder/unknown",
+        "/_dymini_panel/unknown",
         None,
         None,
         Some("app.example.com"),
@@ -2073,7 +2084,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     let invalid = call_with(
         &callback_app,
         "GET",
-        "/_rudder/callback?code=x",
+        "/_dymini_panel/callback?code=x",
         None,
         None,
         Some("app.example.com"),
@@ -2100,7 +2111,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
         let rejected = call_with(
             &callback_app,
             "GET",
-            &format!("/_rudder/callback?code={denied}"),
+            &format!("/_dymini_panel/callback?code={denied}"),
             None,
             None,
             Some("app.example.com"),
@@ -2381,7 +2392,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
         let panel = fake
             .apps
             .values()
-            .find(|app| app["name"] == "Rudder panel")
+            .find(|app| app["name"] == "Dymini Panel")
             .unwrap();
         assert_eq!(panel["domain"], "panel.example.com");
         assert_eq!(panel["policies"][0]["decision"], "allow");
@@ -2441,7 +2452,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
         "POST",
         "/mcp/api/v1/cli/auth/start",
         None,
-        Some(json!({ "method": "device_code", "client_name": "rudder-cli" })),
+        Some(json!({ "method": "device_code", "client_name": "dymini-panel-cli" })),
         Some("panel.example.com"),
     )
     .await;

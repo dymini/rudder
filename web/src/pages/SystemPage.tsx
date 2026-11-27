@@ -46,7 +46,7 @@ export function SystemPage() {
       <Card title={t("Version")}>
         {info.data ? (
           <dl className="grid gap-2 text-sm sm:grid-cols-[180px_1fr]">
-            <dt className="text-muted">Rudder</dt>
+            <dt className="text-muted">Dymini Panel</dt>
             <dd>{info.data.version}</dd>
             <dt className="text-muted">{t("Database schema")}</dt>
             <dd>
@@ -67,7 +67,7 @@ export function SystemPage() {
       <Card title={t("Panel backup")}>
         <p className="mb-3 text-sm text-muted">
           {t(
-            "A complete copy of the panel: the database (projects, services, domains, users, backup jobs, encrypted secrets) and the master key that decrypts it. It is encrypted with the passphrase you choose here; Rudder does not store it.",
+            "A complete copy of the panel: the database (projects, services, domains, users, backup jobs, encrypted secrets) and the master key that decrypts it. It is encrypted with the passphrase you choose here; Dymini Panel does not store it.",
           )}
         </p>
         <form

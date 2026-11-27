@@ -705,7 +705,7 @@ function EditDomainDialog({
       variant="drawer"
       onClose={onClose}
       title={t("Edit domain")}
-      description={t("Change the hostname, port, or certificate mode. Rudder updates routing immediately.")}
+      description={t("Change the hostname, port, or certificate mode. Dymini Panel updates routing immediately.")}
     >
       <form
         className="grid gap-5"
@@ -810,17 +810,17 @@ export function ServiceAccess({
         }),
       }),
     onSuccess: async () => {
-      toast.success(t("Rudder Access updated"));
+      toast.success(t("Dymini Panel Access updated"));
       await queryClient.invalidateQueries({ queryKey: ["access-policy", serviceId] });
     },
     onError: (error) =>
-      toast.error(error instanceof ApiError ? error.message : t("Could not update Rudder Access")),
+      toast.error(error instanceof ApiError ? error.message : t("Could not update Dymini Panel Access")),
   });
   const rotate = useMutation({
     mutationFn: () =>
       api<Schemas["AccessTokenCreated"]>(`/api/v1/access/services/${serviceId}/token`, { method: "POST" }),
     onSuccess: (body) => {
-      toast.success(t("Service token rotated. Copy it now; Rudder also injects it on the next deploy."));
+      toast.success(t("Service token rotated. Copy it now; Dymini Panel also injects it on the next deploy."));
       void navigator.clipboard.writeText(body.token).catch(() => undefined);
     },
     onError: (error) =>
@@ -847,9 +847,9 @@ export function ServiceAccess({
         </Card>
       ) : null}
       <Card
-        title={t("Rudder Access")}
+        title={t("Dymini Panel Access")}
         description={t(
-          "When this is on, Rudder checks a session before the app sees a request. Add email addresses, or manage departments from Rudder Access.",
+          "When this is on, Dymini Panel checks a session before the app sees a request. Add email addresses, or manage departments from Dymini Panel Access.",
         )}
       >
         <form
@@ -865,7 +865,7 @@ export function ServiceAccess({
               checked={accessOn}
               onChange={(event) => setEnabled(event.target.checked)}
             />
-            {t("Require Rudder Access")}
+            {t("Require Dymini Panel Access")}
           </label>
           <Field label={t("Allowed emails")} hint={t("One address per line, or separated by commas.")}>
             <TextArea value={emailText} onChange={(event) => setEmails(event.target.value)} />
@@ -1571,9 +1571,9 @@ function CheckValueDialog({
 
 
 type ServiceImagePolicy = Schemas["ServiceImagePolicyView"];
-type RudderImage = Schemas["RudderImageView"];
+type DyminiPanelImage = Schemas["DyminiPanelImageView"];
 
-export function RudderImagesCard({ service }: { service: ServiceDetail }) {
+export function DyminiPanelImagesCard({ service }: { service: ServiceDetail }) {
   const t = useT();
   const queryClient = useQueryClient();
   const policy = useQuery({
@@ -1582,7 +1582,7 @@ export function RudderImagesCard({ service }: { service: ServiceDetail }) {
   });
   const images = useQuery({
     queryKey: ["service-images", service.id],
-    queryFn: () => api<RudderImage[]>(`/api/v1/services/${service.id}/images`),
+    queryFn: () => api<DyminiPanelImage[]>(`/api/v1/services/${service.id}/images`),
   });
 
   const [autoDeploy, setAutoDeploy] = useState(true);
@@ -1606,7 +1606,7 @@ export function RudderImagesCard({ service }: { service: ServiceDetail }) {
         }),
       }),
     onSuccess: async () => {
-      toast.success(t("Rudder Image policy saved"));
+      toast.success(t("Dymini Panel Image policy saved"));
       await queryClient.invalidateQueries({ queryKey: ["service-image-policy", service.id] });
     },
     onError: (error) => toast.error(errorMessage(error, t("Could not save image policy"))),
@@ -1635,9 +1635,9 @@ export function RudderImagesCard({ service }: { service: ServiceDetail }) {
 
   return (
     <Card
-      title={t("Rudder Image (local CI/CD & Cloudflare R2)")}
+      title={t("Dymini Panel Image (local CI/CD & Cloudflare R2)")}
       description={t(
-        "Build images on a developer machine with `rudder build`, push them to Cloudflare R2 with `rudder push`, and deploy with `rudder deploy`.",
+        "Build images on a developer machine with `dymini-panel build`, push them to Cloudflare R2 with `dymini-panel push`, and deploy with `dymini-panel deploy`.",
       )}
     >
       <form
@@ -1675,7 +1675,7 @@ export function RudderImagesCard({ service }: { service: ServiceDetail }) {
       </form>
       <div className="mt-6">
         {(images.data ?? []).length === 0 ? (
-          <Empty>{t("No images pushed via `rudder push` yet.")}</Empty>
+          <Empty>{t("No images pushed via `dymini-panel push` yet.")}</Empty>
         ) : (
           <DataTable
             head={

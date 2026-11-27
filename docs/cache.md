@@ -1,9 +1,9 @@
 # HTTP cache
 
-Each server can run one `rudder-cache` process: a Pingora reverse proxy with an in-memory store. Traefik still terminates TLS. Domains with caching turned on are routed to the cache, and the cache forwards misses to the app container. Domains without caching skip it entirely.
+Each server can run one `dymini-panel-cache` process: a Pingora reverse proxy with an in-memory store. Traefik still terminates TLS. Domains with caching turned on are routed to the cache, and the cache forwards misses to the app container. Domains without caching skip it entirely.
 
 ```
-client ─TLS─▶ Traefik ─▶ rudder-cache:8080 ─miss─▶ app container:port
+client ─TLS─▶ Traefik ─▶ dymini-panel-cache:8080 ─miss─▶ app container:port
                     └──── (cache off) ─────────────▶ app container:port
 ```
 
@@ -66,7 +66,7 @@ The store holds whole objects in RAM. The server's budget starts as the sum of t
 
 **Operate → Cache** shows the cap in effect, the hit ratio, and how much memory the cache is using. Readings are kept for 14 days.
 
-New installs limit the `rudder-cache` container to `RUDDER_CACHE_MEMORY` (default `512m`) so it is stopped before it can fill the machine. Re-run `install.sh` on an existing machine to apply that limit. If you raise the panel ceiling above the container limit, raise `RUDDER_CACHE_MEMORY` too and run the installer again.
+New installs limit the `dymini-panel-cache` container to `DYMINI_PANEL_CACHE_MEMORY` (default `512m`) so it is stopped before it can fill the machine. Re-run `install.sh` on an existing machine to apply that limit. If you raise the panel ceiling above the container limit, raise `DYMINI_PANEL_CACHE_MEMORY` too and run the installer again.
 
 ## Purge
 
@@ -93,26 +93,26 @@ The token needs the `write` scope.
 
 The cache's admin listener also serves Prometheus metrics at `GET /metrics` (bearer token from `cache/admin.token`):
 
-- `rudder_cache_requests_total{host,outcome}`
-- `rudder_cache_served_bytes_total{host}`
-- `rudder_cache_host_objects{host}`, `rudder_cache_host_stored_bytes{host}`
-- `rudder_cache_objects`, `rudder_cache_stored_bytes`, `rudder_cache_memory_max_bytes`
-- `rudder_cache_evictions_total`, `rudder_cache_reloads_total`
+- `dymini_panel_cache_requests_total{host,outcome}`
+- `dymini_panel_cache_served_bytes_total{host}`
+- `dymini_panel_cache_host_objects{host}`, `dymini_panel_cache_host_stored_bytes{host}`
+- `dymini_panel_cache_objects`, `dymini_panel_cache_stored_bytes`, `dymini_panel_cache_memory_max_bytes`
+- `dymini_panel_cache_evictions_total`, `dymini_panel_cache_reloads_total`
 
 ## Running the cache
 
 ```
-rudder-cache --rules /var/lib/rudder/cache/rules.json \
+dymini-panel-cache --rules /var/lib/dymini-panel/cache/rules.json \
   [--listen 0.0.0.0:8080] [--admin-listen 127.0.0.1:9090] \
-  [--token-file /var/lib/rudder/cache/admin.token] [--memory-bytes N]
+  [--token-file /var/lib/dymini-panel/cache/admin.token] [--memory-bytes N]
 ```
 
-The installer runs it as the `rudder-cache` container on the `rudder-proxy` network with the data directory's `cache/` folder mounted. The panel reaches the admin listener at `RUDDER_CACHE_ADMIN_URL` (default `http://127.0.0.1:9090`). The admin port is never published to the internet; every endpoint except `/health` requires the token.
+The installer runs it as the `dymini-panel-cache` container on the `dymini-panel-proxy` network with the data directory's `cache/` folder mounted. The panel reaches the admin listener at `DYMINI_PANEL_CACHE_ADMIN_URL` (default `http://127.0.0.1:9090`). The admin port is never published to the internet; every endpoint except `/health` requires the token.
 
 | Admin endpoint | Purpose |
 | --- | --- |
 | `GET /health` | Liveness, no auth. |
-| `GET /stats` | JSON counters (`rudder_core::CacheStats`). |
+| `GET /stats` | JSON counters (`dymini_panel_core::CacheStats`). |
 | `GET /metrics` | Prometheus text. |
 | `POST /purge` | `{"host": "...", "paths": [...]}`, `{"host": "...", "prefix": "/x"}`, or `{"host": "...", "all": true}`. |
 | `POST /reload` | Re-read the rules file now; `422` if it is invalid (the previous rules stay). |

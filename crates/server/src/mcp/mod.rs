@@ -43,7 +43,7 @@ pub(crate) fn skip_reason(route: &Route) -> Option<&'static str> {
             | "/api/v1/access/apps"
             | "/api/v1/access/public"
             | "/api/v1/access/callback"
-            | "/_rudder/callback"
+            | "/_dymini_panel/callback"
             | "/api/v1/edge/gate",
         ) => Some("browser session"),
         ("POST", "/api/v1/access/introspect") => Some("service credential"),
@@ -187,12 +187,12 @@ mod tests {
                 tool.name
             );
             assert!(
-                rudder_core::scope_known(&tool.scope),
+                dymini_panel_core::scope_known(&tool.scope),
                 "add {} to MCP_SCOPES and the full-control template",
                 tool.scope
             );
         }
-        let full = rudder_core::scopes_for_template("full").unwrap();
+        let full = dymini_panel_core::scopes_for_template("full").unwrap();
         for route in openapi::ROUTES {
             let name = openapi::operation_id(route);
             let skipped = skip_reason(route);

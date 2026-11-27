@@ -72,7 +72,7 @@ impl Plugin {
 }
 
 fn descriptor_asset() -> String {
-    "rudder-plugin.json".into()
+    "dymini-panel-plugin.json".into()
 }
 
 impl Plugin {
@@ -222,7 +222,7 @@ mod tests {
         )));
         assert!(resolved
             .env
-            .contains(&("RUDDER_TOKEN".into(), String::new())));
+            .contains(&("DYMINI_PANEL_TOKEN".into(), String::new())));
         values.insert("DOCKSIDE_CONFIG".into(), String::new());
         let empty = plugin
             .template

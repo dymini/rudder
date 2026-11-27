@@ -41,7 +41,7 @@ type Overview = Schemas["ImageStoreOverview"];
 type SetupStep = Schemas["ImageSetupStep"];
 type Destination = Schemas["DestinationView"];
 type Settings = Schemas["ImageStoreSettingsView"];
-type RudderImage = Schemas["RudderImageView"];
+type DyminiPanelImage = Schemas["DyminiPanelImageView"];
 type TestResult = Schemas["TestResult"];
 
 const TABS = [
@@ -79,14 +79,14 @@ export function useBucketCheck(enabled: boolean) {
   });
 }
 
-export function RudderImagePage() {
+export function DyminiPanelImagePage() {
   const t = useT();
   const [tab, setTab] = useState<Tab>("overview");
   const overview = useImageOverview();
   return (
     <>
       <PageHeader
-        title={t("Rudder Image")}
+        title={t("Dymini Panel Image")}
         description={t(
           "Docker images built on your machine, stored on Cloudflare R2 or any S3 bucket, and deployed to your servers. Track the setup, the pushes, and the clients that use it.",
         )}
@@ -101,7 +101,7 @@ export function RudderImagePage() {
       />
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
       {overview.isError ? (
-        <Alert tone="error">{errorMessage(overview.error, t("Could not load Rudder Image"))}</Alert>
+        <Alert tone="error">{errorMessage(overview.error, t("Could not load Dymini Panel Image"))}</Alert>
       ) : null}
       {tab === "overview" ? <OverviewTab overview={overview.data} loading={overview.isLoading} /> : null}
       {tab === "images" ? <ImagesTab overview={overview.data} /> : null}
@@ -126,11 +126,11 @@ function stepDetail(step: SetupStep, t: ReturnType<typeof useT>): string {
     "Every version stays in the bucket until you delete it.": msg(
       "Every version stays in the bucket until you delete it.",
     ),
-    "No command-line client has signed in yet (rudder login).": msg(
-      "No command-line client has signed in yet (rudder login).",
+    "No command-line client has signed in yet (dymini-panel login).": msg(
+      "No command-line client has signed in yet (dymini-panel login).",
     ),
-    "Nothing pushed yet (rudder build, then rudder push).": msg(
-      "Nothing pushed yet (rudder build, then rudder push).",
+    "Nothing pushed yet (dymini-panel build, then dymini-panel push).": msg(
+      "Nothing pushed yet (dymini-panel build, then dymini-panel push).",
     ),
     "Pushes only notify; deploy by hand or turn auto-deploy on per service.": msg(
       "Pushes only notify; deploy by hand or turn auto-deploy on per service.",
@@ -405,7 +405,7 @@ function OverviewTab({ overview, loading }: { overview: Overview | undefined; lo
         <Card
           flush
           title={t("Signed-in clients")}
-          description={t("Command-line sessions created with `rudder login --browser` or `--device`.")}
+          description={t("Command-line sessions created with `dymini-panel login --browser` or `--device`.")}
           actions={
             <Link to="/tokens" className="text-sm text-muted hover:text-ink hover:underline">
               {t("Manage tokens")}
@@ -414,7 +414,7 @@ function OverviewTab({ overview, loading }: { overview: Overview | undefined; lo
         >
           {overview && overview.clients.length === 0 ? (
             <Empty icon="terminal" title={t("No client yet")}>
-              {t("Run `rudder login --url <panel URL> --browser` on your machine.")}
+              {t("Run `dymini-panel login --url <panel URL> --browser` on your machine.")}
             </Empty>
           ) : (
             <DataTable
@@ -465,7 +465,7 @@ function ImagesTab({ overview }: { overview: Overview | undefined }) {
 
   const images = useQuery({
     queryKey: ["service-images", serviceId],
-    queryFn: () => api<RudderImage[]>(`/api/v1/services/${serviceId}/images`),
+    queryFn: () => api<DyminiPanelImage[]>(`/api/v1/services/${serviceId}/images`),
     enabled: Boolean(serviceId),
   });
   const refresh = async () => {
@@ -497,7 +497,7 @@ function ImagesTab({ overview }: { overview: Overview | undefined }) {
     return (
       <Card>
         <Empty icon="box" title={t("No images yet")}>
-          {t("Build and push an image with the rudder CLI; it will be listed here.")}
+          {t("Build and push an image with the dymini-panel CLI; it will be listed here.")}
         </Empty>
       </Card>
     );
@@ -610,7 +610,7 @@ function SetupTab({ overview }: { overview: Overview | undefined }) {
     queryFn: () => api<Destination[]>("/api/v1/s3-destinations"),
   });
   const [destinationId, setDestinationId] = useState("");
-  const [prefix, setPrefix] = useState("rudder-images");
+  const [prefix, setPrefix] = useState("dymini-panel-images");
   const [keepCount, setKeepCount] = useState("");
   const [keepDays, setKeepDays] = useState("");
 
@@ -618,7 +618,7 @@ function SetupTab({ overview }: { overview: Overview | undefined }) {
   useEffect(() => {
     if (!settings) return;
     setDestinationId(settings.destination_id ?? "");
-    setPrefix(settings.path_prefix || "rudder-images");
+    setPrefix(settings.path_prefix || "dymini-panel-images");
     setKeepCount(settings.r2_keep_count != null ? String(settings.r2_keep_count) : "");
     setKeepDays(settings.r2_keep_days != null ? String(settings.r2_keep_days) : "");
   }, [settings]);
@@ -629,13 +629,13 @@ function SetupTab({ overview }: { overview: Overview | undefined }) {
         method: "PUT",
         body: JSON.stringify({
           destination_id: destinationId || null,
-          path_prefix: prefix || "rudder-images",
+          path_prefix: prefix || "dymini-panel-images",
           r2_keep_count: keepCount.trim() ? Number(keepCount) : null,
           r2_keep_days: keepDays.trim() ? Number(keepDays) : null,
         }),
       }),
     onSuccess: async () => {
-      toast.success(t("Rudder Image store settings saved"));
+      toast.success(t("Dymini Panel Image store settings saved"));
       await queryClient.invalidateQueries({ queryKey: ["image-store-overview"] });
       await queryClient.invalidateQueries({ queryKey: ["image-store-test"] });
     },
@@ -644,10 +644,10 @@ function SetupTab({ overview }: { overview: Overview | undefined }) {
 
   const origin = typeof window === "undefined" ? "https://panel.example.com" : window.location.origin;
   const quickstart = [
-    `rudder login --url ${origin} --browser`,
-    "rudder init my-project/production/api",
-    "rudder build",
-    "rudder push --deploy",
+    `dymini-panel login --url ${origin} --browser`,
+    "dymini-panel init my-project/production/api",
+    "dymini-panel build",
+    "dymini-panel push --deploy",
   ].join("\n");
 
   return (
@@ -732,7 +732,7 @@ function SetupTab({ overview }: { overview: Overview | undefined }) {
       </Card>
 
       <Card
-        title={t("Connect the rudder CLI")}
+        title={t("Connect the dymini-panel CLI")}
         description={t(
           "Install the CLI from the release page, sign in once, then build and push from your project.",
         )}

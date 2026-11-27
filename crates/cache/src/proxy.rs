@@ -4,13 +4,13 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
+use dymini_panel_core::{encoding_class, CacheDocument, CacheRequest, RequestDecision};
 use pingora_cache::lock::CacheKeyLockImpl;
 use pingora_cache::{CacheKey, CacheMeta, CachePhase, NoCacheReason, RespCacheable};
 use pingora_core::upstreams::peer::HttpPeer;
 use pingora_core::{Error, ErrorType, Result};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::{ProxyHttp, Session};
-use rudder_core::{encoding_class, CacheDocument, CacheRequest, RequestDecision};
 
 use crate::state::{Outcome, Shared};
 use crate::storage::primary_key;

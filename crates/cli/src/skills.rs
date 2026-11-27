@@ -1,7 +1,7 @@
-//! `rudder skills`: put the Rudder skill where AI coding agents look for skills, so they know
-//! what Rudder is and how to drive it.
+//! `dymini-panel skills`: put the Dymini Panel skill where AI coding agents look for skills, so they know
+//! what Dymini Panel is and how to drive it.
 //!
-//! The skill text is built into the binary (`skills/rudder/SKILL.md`), so it always matches the
+//! The skill text is built into the binary (`skills/dymini-panel/SKILL.md`), so it always matches the
 //! CLI that installs it. A file we wrote carries a marker; we update or remove those, and leave
 //! a file someone else wrote alone unless `--force` is given.
 
@@ -10,28 +10,28 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context as _};
 
-const SKILL: &str = include_str!("../../../skills/rudder/SKILL.md");
-const MARKER: &str = "rudder-skill:";
-const NAME: &str = "rudder";
+const SKILL: &str = include_str!("../../../skills/dymini-panel/SKILL.md");
+const MARKER: &str = "dymini-panel-skill:";
+const NAME: &str = "dymini-panel";
 
 pub const HELP: &str = "\
 Usage:
-  rudder skills install [--agent claude|codex|cursor|agents|all]... [--project] [--dir DIR] [--force] [--dry-run]
-  rudder skills list    [--project]
-  rudder skills remove  [--agent ...]... [--project] [--force]
-  rudder skills print                                     print the skill text
+  dymini-panel skills install [--agent claude|codex|cursor|agents|all]... [--project] [--dir DIR] [--force] [--dry-run]
+  dymini-panel skills list    [--project]
+  dymini-panel skills remove  [--agent ...]... [--project] [--force]
+  dymini-panel skills print                                     print the skill text
 
-Installs a skill that teaches AI coding agents what Rudder is and how to use it (the rudder CLI,
+Installs a skill that teaches AI coding agents what Dymini Panel is and how to use it (the dymini-panel CLI,
 the MCP server, and how to search the docs of your panel).
 
-  --agent      claude  ~/.claude/skills/rudder/SKILL.md          (project: .claude/skills)
-               codex   ~/.codex/skills/rudder/SKILL.md           (project: .agents/skills)
-               agents  ~/.agents/skills/rudder/SKILL.md          (project: .agents/skills)
-               cursor  .cursor/rules/rudder.mdc                  (project only)
+  --agent      claude  ~/.claude/skills/dymini-panel/SKILL.md          (project: .claude/skills)
+               codex   ~/.codex/skills/dymini-panel/SKILL.md           (project: .agents/skills)
+               agents  ~/.agents/skills/dymini-panel/SKILL.md          (project: .agents/skills)
+               cursor  .cursor/rules/dymini-panel.mdc                  (project only)
                Without --agent, every agent found on this machine is used.
   --project    install into the current directory instead of your home directory
-  --dir DIR    install into DIR/rudder/SKILL.md for any other agent that reads SKILL.md folders
-  --force      replace or remove a file that rudder did not write
+  --dir DIR    install into DIR/dymini-panel/SKILL.md for any other agent that reads SKILL.md folders
+  --force      replace or remove a file that dymini-panel did not write
   --dry-run    show what would change";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -141,7 +141,7 @@ fn parse(args: Vec<String>) -> anyhow::Result<Options> {
                 } else if let Some(value) = other.strip_prefix("--dir=") {
                     options.dir = Some(PathBuf::from(value));
                 } else {
-                    bail!("unknown option '{other}'; see rudder skills --help");
+                    bail!("unknown option '{other}'; see dymini-panel skills --help");
                 }
             }
         }
@@ -159,7 +159,11 @@ fn path_for(agent: Agent, project: bool, env: &Env) -> Option<PathBuf> {
         return Some(match agent {
             Agent::Claude => skill_file(&env.cwd.join(".claude").join("skills")),
             Agent::Codex | Agent::Agents => skill_file(&env.cwd.join(".agents").join("skills")),
-            Agent::Cursor => env.cwd.join(".cursor").join("rules").join("rudder.mdc"),
+            Agent::Cursor => env
+                .cwd
+                .join(".cursor")
+                .join("rules")
+                .join("dymini-panel.mdc"),
         });
     }
     match agent {
@@ -254,7 +258,7 @@ fn targets(options: &Options, env: &Env) -> anyhow::Result<Vec<Target>> {
 
 /// The text written for a target.
 fn render(cursor_rule: bool) -> String {
-    let body = SKILL.replace("{{VERSION}}", rudder_core::VERSION);
+    let body = SKILL.replace("{{VERSION}}", dymini_panel_core::VERSION);
     if !cursor_rule {
         return body;
     }
@@ -265,7 +269,7 @@ fn render(cursor_rule: bool) -> String {
         .map(|(_, rest)| rest.trim_start_matches(['\r', '\n']))
         .unwrap_or(&body);
     format!(
-        "---\ndescription: Operate a self-hosted Rudder panel: rudder CLI, MCP server, deploys, logs, cache, and the panel's documentation\nalwaysApply: false\n---\n\n{rest}"
+        "---\ndescription: Operate a self-hosted Dymini Panel: dymini-panel CLI, MCP server, deploys, logs, cache, and the panel's documentation\nalwaysApply: false\n---\n\n{rest}"
     )
 }
 
@@ -319,7 +323,7 @@ pub fn run(args: Vec<String>, env: &Env, out: &mut (dyn Write + Send)) -> anyhow
         Some("install") => install(&parse(rest)?, env, out),
         Some("list" | "status") => list(&parse(rest)?, env, out),
         Some("remove" | "uninstall") => remove(&parse(rest)?, env, out),
-        Some(other) => bail!("unknown skills command '{other}'; see rudder skills --help"),
+        Some(other) => bail!("unknown skills command '{other}'; see dymini-panel skills --help"),
     }
 }
 
@@ -341,7 +345,7 @@ fn install(options: &Options, env: &Env, out: &mut (dyn Write + Send)) -> anyhow
             State::Foreign if !options.force => {
                 writeln!(
                     out,
-                    "! {:<7} skipped      {} exists and was not written by rudder (use --force to replace it)",
+                    "! {:<7} skipped      {} exists and was not written by dymini-panel (use --force to replace it)",
                     target.label,
                     target.path.display()
                 )?;
@@ -371,7 +375,7 @@ fn install(options: &Options, env: &Env, out: &mut (dyn Write + Send)) -> anyhow
         writeln!(
             out,
             "\nRestart the agent (or start a new session) so it picks the skill up. It will then\n\
-             search your panel's docs with `rudder docs search` or the MCP docs tools."
+             search your panel's docs with `dymini-panel docs search` or the MCP docs tools."
         )?;
     }
     Ok(())
@@ -393,8 +397,8 @@ fn list(options: &Options, env: &Env, out: &mut (dyn Write + Send)) -> anyhow::R
         let state = match state_of(&target)? {
             State::Missing => "not installed",
             State::Current => "installed, up to date",
-            State::Outdated => "installed, outdated (run rudder skills install)",
-            State::Foreign => "present, not written by rudder",
+            State::Outdated => "installed, outdated (run dymini-panel skills install)",
+            State::Foreign => "present, not written by dymini-panel",
         };
         writeln!(
             out,
@@ -424,7 +428,7 @@ fn remove(options: &Options, env: &Env, out: &mut (dyn Write + Send)) -> anyhow:
             State::Foreign if !options.force => {
                 writeln!(
                     out,
-                    "! {:<7} kept         {} was not written by rudder (use --force)",
+                    "! {:<7} kept         {} was not written by dymini-panel (use --force)",
                     target.label,
                     target.path.display()
                 )?;
@@ -460,7 +464,7 @@ mod tests {
     fn sandbox() -> (Env, PathBuf) {
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let root = std::env::temp_dir().join(format!(
-            "rudder-skills-{}-{}",
+            "dymini-panel-skills-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
@@ -492,18 +496,19 @@ mod tests {
     #[test]
     fn the_skill_has_frontmatter_a_marker_and_a_version_placeholder() {
         assert!(
-            SKILL.starts_with("---\nname: rudder\n") || SKILL.starts_with("---\r\nname: rudder")
+            SKILL.starts_with("---\nname: dymini-panel\n")
+                || SKILL.starts_with("---\r\nname: dymini-panel")
         );
         assert!(SKILL.contains(MARKER));
         assert!(!render(false).contains("{{VERSION}}"));
-        assert!(render(false).contains(rudder_core::VERSION));
+        assert!(render(false).contains(dymini_panel_core::VERSION));
     }
 
     #[test]
     fn cursor_rule_swaps_the_frontmatter() {
         let rule = render(true);
         assert!(rule.starts_with("---\ndescription:"));
-        assert!(!rule.contains("name: rudder"));
+        assert!(!rule.contains("name: dymini-panel"));
         assert!(rule.contains(MARKER));
     }
 
@@ -517,7 +522,7 @@ mod tests {
             .home
             .as_ref()
             .unwrap()
-            .join(".claude/skills/rudder/SKILL.md");
+            .join(".claude/skills/dymini-panel/SKILL.md");
         assert!(claude.is_file());
         assert!(!env.home.as_ref().unwrap().join(".agents").exists());
         let _ = std::fs::remove_dir_all(root);
@@ -535,10 +540,10 @@ mod tests {
             .home
             .as_ref()
             .unwrap()
-            .join(".claude/skills/rudder/SKILL.md");
+            .join(".claude/skills/dymini-panel/SKILL.md");
         let old = std::fs::read_to_string(&file)
             .unwrap()
-            .replace(rudder_core::VERSION, "0.0.1");
+            .replace(dymini_panel_core::VERSION, "0.0.1");
         std::fs::write(&file, old).unwrap();
         assert!(run_to_string(&["list"], &env).unwrap().contains("outdated"));
         assert!(run_to_string(&["install"], &env)
@@ -548,9 +553,9 @@ mod tests {
     }
 
     #[test]
-    fn a_file_rudder_did_not_write_is_kept_unless_forced() {
+    fn a_file_dymini_panel_did_not_write_is_kept_unless_forced() {
         let (env, root) = sandbox();
-        let file = env.cwd.join(".claude/skills/rudder/SKILL.md");
+        let file = env.cwd.join(".claude/skills/dymini-panel/SKILL.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "my own notes").unwrap();
         let text = run_to_string(&["install", "--project", "--agent", "claude"], &env).unwrap();
@@ -583,11 +588,14 @@ mod tests {
             &env,
         )
         .unwrap();
-        assert!(env.cwd.join(".cursor/rules/rudder.mdc").is_file());
-        assert!(env.cwd.join(".agents/skills/rudder/SKILL.md").is_file());
+        assert!(env.cwd.join(".cursor/rules/dymini-panel.mdc").is_file());
+        assert!(env
+            .cwd
+            .join(".agents/skills/dymini-panel/SKILL.md")
+            .is_file());
         run_to_string(&["remove", "--project", "--agent", "all"], &env).unwrap();
-        assert!(!env.cwd.join(".cursor/rules/rudder.mdc").exists());
-        assert!(!env.cwd.join(".agents/skills/rudder").exists());
+        assert!(!env.cwd.join(".cursor/rules/dymini-panel.mdc").exists());
+        assert!(!env.cwd.join(".agents/skills/dymini-panel").exists());
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -612,7 +620,7 @@ mod tests {
         let (env, root) = sandbox();
         let dir = root.join("elsewhere");
         run_to_string(&["install", "--dir", dir.to_str().unwrap()], &env).unwrap();
-        assert!(dir.join("rudder/SKILL.md").is_file());
+        assert!(dir.join("dymini-panel/SKILL.md").is_file());
         let _ = std::fs::remove_dir_all(root);
     }
 }

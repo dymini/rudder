@@ -12,20 +12,20 @@ use sha2::{Digest, Sha256};
 
 use crate::{ContainerSpec, Error, PROXY_NETWORK, TRAEFIK_CONTAINER};
 
-/// Prefix of the `cloudflared` containers Rudder runs. Replica `n` is `rudder-cloudflared-n`.
-pub const CLOUDFLARED_CONTAINER_PREFIX: &str = "rudder-cloudflared";
+/// Prefix of the `cloudflared` containers Dymini Panel runs. Replica `n` is `dymini-panel-cloudflared-n`.
+pub const CLOUDFLARED_CONTAINER_PREFIX: &str = "dymini-panel-cloudflared";
 
-/// Image run for each replica unless `RUDDER_CLOUDFLARED_IMAGE` says otherwise.
+/// Image run for each replica unless `DYMINI_PANEL_CLOUDFLARED_IMAGE` says otherwise.
 pub const DEFAULT_CLOUDFLARED_IMAGE: &str = "cloudflare/cloudflared:latest";
 
-/// Most replicas Rudder starts on one server. Each opens four connections.
+/// Most replicas Dymini Panel starts on one server. Each opens four connections.
 pub const MAX_TUNNEL_REPLICAS: u8 = 5;
 
 /// Port `cloudflared` serves `/ready` and metrics on inside its container.
 pub const CLOUDFLARED_METRICS_PORT: u16 = 2000;
 
-/// Label that marks containers Rudder started for the tunnel.
-pub const CLOUDFLARED_LABEL: (&str, &str) = ("rudder.managed", "cloudflared");
+/// Label that marks containers Dymini Panel started for the tunnel.
+pub const CLOUDFLARED_LABEL: (&str, &str) = ("dymini-panel.managed", "cloudflared");
 
 /// Name of replica `index` (counting from 1).
 pub fn replica_container_name(index: u8) -> String {
@@ -245,7 +245,7 @@ pub enum DnsAction {
 }
 
 /// Decide what to do for each hostname. `existing` holds the records whose name
-/// matches one of the hosts. Records Rudder cannot safely replace (MX, TXT, NS)
+/// matches one of the hosts. Records Dymini Panel cannot safely replace (MX, TXT, NS)
 /// never block a CNAME of another type, but a CNAME cannot sit beside them, so
 /// they are reported as conflicts.
 pub fn plan_dns(
@@ -406,29 +406,29 @@ pub fn sshd_trust_script(ca_public_key: &str) -> Result<String, Error> {
     let key = validate_ssh_ca_public_key(ca_public_key)?;
     Ok(format!(
         r#"#!/bin/sh
-# Written by Rudder. Makes sshd trust the Cloudflare SSH certificate authority.
+# Written by Dymini Panel. Makes sshd trust the Cloudflare SSH certificate authority.
 set -eu
 [ "$(id -u)" -eq 0 ] || {{ echo "run this as root" >&2; exit 1; }}
-CA=/etc/ssh/rudder-cloudflare-ca.pub
-cat >"$CA" <<'RUDDER_CA'
+CA=/etc/ssh/dymini-panel-cloudflare-ca.pub
+cat >"$CA" <<'DYMINI_PANEL_CA'
 {key}
-RUDDER_CA
+DYMINI_PANEL_CA
 chmod 644 "$CA"
 CONF=/etc/ssh/sshd_config
 if grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/' "$CONF" 2>/dev/null; then
 	mkdir -p /etc/ssh/sshd_config.d
-	TARGET=/etc/ssh/sshd_config.d/50-rudder-cloudflare.conf
+	TARGET=/etc/ssh/sshd_config.d/50-dymini-panel-cloudflare.conf
 	printf 'PubkeyAuthentication yes\nTrustedUserCAKeys %s\n' "$CA" >"$TARGET"
 else
 	TARGET="$CONF"
-	if ! grep -q 'rudder-cloudflare-ca.pub' "$CONF"; then
-		cp "$CONF" "$CONF.rudder-backup"
-		printf 'PubkeyAuthentication yes\nTrustedUserCAKeys %s\n' "$CA" | cat - "$CONF.rudder-backup" >"$CONF"
+	if ! grep -q 'dymini-panel-cloudflare-ca.pub' "$CONF"; then
+		cp "$CONF" "$CONF.dymini-panel-backup"
+		printf 'PubkeyAuthentication yes\nTrustedUserCAKeys %s\n' "$CA" | cat - "$CONF.dymini-panel-backup" >"$CONF"
 	fi
 fi
 if ! sshd -t; then
 	echo "sshd rejected the configuration; undoing" >&2
-	if [ "$TARGET" = "$CONF" ] && [ -f "$CONF.rudder-backup" ]; then cp "$CONF.rudder-backup" "$CONF"; else rm -f "$TARGET"; fi
+	if [ "$TARGET" = "$CONF" ] && [ -f "$CONF.dymini-panel-backup" ]; then cp "$CONF.dymini-panel-backup" "$CONF"; else rm -f "$TARGET"; fi
 	exit 1
 fi
 if command -v systemctl >/dev/null 2>&1; then
@@ -441,7 +441,7 @@ echo "sshd now trusts the Cloudflare SSH certificate authority"
     ))
 }
 
-/// Claims Rudder reads from a Cloudflare Access token.
+/// Claims Dymini Panel reads from a Cloudflare Access token.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AccessClaims {
     pub email: Option<String>,
@@ -716,8 +716,8 @@ mod tests {
     #[test]
     fn a_replica_container_hides_the_token_from_the_command_line() {
         let spec = cloudflared_spec("eyJhIjoiabc-_=", DEFAULT_CLOUDFLARED_IMAGE, 2).unwrap();
-        assert_eq!(spec.name, "rudder-cloudflared-2");
-        assert_eq!(spec.network.as_deref(), Some("rudder-proxy"));
+        assert_eq!(spec.name, "dymini-panel-cloudflared-2");
+        assert_eq!(spec.network.as_deref(), Some("dymini-panel-proxy"));
         assert!(spec.ports.is_empty());
         assert!(spec.command.iter().all(|part| !part.contains("eyJ")));
         assert_eq!(
@@ -742,7 +742,7 @@ mod tests {
         let ingress = config["config"]["ingress"].as_array().unwrap();
         assert_eq!(ingress.len(), 3);
         assert_eq!(ingress[0]["hostname"], "a.example.com");
-        assert_eq!(ingress[0]["service"], "https://rudder-traefik:443");
+        assert_eq!(ingress[0]["service"], "https://dymini-panel-traefik:443");
         assert_eq!(ingress[0]["originRequest"]["noTLSVerify"], true);
         assert_eq!(
             ingress[0]["originRequest"]["originServerName"],

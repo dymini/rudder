@@ -14,7 +14,7 @@ use crate::Error;
 pub const RELEASE_MANIFEST: &str = "release.json";
 pub const RELEASE_SUMS: &str = "SHA256SUMS";
 pub const RELEASE_SIGNATURE: &str = "SHA256SUMS.minisig";
-pub const RELEASE_FORMAT: &str = "rudder-release";
+pub const RELEASE_FORMAT: &str = "dymini-panel-release";
 /// Agent builds the panel image bundles and the release publishes.
 pub const AGENT_TARGETS: [&str; 2] = ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"];
 
@@ -162,7 +162,7 @@ pub struct ReleaseManifest {
     pub format: String,
     pub version: String,
     pub images: ReleaseImages,
-    /// Agent target triple to the SHA-256 of `rudder-agent-<target>`.
+    /// Agent target triple to the SHA-256 of `dymini-panel-agent-<target>`.
     #[serde(default)]
     pub agents: BTreeMap<String, String>,
 }
@@ -261,7 +261,7 @@ pub fn verify_release(
         )));
     }
     for (target, hash) in &parsed.agents {
-        if let Some(listed) = sums.get(&format!("rudder-agent-{target}")) {
+        if let Some(listed) = sums.get(&format!("dymini-panel-agent-{target}")) {
             if listed != hash {
                 return Err(Error::Validation(format!(
                     "agent checksum for {target} differs between release.json and SHA256SUMS"
@@ -377,10 +377,12 @@ mod tests {
     #[test]
     fn sha256sums_parse_both_styles_and_reject_paths() {
         let hash = "a".repeat(64);
-        let sums =
-            parse_sha256sums(&format!("{hash}  release.json\n{hash} *rudder-agent-x\n")).unwrap();
+        let sums = parse_sha256sums(&format!(
+            "{hash}  release.json\n{hash} *dymini-panel-agent-x\n"
+        ))
+        .unwrap();
         assert_eq!(sums.len(), 2);
-        assert!(sums.contains_key("rudder-agent-x"));
+        assert!(sums.contains_key("dymini-panel-agent-x"));
         assert!(parse_sha256sums(&format!("{hash}  ../etc/passwd\n")).is_err());
         assert!(parse_sha256sums(&format!("{hash}  dir/file\n")).is_err());
         assert!(parse_sha256sums("abc  file\n").is_err());
@@ -393,8 +395,8 @@ mod tests {
             format: RELEASE_FORMAT.into(),
             version: version.into(),
             images: ReleaseImages {
-                panel: format!("ghcr.io/vantanminh/rudder:{version}@sha256:{digest}"),
-                cache: format!("ghcr.io/vantanminh/rudder-cache@sha256:{digest}"),
+                panel: format!("ghcr.io/vantanminh/dymini-panel:{version}@sha256:{digest}"),
+                cache: format!("ghcr.io/vantanminh/dymini-panel-cache@sha256:{digest}"),
             },
             agents: BTreeMap::from([("x86_64-unknown-linux-musl".into(), "c".repeat(64))]),
         }
@@ -404,7 +406,7 @@ mod tests {
     fn manifests_must_pin_images_by_digest() {
         assert!(manifest("0.2.0").validate().is_ok());
         let mut tag_only = manifest("0.2.0");
-        tag_only.images.cache = "ghcr.io/vantanminh/rudder-cache:0.2.0".into();
+        tag_only.images.cache = "ghcr.io/vantanminh/dymini-panel-cache:0.2.0".into();
         assert!(tag_only.validate().is_err());
         let mut odd_target = manifest("0.2.0");
         odd_target
@@ -437,7 +439,7 @@ mod tests {
     fn signed_release(signer: &Signer, manifest: &ReleaseManifest) -> (Vec<u8>, String, Vec<u8>) {
         let manifest = serde_json::to_vec(manifest).unwrap();
         let agent = format!(
-            "{}  rudder-agent-x86_64-unknown-linux-musl\n",
+            "{}  dymini-panel-agent-x86_64-unknown-linux-musl\n",
             "c".repeat(64)
         );
         let sums = format!("{}  release.json\n{agent}", sha256_hex(&manifest)).into_bytes();

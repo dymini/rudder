@@ -15,8 +15,8 @@ use axum::body::Body;
 use axum::extract::{Path as UrlPath, State};
 use axum::http::{Request, StatusCode};
 use axum::response::IntoResponse;
+use dymini_panel_core::{sha256_hex, ReleaseImages, ReleaseManifest, RELEASE_FORMAT};
 use http_body_util::BodyExt;
-use rudder_core::{sha256_hex, ReleaseImages, ReleaseManifest, RELEASE_FORMAT};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -26,7 +26,7 @@ struct TempDir(PathBuf);
 
 impl TempDir {
     fn new() -> Self {
-        let path = std::env::temp_dir().join(format!("rudder-updates-{}", Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("dymini-panel-updates-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&path).unwrap();
         Self(path)
     }
@@ -91,12 +91,12 @@ impl FakeGithub {
         self.releases.retain(|release| release["tag_name"] != tag);
         self.releases.push(json!({
             "tag_name": tag,
-            "name": format!("Rudder {tag}"),
+            "name": format!("Dymini Panel {tag}"),
             "body": format!("Notes for {tag}"),
             "draft": false,
             "prerelease": prerelease,
             "published_at": "2026-10-01T00:00:00Z",
-            "html_url": format!("https://github.com/acme/rudder/releases/tag/{tag}"),
+            "html_url": format!("https://github.com/acme/dymini-panel/releases/tag/{tag}"),
             "assets": assets,
         }));
     }
@@ -108,8 +108,8 @@ fn manifest(version: &str) -> ReleaseManifest {
         format: RELEASE_FORMAT.into(),
         version: version.into(),
         images: ReleaseImages {
-            panel: format!("ghcr.io/acme/rudder:{version}@sha256:{digest}"),
-            cache: format!("ghcr.io/acme/rudder-cache:{version}@sha256:{digest}"),
+            panel: format!("ghcr.io/acme/dymini-panel:{version}@sha256:{digest}"),
+            cache: format!("ghcr.io/acme/dymini-panel-cache:{version}@sha256:{digest}"),
         },
         agents: Default::default(),
     }
@@ -132,7 +132,7 @@ async fn start_github() -> (String, Shared) {
         State(shared): State<Shared>,
         UrlPath((owner, repo)): UrlPath<(String, String)>,
     ) -> axum::response::Response {
-        if (owner.as_str(), repo.as_str()) != ("acme", "rudder") {
+        if (owner.as_str(), repo.as_str()) != ("acme", "dymini-panel") {
             return StatusCode::NOT_FOUND.into_response();
         }
         let list = shared.lock().unwrap().releases.clone();
@@ -162,7 +162,7 @@ async fn start_github() -> (String, Shared) {
 }
 
 struct Panel {
-    state: rudder_server::AppState,
+    state: dymini_panel_server::AppState,
     router: axum::Router,
     owner: (String, String),
     viewer: (String, String),
@@ -184,7 +184,7 @@ async fn send(
     let mut builder = Request::builder().method(method).uri(path);
     if let Some((cookie, csrf)) = session {
         builder = builder
-            .header("cookie", format!("rudder_session={cookie}"))
+            .header("cookie", format!("dymini_panel_session={cookie}"))
             .header("x-csrf-token", csrf);
     }
     let request = match body {
@@ -212,7 +212,7 @@ fn session(reply: &Reply, headers: &axum::http::HeaderMap) -> (String, String) {
         .get("set-cookie")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.split(';').next())
-        .and_then(|v| v.strip_prefix("rudder_session="))
+        .and_then(|v| v.strip_prefix("dymini_panel_session="))
         .unwrap()
         .to_owned();
     (
@@ -224,36 +224,42 @@ fn session(reply: &Reply, headers: &axum::http::HeaderMap) -> (String, String) {
 impl Panel {
     async fn start(pool: PgPool, github: &str, public_key: &str, extra: &[(&str, String)]) -> Self {
         let dir = TempDir::new();
-        let url =
-            std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+        let url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
         let mut vars = HashMap::from([
             ("DATABASE_URL".to_owned(), url),
-            ("RUDDER_MASTER_KEY".to_owned(), "dd".repeat(32)),
-            ("RUDDER_SETUP_TOKEN".to_owned(), "test-setup-token".into()),
-            ("RUDDER_COOKIE_SECURE".to_owned(), "false".to_owned()),
+            ("DYMINI_PANEL_MASTER_KEY".to_owned(), "dd".repeat(32)),
             (
-                "RUDDER_DATA_DIR".to_owned(),
+                "DYMINI_PANEL_SETUP_TOKEN".to_owned(),
+                "test-setup-token".into(),
+            ),
+            ("DYMINI_PANEL_COOKIE_SECURE".to_owned(), "false".to_owned()),
+            (
+                "DYMINI_PANEL_DATA_DIR".to_owned(),
                 dir.path().display().to_string(),
             ),
-            ("RUDDER_UPDATE_API_URL".to_owned(), github.to_owned()),
-            ("RUDDER_UPDATE_PUBKEY".to_owned(), public_key.to_owned()),
-            ("RUDDER_UPDATE_CHECK_SECS".to_owned(), "0".to_owned()),
+            ("DYMINI_PANEL_UPDATE_API_URL".to_owned(), github.to_owned()),
             (
-                "RUDDER_DOCKER_SOCKET".to_owned(),
+                "DYMINI_PANEL_UPDATE_PUBKEY".to_owned(),
+                public_key.to_owned(),
+            ),
+            ("DYMINI_PANEL_UPDATE_CHECK_SECS".to_owned(), "0".to_owned()),
+            (
+                "DYMINI_PANEL_DOCKER_SOCKET".to_owned(),
                 dir.path().join("no-docker.sock").display().to_string(),
             ),
             (
-                "RUDDER_DIST_DIR".to_owned(),
+                "DYMINI_PANEL_DIST_DIR".to_owned(),
                 dir.path().join("dist").display().to_string(),
             ),
         ]);
         for (key, value) in extra {
             vars.insert((*key).to_owned(), value.clone());
         }
-        let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-        let state = rudder_server::AppState::new(pool.clone(), config);
-        let router = rudder_server::router(state.clone());
-        sqlx::query("UPDATE panel_settings SET github_repo = 'acme/rudder'")
+        let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+        let state = dymini_panel_server::AppState::new(pool.clone(), config);
+        let router = dymini_panel_server::router(state.clone());
+        sqlx::query("UPDATE panel_settings SET github_repo = 'acme/dymini-panel'")
             .execute(&pool)
             .await
             .unwrap();
@@ -329,7 +335,7 @@ async fn release_checks_verify_signatures_and_follow_the_channel(pool: PgPool) {
 
     let overview = panel.call("GET", "/api/v1/system/updates", None).await;
     assert_eq!(overview.status, StatusCode::OK, "{}", overview.body);
-    assert_eq!(overview.body["current_version"], rudder_core::VERSION);
+    assert_eq!(overview.body["current_version"], dymini_panel_core::VERSION);
     assert_eq!(overview.body["channel"], "stable");
     assert_eq!(overview.body["signing_key"], true);
     assert_eq!(overview.body["last_check"], Value::Null);
@@ -528,7 +534,7 @@ async fn release_checks_without_a_signing_key_cannot_verify(pool: PgPool) {
 }
 
 fn agent_script(version: &str) -> Vec<u8> {
-    format!("#!/bin/sh\necho rudder-agent {version}\n").into_bytes()
+    format!("#!/bin/sh\necho dymini-panel-agent {version}\n").into_bytes()
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -545,12 +551,12 @@ async fn outdated_agents_receive_the_bundled_binary_and_reconnect(pool: PgPool) 
         &github,
         &signer.public,
         &[(
-            "RUDDER_AGENT_URL",
+            "DYMINI_PANEL_AGENT_URL",
             format!("https://127.0.0.1:{agent_port}"),
         )],
     )
     .await;
-    tokio::spawn(rudder_server::serve_agents(
+    tokio::spawn(dymini_panel_server::serve_agents(
         panel.state.clone(),
         agent_listener,
     ));
@@ -569,13 +575,13 @@ async fn outdated_agents_receive_the_bundled_binary_and_reconnect(pool: PgPool) 
     // The binary the panel image would bundle for this machine's agent.
     let dist = panel.state.config.dist_dir.clone();
     std::fs::create_dir_all(&dist).unwrap();
-    let target = rudder_agent::update::target();
-    let bundled = agent_script(rudder_core::VERSION);
-    let file = dist.join(format!("rudder-agent-{target}"));
+    let target = dymini_panel_agent::update::target();
+    let bundled = agent_script(dymini_panel_core::VERSION);
+    let file = dist.join(format!("dymini-panel-agent-{target}"));
     std::fs::write(&file, &bundled).unwrap();
     std::fs::write(
         file.with_extension("sha256"),
-        format!("{}  rudder-agent-{target}\n", sha256_hex(&bundled)),
+        format!("{}  dymini-panel-agent-{target}\n", sha256_hex(&bundled)),
     )
     .unwrap();
 
@@ -590,24 +596,25 @@ async fn outdated_agents_receive_the_bundled_binary_and_reconnect(pool: PgPool) 
     let token = created.body["join_token"].as_str().unwrap();
     let agent_dir = TempDir::new();
     let data_dir = agent_dir.path().join("agent");
-    let identity = rudder_agent::enroll(&format!("http://{http_addr}"), token, None, &data_dir)
-        .await
-        .unwrap();
+    let identity =
+        dymini_panel_agent::enroll(&format!("http://{http_addr}"), token, None, &data_dir)
+            .await
+            .unwrap();
 
     // The agent's own executable, as installed on a server.
-    let binary = agent_dir.path().join("rudder-agent");
+    let binary = agent_dir.path().join("dymini-panel-agent");
     std::fs::write(&binary, agent_script("0.0.1")).unwrap();
     #[cfg(unix)]
     std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
     let (restart_tx, mut restart_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
-    let start = |identity: rudder_agent::Identity| {
+    let start = |identity: dymini_panel_agent::Identity| {
         let restart = restart_tx.clone();
-        let options = rudder_agent::RunOptions {
+        let options = dymini_panel_agent::RunOptions {
             builder: None,
             identity,
             data_dir: data_dir.clone(),
             stats_interval: Duration::from_secs(60),
-            self_update: Some(rudder_agent::SelfUpdate {
+            self_update: Some(dymini_panel_agent::SelfUpdate {
                 binary: binary.clone(),
                 data_dir: data_dir.clone(),
                 restart: Arc::new(move || {
@@ -618,14 +625,15 @@ async fn outdated_agents_receive_the_bundled_binary_and_reconnect(pool: PgPool) 
         };
         let node_dir = agent_dir.path().join("node");
         std::fs::create_dir_all(&node_dir).unwrap();
-        let driver: Arc<dyn rudder_core::NodeDriver> = Arc::new(rudder_node::LocalDriver::connect(
-            &node_dir,
-            Some(&node_dir.join("no-docker.sock")),
-        ));
-        tokio::spawn(rudder_agent::run_with(
+        let driver: Arc<dyn dymini_panel_core::NodeDriver> =
+            Arc::new(dymini_panel_node::LocalDriver::connect(
+                &node_dir,
+                Some(&node_dir.join("no-docker.sock")),
+            ));
+        tokio::spawn(dymini_panel_agent::run_with(
             options,
             driver,
-            Arc::new(rudder_agent::Buffer::default()),
+            Arc::new(dymini_panel_agent::Buffer::default()),
             std::future::pending(),
         ))
     };
@@ -683,10 +691,10 @@ async fn outdated_agents_receive_the_bundled_binary_and_reconnect(pool: PgPool) 
         .unwrap();
     assert_eq!(std::fs::read(&binary).unwrap(), bundled);
     assert_eq!(
-        std::fs::read(rudder_agent::update::previous_path(&binary)).unwrap(),
+        std::fs::read(dymini_panel_agent::update::previous_path(&binary)).unwrap(),
         agent_script("0.0.1")
     );
-    assert!(data_dir.join(rudder_agent::update::MARKER).exists());
+    assert!(data_dir.join(dymini_panel_agent::update::MARKER).exists());
     first.abort();
     let _second = start(identity);
 
@@ -710,7 +718,7 @@ async fn outdated_agents_receive_the_bundled_binary_and_reconnect(pool: PgPool) 
     assert_eq!(status, "succeeded", "{logs}");
     assert!(logs.contains("sha256"), "{logs}");
     let marker_cleared = async {
-        while data_dir.join(rudder_agent::update::MARKER).exists() {
+        while data_dir.join(dymini_panel_agent::update::MARKER).exists() {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     };
@@ -724,5 +732,5 @@ async fn outdated_agents_receive_the_bundled_binary_and_reconnect(pool: PgPool) 
     assert_eq!(history[0]["component"], "agent");
     assert_eq!(history[0]["server_name"], "edge-1");
     assert_eq!(history[0]["from_version"], "0.0.1");
-    assert_eq!(history[0]["to_version"], rudder_core::VERSION);
+    assert_eq!(history[0]["to_version"], dymini_panel_core::VERSION);
 }

@@ -1,11 +1,11 @@
 [package]
-name = "rudder-core"
+name = "dymini-panel-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
-description = "Domain types, validation, and shared errors for Rudder"
+description = "Domain types, validation, and shared errors for Dymini Panel"
 
 [dependencies]
 thiserror.workspace = true

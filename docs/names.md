@@ -1,6 +1,6 @@
 # Names and validation errors
 
-Rudder returns the reason when it rejects a name or identifier. The panel displays
+Dymini Panel returns the reason when it rejects a name or identifier. The panel displays
 that API message rather than replacing it with a generic save failure; MCP callers
 receive the same reason. A duplicate-name error means that name is already in use
 in the relevant scope. Choose another name rather than changing its spelling rules.

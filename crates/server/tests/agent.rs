@@ -1,10 +1,10 @@
 //! Remote servers end to end: enrollment over HTTP, the mTLS gRPC session, the
-//! remote driver, and telemetry shipping, with a real `rudder-agent` running in
+//! remote driver, and telemetry shipping, with a real `dymini-panel-agent` running in
 //! process against real listeners.
 //!
 //! The agent side uses a driver without a Docker socket, so everything except
 //! container operations runs in CI. The Docker test runs only with
-//! `RUDDER_DOCKER_TESTS=1`.
+//! `DYMINI_PANEL_DOCKER_TESTS=1`.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -14,12 +14,12 @@ use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
+use dymini_panel_agent::{Buffer, Identity, RunOptions};
+use dymini_panel_core::{ArchiveSource, ExecSpec, NodeDriver};
+use dymini_panel_proto::agent::{agent_message, AgentMessage, Hello};
+use dymini_panel_proto::NodeAgentClient;
 use futures_util::StreamExt;
 use http_body_util::BodyExt;
-use rudder_agent::{Buffer, Identity, RunOptions};
-use rudder_core::{ArchiveSource, ExecSpec, NodeDriver};
-use rudder_proto::agent::{agent_message, AgentMessage, Hello};
-use rudder_proto::NodeAgentClient;
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -29,7 +29,7 @@ struct TempDir(PathBuf);
 
 impl TempDir {
     fn new() -> Self {
-        let path = std::env::temp_dir().join(format!("rudder-agent-{}", Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("dymini-panel-agent-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&path).unwrap();
         Self(path)
     }
@@ -46,7 +46,7 @@ impl Drop for TempDir {
 }
 
 struct Panel {
-    state: rudder_server::AppState,
+    state: dymini_panel_server::AppState,
     router: axum::Router,
     http: String,
     cookie: String,
@@ -59,28 +59,34 @@ impl Panel {
         let dir = TempDir::new();
         let agent_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let agent_port = agent_listener.local_addr().unwrap().port();
-        let url =
-            std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+        let url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
         let vars = HashMap::from([
             ("DATABASE_URL".into(), url),
-            ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-            ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-            ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-            ("RUDDER_DATA_DIR".into(), dir.path().display().to_string()),
+            ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+            ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+            ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
             (
-                "RUDDER_AGENT_URL".into(),
+                "DYMINI_PANEL_DATA_DIR".into(),
+                dir.path().display().to_string(),
+            ),
+            (
+                "DYMINI_PANEL_AGENT_URL".into(),
                 format!("https://127.0.0.1:{agent_port}"),
             ),
             (
-                "RUDDER_AGENT_BIND".into(),
+                "DYMINI_PANEL_AGENT_BIND".into(),
                 format!("127.0.0.1:{agent_port}"),
             ),
         ]);
-        let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-        let state = rudder_server::AppState::new(pool, config);
-        tokio::spawn(rudder_server::serve_agents(state.clone(), agent_listener));
-        rudder_server::start_log_pipeline(&state);
-        let router = rudder_server::router(state.clone());
+        let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+        let state = dymini_panel_server::AppState::new(pool, config);
+        tokio::spawn(dymini_panel_server::serve_agents(
+            state.clone(),
+            agent_listener,
+        ));
+        dymini_panel_server::start_log_pipeline(&state);
+        let router = dymini_panel_server::router(state.clone());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr: SocketAddr = listener.local_addr().unwrap();
         let app = router.clone();
@@ -117,7 +123,7 @@ impl Panel {
             .get("set-cookie")
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.split(';').next())
-            .and_then(|v| v.strip_prefix("rudder_session="))
+            .and_then(|v| v.strip_prefix("dymini_panel_session="))
             .unwrap()
             .to_owned();
         let body: Value =
@@ -138,7 +144,7 @@ impl Panel {
             .method(method)
             .uri(path)
             .header("host", self.http.trim_start_matches("http://"))
-            .header("cookie", format!("rudder_session={}", self.cookie))
+            .header("cookie", format!("dymini_panel_session={}", self.cookie))
             .header("x-csrf-token", &self.csrf);
         let request = match body {
             Some(body) => builder
@@ -189,7 +195,7 @@ impl Panel {
     }
 
     async fn driver(&self, id: &str) -> Arc<dyn NodeDriver> {
-        rudder_server::node_driver(&self.state, id.parse().unwrap())
+        dymini_panel_server::node_driver(&self.state, id.parse().unwrap())
             .await
             .map_err(|e| e.public_message())
             .unwrap()
@@ -198,7 +204,7 @@ impl Panel {
 
 /// An agent driver that has no Docker socket: files and host stats work.
 fn node_driver(node_dir: &Path) -> Arc<dyn NodeDriver> {
-    Arc::new(rudder_node::LocalDriver::connect(
+    Arc::new(dymini_panel_node::LocalDriver::connect(
         node_dir,
         Some(&node_dir.join("no-docker.sock")),
     ))
@@ -217,7 +223,7 @@ fn start_agent(
         self_update: None,
         builder: None,
     };
-    tokio::spawn(rudder_agent::run_with(
+    tokio::spawn(dymini_panel_agent::run_with(
         options,
         driver,
         buffer,
@@ -308,12 +314,12 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
     let node_dir = agent_dir.path().join("node");
     std::fs::create_dir_all(&node_dir).unwrap();
 
-    let error = rudder_agent::enroll(&panel.http, "join_not-a-real-token", None, &data_dir)
+    let error = dymini_panel_agent::enroll(&panel.http, "join_not-a-real-token", None, &data_dir)
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("join token"), "{error:#}");
 
-    let identity = rudder_agent::enroll(&panel.http, &token, Some(&ca_sha256), &data_dir)
+    let identity = dymini_panel_agent::enroll(&panel.http, &token, Some(&ca_sha256), &data_dir)
         .await
         .unwrap();
     assert_eq!(identity.meta.server_id, server_id);
@@ -330,7 +336,8 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
     let reloaded = Identity::load(&data_dir).unwrap();
     assert_eq!(reloaded.cert_pem, identity.cert_pem);
     let reused =
-        rudder_agent::enroll(&panel.http, &token, None, &agent_dir.path().join("again")).await;
+        dymini_panel_agent::enroll(&panel.http, &token, None, &agent_dir.path().join("again"))
+            .await;
     assert!(reused.is_err(), "a join token works once");
     assert!(
         !panel.server(&server_id).await.to_string().contains(&token),
@@ -338,7 +345,7 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
     );
 
     let buffer = Arc::new(Buffer::default());
-    buffer.push_log(rudder_proto::agent::LogRecord {
+    buffer.push_log(dymini_panel_proto::agent::LogRecord {
         logged_at_unix_ms: chrono::Utc::now().timestamp_millis(),
         text: r#"{"level":"WARN","fields":{"message":"docker socket missing"}}"#.into(),
         source: "agent".into(),
@@ -351,7 +358,7 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
         buffer.clone(),
     );
     let online = panel.wait_for_status(&server_id, "online").await;
-    assert_eq!(online["agent_version"], rudder_core::VERSION);
+    assert_eq!(online["agent_version"], dymini_panel_core::VERSION);
     let stored_arch: String = sqlx::query_scalar("SELECT arch FROM servers WHERE id = $1")
         .bind(server_id.parse::<Uuid>().unwrap())
         .fetch_one(&pool)
@@ -360,7 +367,7 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
     assert_eq!(stored_arch, std::env::consts::ARCH);
     let status = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            let status = rudder_agent::status::read(&data_dir).unwrap();
+            let status = dymini_panel_agent::status::read(&data_dir).unwrap();
             if status.connected {
                 break status;
             }
@@ -393,13 +400,16 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
     );
     let escape = driver.read_file("../../etc/passwd").await.unwrap_err();
     assert!(
-        matches!(escape, rudder_core::Error::Validation(_)),
+        matches!(escape, dymini_panel_core::Error::Validation(_)),
         "{escape:?}"
     );
     let host = driver.host_stats().await.unwrap();
     assert!(host.cpu_count > 0);
     let docker = driver.docker_info().await.unwrap_err();
-    assert!(matches!(docker, rudder_core::Error::Node(_)), "{docker:?}");
+    assert!(
+        matches!(docker, dymini_panel_core::Error::Node(_)),
+        "{docker:?}"
+    );
     // Streaming calls fail cleanly when the agent cannot reach Docker.
     let archive = driver
         .archive_read(&ArchiveSource::Volume {
@@ -438,7 +448,7 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
     let other_ca_cert = params.self_signed(&other_ca).unwrap();
     let issuer = rcgen::Issuer::new(params, other_ca);
     let rogue_key = rcgen::KeyPair::generate().unwrap();
-    let rogue = rcgen::CertificateParams::new(vec!["rogue.agent.rudder".to_owned()])
+    let rogue = rcgen::CertificateParams::new(vec!["rogue.agent.dymini-panel".to_owned()])
         .unwrap()
         .signed_by(&rogue_key, &issuer)
         .unwrap();
@@ -461,7 +471,7 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
         .unwrap()
         .contains(new_token));
     let new_dir = agent_dir.path().join("agent2");
-    let new_identity = rudder_agent::enroll(&panel.http, new_token, None, &new_dir)
+    let new_identity = dymini_panel_agent::enroll(&panel.http, new_token, None, &new_dir)
         .await
         .unwrap();
     let old = dial(&identity, &identity.cert_pem, &identity.key_pem)
@@ -476,7 +486,7 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
         Arc::new(Buffer::default()),
     );
     let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
-    while rudder_server::node_driver(&panel.state, server_id.parse().unwrap())
+    while dymini_panel_server::node_driver(&panel.state, server_id.parse().unwrap())
         .await
         .is_err()
     {
@@ -508,7 +518,8 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
         );
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    let unavailable = rudder_server::node_driver(&panel.state, server_id.parse().unwrap()).await;
+    let unavailable =
+        dymini_panel_server::node_driver(&panel.state, server_id.parse().unwrap()).await;
     assert!(unavailable.is_err());
 
     // Deleting the server drops a live session and its certificate stops working.
@@ -523,7 +534,7 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
         .ok("DELETE", &format!("/api/v1/servers/{server_id}"), None)
         .await;
     assert!(
-        rudder_server::node_driver(&panel.state, server_id.parse().unwrap())
+        dymini_panel_server::node_driver(&panel.state, server_id.parse().unwrap())
             .await
             .is_err()
     );
@@ -549,7 +560,7 @@ async fn agent_enrolls_connects_runs_commands_and_ships_telemetry(pool: PgPool) 
         )
         .await;
     let pinned_dir = agent_dir.path().join("pinned");
-    let wrong_ca = rudder_agent::enroll(
+    let wrong_ca = dymini_panel_agent::enroll(
         &panel.http,
         pin["join_token"].as_str().unwrap(),
         Some(&"0".repeat(64)),
@@ -585,7 +596,7 @@ async fn agent_session_survives_over_the_websocket_tunnel(pool: PgPool) {
     let node_dir = agent_dir.path().join("node");
     std::fs::create_dir_all(&node_dir).unwrap();
 
-    let mut identity = rudder_agent::enroll(&panel.http, &token, None, &data_dir)
+    let mut identity = dymini_panel_agent::enroll(&panel.http, &token, None, &data_dir)
         .await
         .unwrap();
     // Enrollment said where the listener is, but nothing can reach that port.
@@ -640,9 +651,12 @@ async fn join_tokens_are_for_remote_servers_and_writers_only(pool: PgPool) {
     let script = response.into_body().collect().await.unwrap().to_bytes();
     let script = String::from_utf8(script.to_vec()).unwrap();
     assert!(script.starts_with("#!/bin/sh"));
-    assert!(script.contains("rudder-agent enroll") || script.contains("\" enroll --server"));
+    assert!(script.contains("dymini-panel-agent enroll") || script.contains("\" enroll --server"));
 
-    for path in ["/downloads/rudder-agent", "/downloads/..%2Fetc%2Fpasswd"] {
+    for path in [
+        "/downloads/dymini-panel-agent",
+        "/downloads/..%2Fetc%2Fpasswd",
+    ] {
         let response = panel
             .router
             .clone()
@@ -667,8 +681,8 @@ async fn join_tokens_are_for_remote_servers_and_writers_only(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn remote_streams_run_on_the_agent_docker(pool: PgPool) {
-    if std::env::var("RUDDER_DOCKER_TESTS").as_deref() != Ok("1") {
-        eprintln!("skipping: set RUDDER_DOCKER_TESTS=1 to run Docker tests");
+    if std::env::var("DYMINI_PANEL_DOCKER_TESTS").as_deref() != Ok("1") {
+        eprintln!("skipping: set DYMINI_PANEL_DOCKER_TESTS=1 to run Docker tests");
         return;
     }
     let panel = Panel::start(pool.clone()).await;
@@ -709,7 +723,7 @@ async fn remote_streams_run_on_the_agent_docker(pool: PgPool) {
     let data_dir = agent_dir.path().join("agent");
     let node_dir = agent_dir.path().join("node");
     std::fs::create_dir_all(&node_dir).unwrap();
-    let identity = rudder_agent::enroll(
+    let identity = dymini_panel_agent::enroll(
         &panel.http,
         created["join_token"].as_str().unwrap(),
         None,
@@ -717,7 +731,8 @@ async fn remote_streams_run_on_the_agent_docker(pool: PgPool) {
     )
     .await
     .unwrap();
-    let docker: Arc<dyn NodeDriver> = Arc::new(rudder_node::LocalDriver::connect(&node_dir, None));
+    let docker: Arc<dyn NodeDriver> =
+        Arc::new(dymini_panel_node::LocalDriver::connect(&node_dir, None));
     let agent = start_agent(identity, &data_dir, docker, Arc::new(Buffer::default()));
     panel.wait_for_status(&server_id, "online").await;
     let online = panel.server(&server_id).await;
@@ -725,7 +740,7 @@ async fn remote_streams_run_on_the_agent_docker(pool: PgPool) {
         .as_str()
         .is_some_and(|v| !v.is_empty()));
 
-    let name = format!("rudder-agent-test-{}", &service_id[..8]);
+    let name = format!("dymini-panel-agent-test-{}", &service_id[..8]);
     let started = std::process::Command::new("docker")
         .args([
             "run",
@@ -734,9 +749,9 @@ async fn remote_streams_run_on_the_agent_docker(pool: PgPool) {
             "--name",
             &name,
             "--label",
-            "rudder.managed=true",
+            "dymini-panel.managed=true",
             "--label",
-            &format!("rudder.service={service_id}"),
+            &format!("dymini-panel.service={service_id}"),
             "alpine:3.20",
             "sh",
             "-c",
@@ -774,7 +789,7 @@ async fn remote_streams_run_on_the_agent_docker(pool: PgPool) {
 
     // Input stream.
     let payload = bytes::Bytes::from(vec![b'x'; 200_000]);
-    let input: rudder_core::ByteStream = Box::pin(futures_util::stream::iter(vec![
+    let input: dymini_panel_core::ByteStream = Box::pin(futures_util::stream::iter(vec![
         Ok(payload.clone()),
         Ok(payload),
     ]));
@@ -807,10 +822,13 @@ async fn remote_streams_run_on_the_agent_docker(pool: PgPool) {
     assert_eq!(
         seen,
         [
-            ("remote-err".to_owned(), rudder_core::LogStreamKind::Stderr),
+            (
+                "remote-err".to_owned(),
+                dymini_panel_core::LogStreamKind::Stderr
+            ),
             (
                 "remote-line-one".to_owned(),
-                rudder_core::LogStreamKind::Stdout
+                dymini_panel_core::LogStreamKind::Stdout
             ),
         ]
     );
@@ -848,7 +866,7 @@ async fn remote_streams_run_on_the_agent_docker(pool: PgPool) {
     .await;
 
     // Built images stream from the panel's engine to the server's engine.
-    let panel_engine = rudder_node::LocalDriver::connect(&node_dir, None);
+    let panel_engine = dymini_panel_node::LocalDriver::connect(&node_dir, None);
     let tar = panel_engine.save_image("alpine:3.20").await.unwrap();
     driver.load_image(tar).await.unwrap();
     assert!(driver.image_digest("alpine:3.20").await.is_ok());
@@ -871,16 +889,16 @@ async fn remote_streams_run_on_the_agent_docker(pool: PgPool) {
         .await
         .unwrap();
     input_tx
-        .send(rudder_core::TerminalInput::Resize {
+        .send(dymini_panel_core::TerminalInput::Resize {
             cols: 120,
             rows: 40,
         })
         .await
         .unwrap();
     input_tx
-        .send(rudder_core::TerminalInput::Data(bytes::Bytes::from_static(
-            b"echo remote-$((40+2)); stty size\n",
-        )))
+        .send(dymini_panel_core::TerminalInput::Data(
+            bytes::Bytes::from_static(b"echo remote-$((40+2)); stty size\n"),
+        ))
         .await
         .unwrap();
     let mut output = String::new();
@@ -901,4 +919,85 @@ async fn remote_streams_run_on_the_agent_docker(pool: PgPool) {
     cleanup();
     agent.abort();
     assert!(container_samples > 0, "no container samples were stored");
+}
+
+/// A pre-rebrand agent speaks the `rudder.agent.v1` proto package. The panel
+/// serves it next to the current package so older agents keep their session —
+/// and their binary update channel — until they restart onto the rebranded build.
+#[sqlx::test(migrations = "./migrations")]
+async fn legacy_pre_rebrand_agent_session_connects(pool: PgPool) {
+    use dymini_panel_proto::legacy::{
+        agent_message as legacy_agent_message, node_agent_client::NodeAgentClient as LegacyClient,
+        server_message as legacy_server_message, AgentMessage as LegacyAgentMessage,
+        Hello as LegacyHello,
+    };
+
+    let panel = Panel::start(pool.clone()).await;
+    let created = panel
+        .ok(
+            "POST",
+            "/api/v1/servers",
+            Some(json!({ "name": "edge-legacy", "kind": "remote" })),
+        )
+        .await;
+    let server_id = created["id"].as_str().unwrap().to_owned();
+    let token = created["join_token"].as_str().unwrap().to_owned();
+    let agent_dir = TempDir::new();
+    let identity =
+        dymini_panel_agent::enroll(&panel.http, &token, None, &agent_dir.path().join("agent"))
+            .await
+            .unwrap();
+
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let tls = tonic::transport::ClientTlsConfig::new()
+        .ca_certificate(tonic::transport::Certificate::from_pem(&identity.ca_pem))
+        .identity(tonic::transport::Identity::from_pem(
+            &identity.cert_pem,
+            &identity.key_pem,
+        ))
+        .domain_name(identity.meta.tls_name.clone());
+    let channel = tonic::transport::Endpoint::from_shared(identity.meta.grpc_url.clone())
+        .unwrap()
+        .tls_config(tls)
+        .unwrap()
+        .connect()
+        .await
+        .unwrap();
+    let hello = LegacyAgentMessage {
+        body: Some(legacy_agent_message::Body::Hello(LegacyHello {
+            agent_version: "0.15.0-pre-rebrand".into(),
+            ..LegacyHello::default()
+        })),
+    };
+    let (tx, rx) = tokio::sync::mpsc::channel(4);
+    tx.send(hello).await.unwrap();
+    let mut stream = LegacyClient::new(channel)
+        .session(tokio_stream::wrappers::ReceiverStream::new(rx))
+        .await
+        .expect("the legacy session is accepted")
+        .into_inner();
+    let first = stream
+        .message()
+        .await
+        .unwrap()
+        .expect("the panel answers with a Welcome");
+    let Some(legacy_server_message::Body::Welcome(welcome)) = first.body else {
+        panic!("the first legacy server message is not a Welcome: {first:?}");
+    };
+    assert_eq!(welcome.server_id, server_id);
+
+    // The session registers exactly like a current one: the server is online
+    // and carries the agent version the legacy Hello announced.
+    let status: String = sqlx::query_scalar("SELECT status FROM servers WHERE id = $1")
+        .bind(server_id.parse::<Uuid>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(status, "online");
+    let version: String = sqlx::query_scalar("SELECT agent_version FROM servers WHERE id = $1")
+        .bind(server_id.parse::<Uuid>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(version, "0.15.0-pre-rebrand");
 }

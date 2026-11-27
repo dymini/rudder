@@ -392,7 +392,7 @@ mod tests {
 
     #[test]
     fn reads_a_procfs_root() {
-        let dir = std::env::temp_dir().join(format!("rudder-guard-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("dymini-panel-guard-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("pressure")).unwrap();
         std::fs::write(
             dir.join("stat"),

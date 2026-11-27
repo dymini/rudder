@@ -16,7 +16,7 @@ export function useDarkTheme(): boolean {
 export function setDarkTheme(dark: boolean) {
   root.classList.toggle("dark", dark);
   try {
-    localStorage.setItem("rudder_theme", dark ? "dark" : "light");
+    localStorage.setItem("dymini_panel_theme", dark ? "dark" : "light");
   } catch {
     // Storage can be blocked; the theme still applies for this session.
   }

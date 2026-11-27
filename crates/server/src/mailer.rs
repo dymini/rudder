@@ -1,4 +1,4 @@
-//! Outbound mail for Rudder Access codes.
+//! Outbound mail for Dymini Panel Access codes.
 //!
 //! Resend, SMTP, and Cloudflare Email Sending. Secrets stay in the encrypted
 //! provider config and are not logged.
@@ -68,7 +68,15 @@ pub async fn send_login_code(
     let text = format!(
         "Your sign-in code is {code}. It expires in 10 minutes. If you did not ask for it, ignore this message."
     );
-    send_text(client, config, from, to, "Your Rudder Access code", &text).await
+    send_text(
+        client,
+        config,
+        from,
+        to,
+        "Your Dymini Panel Access code",
+        &text,
+    )
+    .await
 }
 
 pub async fn send_text(
@@ -279,8 +287,8 @@ mod tests {
 
     #[test]
     fn from_address_keeps_the_display_name() {
-        let (name, address) = split_from("Rudder Access <login@example.com>").unwrap();
-        assert_eq!(name.as_deref(), Some("Rudder Access"));
+        let (name, address) = split_from("Dymini Panel Access <login@example.com>").unwrap();
+        assert_eq!(name.as_deref(), Some("Dymini Panel Access"));
         assert_eq!(address, "login@example.com");
         assert!(split_from("not an email").is_err());
     }

@@ -1,14 +1,14 @@
 # GitHub App
 
-A GitHub App lets Rudder clone private repositories with short-lived tokens and receive push events, without a personal access token. Rudder creates the app for you.
+A GitHub App lets Dymini Panel clone private repositories with short-lived tokens and receive push events, without a personal access token. Dymini Panel creates the app for you.
 
 ## Connect GitHub
 
 Git providers → **Connect with GitHub**.
 
-1. Rudder sends you to GitHub with the app already described. Confirm the name and press *Create GitHub App*.
+1. Dymini Panel sends you to GitHub with the app already described. Confirm the name and press *Create GitHub App*.
 2. GitHub asks which repositories the app may read. Choose them and press *Install*.
-3. You come back to Rudder. The provider is listed as *Ready* with the GitHub account that installed it.
+3. You come back to Dymini Panel. The provider is listed as *Ready* with the GitHub account that installed it.
 
 To create the app under an organization, open *Create it under an organization* and enter its login first. An organization that requires approval shows *Waiting for approval* until an owner approves; then open **Manage repositories** on the provider to finish.
 
@@ -16,7 +16,7 @@ Only admins can connect GitHub. The app is private to its owner and asks for rea
 
 ### Public address
 
-GitHub sends you back to, and delivers push events to, the address you used to open the panel, or `RUDDER_PUBLIC_URL` when it is set. Set it when the panel is behind a proxy so the address is the public one. If the address is private (`localhost`, a private IP, `.local`), GitHub cannot reach it: Rudder warns you before going to GitHub and creates the app without a webhook. Builds then start by hand ("Build now") or through a per-service webhook.
+GitHub sends you back to, and delivers push events to, the address you used to open the panel, or `DYMINI_PANEL_PUBLIC_URL` when it is set. Set it when the panel is behind a proxy so the address is the public one. If the address is private (`localhost`, a private IP, `.local`), GitHub cannot reach it: Dymini Panel warns you before going to GitHub and creates the app without a webhook. Builds then start by hand ("Build now") or through a per-service webhook.
 
 ## Use it
 
@@ -28,20 +28,20 @@ A push to a branch starts a build of every application whose source uses this pr
 
 ## Pull request previews
 
-On an application's Git source, or a Git stack's source settings, turn on **Preview pull requests**. When a pull request is opened, updated, or reopened against that branch in the same repository, Rudder creates a copy of the service, builds the pull request's branch, and gives it a preview address. Closing the pull request removes the copy. Pull requests from a fork are ignored. The copy uses the same environment variables as the service it came from.
+On an application's Git source, or a Git stack's source settings, turn on **Preview pull requests**. When a pull request is opened, updated, or reopened against that branch in the same repository, Dymini Panel creates a copy of the service, builds the pull request's branch, and gives it a preview address. Closing the pull request removes the copy. Pull requests from a fork are ignored. The copy uses the same environment variables as the service it came from.
 
 ## Manage
 
 - **Manage repositories** opens GitHub's installation page to add or remove repositories.
 - **Finish installing** appears on an app that was created but not installed, for example if you closed the tab on GitHub.
-- Deleting the provider removes it from Rudder only. Delete the app on GitHub too (Settings → Developer settings → GitHub Apps).
+- Deleting the provider removes it from Dymini Panel only. Delete the app on GitHub too (Settings → Developer settings → GitHub Apps).
 
 ## Settings
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `RUDDER_PUBLIC_URL` | none | Public address of the panel, used for GitHub's redirects and webhook |
-| `RUDDER_GITHUB_API_URL` | `https://api.github.com` | GitHub API base, for app creation, installation checks, and installation tokens |
+| `DYMINI_PANEL_PUBLIC_URL` | none | Public address of the panel, used for GitHub's redirects and webhook |
+| `DYMINI_PANEL_GITHUB_API_URL` | `https://api.github.com` | GitHub API base, for app creation, installation checks, and installation tokens |
 
 GitHub Enterprise Server is not supported.
 

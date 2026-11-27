@@ -5,8 +5,8 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 WebBrowser.maybeCompleteAuthSession();
 
-const REDIRECT_URI = "rudder://oauth/callback";
-const CLIENT_NAME = "Rudder iOS";
+const REDIRECT_URI = "dymini-panel://oauth/callback";
+const CLIENT_NAME = "Dymini Panel iOS";
 
 interface StoredSession {
   panelUrl: string;
@@ -45,7 +45,7 @@ interface AuthState {
 const AuthContext = createContext<AuthState | null>(null);
 
 function storeKey(panelUrl: string) {
-  return `rudder_session_${panelUrl.replace(/[^a-zA-Z0-9]/g, "_")}`;
+  return `dymini_panel_session_${panelUrl.replace(/[^a-zA-Z0-9]/g, "_")}`;
 }
 
 export function normalizePanelUrl(input: string): string {
@@ -134,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const last = await getItem("rudder_last_panel");
+        const last = await getItem("dymini_panel_last_panel");
         if (last) {
           const raw = await getItem(storeKey(last));
           if (raw) {
@@ -153,15 +153,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(next);
     if (next) {
       await setItem(storeKey(next.panelUrl), JSON.stringify(next));
-      await setItem("rudder_last_panel", next.panelUrl);
+      await setItem("dymini_panel_last_panel", next.panelUrl);
     } else if (session) {
       await deleteItem(storeKey(session.panelUrl));
-      await deleteItem("rudder_last_panel");
+      await deleteItem("dymini_panel_last_panel");
     }
   }
 
   async function registerClient(panelUrl: string): Promise<string> {
-    const key = `rudder_client_${panelUrl.replace(/[^a-zA-Z0-9]/g, "_")}`;
+    const key = `dymini_panel_client_${panelUrl.replace(/[^a-zA-Z0-9]/g, "_")}`;
     const cached = await getItem(key);
     if (cached) {
       return cached;

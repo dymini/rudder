@@ -5,7 +5,7 @@
 //! JSON-encoded return value. Streaming calls move their bytes over a separate
 //! `Channel` RPC named by the command's `stream_id`.
 
-use rudder_core::{
+use dymini_panel_core::{
     ArchiveSource, CachePurge, ComposeAction, ComposeOptions, ContainerSpec, Error, ExecSpec,
     NodeDriver, RegistryAuth, ReplaceContainer,
 };
@@ -18,7 +18,7 @@ use serde_json::Value;
 pub struct BuildRequest {
     pub job_id: String,
     pub service_id: String,
-    pub plan: rudder_core::BuildPlan,
+    pub plan: dymini_panel_core::BuildPlan,
     pub cache_key: String,
     /// Ordered: current branch, then default branch. Duplicate keys are ignored.
     pub cache_fallback_keys: Vec<String>,

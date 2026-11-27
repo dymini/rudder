@@ -35,7 +35,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     label: msg("S3"),
     items: [
       ["/s3-destinations", msg("S3 destinations"), "bucket"],
-      ["/rudder-image", msg("Rudder Image"), "box"],
+      ["/dymini-panel-image", msg("Dymini Panel Image"), "box"],
       ["/backups", msg("Backups"), "archive"],
     ],
   },
@@ -59,7 +59,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     label: msg("Admin"),
     items: [
       ["/users", msg("Users"), "users"],
-      ["/access-admin", msg("Rudder Access"), "lock"],
+      ["/access-admin", msg("Dymini Panel Access"), "lock"],
       ["/tokens", msg("API tokens"), "key"],
       ["/agents", msg("AI agents"), "command"],
       ["/audit", msg("Audit log"), "history"],

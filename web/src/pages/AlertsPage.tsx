@@ -59,7 +59,7 @@ const CHANNEL_FIELDS: Record<
     },
   ],
   webhook: [
-    { key: "url", label: msg("URL"), placeholder: "https://example.com/rudder" },
+    { key: "url", label: msg("URL"), placeholder: "https://example.com/dymini-panel" },
     { key: "secret", label: msg("Signing secret (HMAC-SHA256)"), secret: true, optional: true },
   ],
   smtp: [
@@ -67,7 +67,7 @@ const CHANNEL_FIELDS: Record<
     { key: "port", label: msg("Port"), optional: true, placeholder: "587" },
     { key: "username", label: msg("Username"), optional: true },
     { key: "password", label: msg("Password"), secret: true, optional: true },
-    { key: "from", label: msg("From"), placeholder: "Rudder <alerts@example.com>" },
+    { key: "from", label: msg("From"), placeholder: "Dymini Panel <alerts@example.com>" },
     { key: "to", label: msg("To (comma separated)"), placeholder: "ops@example.com" },
   ],
 };

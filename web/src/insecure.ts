@@ -3,7 +3,7 @@
 
 import { useT } from "./i18n";
 
-const ACK_KEY = "rudder_http_secrets_ack";
+const ACK_KEY = "dymini_panel_http_secrets_ack";
 
 function loopback(host: string): boolean {
   const name = host.replace(/^\[|\]$/g, "").toLowerCase();

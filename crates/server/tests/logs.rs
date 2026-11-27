@@ -1,6 +1,6 @@
 //! Central logs: ingest, search, export, retention, live tail, and the terminal.
 //!
-//! The terminal test needs Docker and runs only with `RUDDER_DOCKER_TESTS=1`.
+//! The terminal test needs Docker and runs only with `DYMINI_PANEL_DOCKER_TESTS=1`.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -20,7 +20,7 @@ struct TempDir(std::path::PathBuf);
 
 impl TempDir {
     fn new() -> Self {
-        let path = std::env::temp_dir().join(format!("rudder-logs-{}", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("dymini-panel-logs-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&path).unwrap();
         Self(path)
     }
@@ -37,17 +37,20 @@ impl Drop for TempDir {
 }
 
 fn app(pool: PgPool, data_dir: &Path) -> axum::Router {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
-        ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        (
+            "DYMINI_PANEL_DATA_DIR".into(),
+            data_dir.display().to_string(),
+        ),
     ]);
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::router(rudder_server::AppState::new(pool, config))
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    dymini_panel_server::router(dymini_panel_server::AppState::new(pool, config))
 }
 
 struct Client {
@@ -79,7 +82,7 @@ impl Client {
             .get("set-cookie")
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.split(';').next())
-            .and_then(|pair| pair.strip_prefix("rudder_session="))
+            .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
             .unwrap()
             .to_owned();
         let body: Value =
@@ -103,7 +106,7 @@ impl Client {
         builder = match bearer {
             Some(token) => builder.header("authorization", format!("Bearer {token}")),
             None => builder
-                .header("cookie", format!("rudder_session={}", self.cookie))
+                .header("cookie", format!("dymini_panel_session={}", self.cookie))
                 .header("x-csrf-token", &self.csrf),
         };
         let request = match body {
@@ -401,7 +404,7 @@ async fn ingest_search_export_and_retention_settings(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn retention_deletes_rows_and_drops_old_partitions(pool: PgPool) {
-    sqlx::query("SELECT rudder_ensure_daily_partition('log_entries', CURRENT_DATE - 40)")
+    sqlx::query("SELECT dymini_panel_ensure_daily_partition('log_entries', CURRENT_DATE - 40)")
         .execute(&pool)
         .await
         .unwrap();
@@ -422,7 +425,9 @@ async fn retention_deletes_rows_and_drops_old_partitions(pool: PgPool) {
         .await
         .unwrap();
 
-    let report = rudder_server::apply_log_retention(&pool).await.unwrap();
+    let report = dymini_panel_server::apply_log_retention(&pool)
+        .await
+        .unwrap();
     assert!(report.deleted_rows >= 2, "{report:?}");
     assert_eq!(report.dropped_partitions.len(), 1, "{report:?}");
     assert!(report.dropped_partitions[0].starts_with("log_entries_"));
@@ -464,7 +469,7 @@ fn ws_request(
     let mut request = format!("ws://{addr}{path}").into_client_request().unwrap();
     request.headers_mut().insert(
         "cookie",
-        format!("rudder_session={cookie}").parse().unwrap(),
+        format!("dymini_panel_session={cookie}").parse().unwrap(),
     );
     if let Some(origin) = origin {
         request
@@ -537,8 +542,8 @@ async fn live_tail_streams_matching_lines(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn terminal_runs_a_shell_in_the_container(pool: PgPool) {
-    if std::env::var("RUDDER_DOCKER_TESTS").as_deref() != Ok("1") {
-        eprintln!("skipping: set RUDDER_DOCKER_TESTS=1 to run Docker tests");
+    if std::env::var("DYMINI_PANEL_DOCKER_TESTS").as_deref() != Ok("1") {
+        eprintln!("skipping: set DYMINI_PANEL_DOCKER_TESTS=1 to run Docker tests");
         return;
     }
     let dir = TempDir::new();
@@ -546,7 +551,7 @@ async fn terminal_runs_a_shell_in_the_container(pool: PgPool) {
     let client = Client::owner(router.clone()).await;
     let (_, _, service_id) = client.service("application").await;
 
-    let name = format!("rudder-term-test-{}", &service_id[..8]);
+    let name = format!("dymini-panel-term-test-{}", &service_id[..8]);
     let started = std::process::Command::new("docker")
         .args([
             "run",
@@ -588,7 +593,7 @@ async fn terminal_runs_a_shell_in_the_container(pool: PgPool) {
         .unwrap();
     socket
         .send(Message::Text(
-            json!({ "type": "input", "data": "echo rudder-$((40+2)); stty size\n" })
+            json!({ "type": "input", "data": "echo dymini-panel-$((40+2)); stty size\n" })
                 .to_string()
                 .into(),
         ))
@@ -596,7 +601,7 @@ async fn terminal_runs_a_shell_in_the_container(pool: PgPool) {
         .unwrap();
     let mut output = String::new();
     let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
-    while !(output.contains("rudder-42") && output.contains("40 120")) {
+    while !(output.contains("dymini-panel-42") && output.contains("40 120")) {
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         match tokio::time::timeout(remaining, socket.next()).await {
             Ok(Some(Ok(Message::Binary(bytes)))) => {
@@ -621,23 +626,26 @@ async fn terminal_runs_a_shell_in_the_container(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn collector_follows_managed_containers_and_redacts_env(pool: PgPool) {
-    if std::env::var("RUDDER_DOCKER_TESTS").as_deref() != Ok("1") {
-        eprintln!("skipping: set RUDDER_DOCKER_TESTS=1 to run Docker tests");
+    if std::env::var("DYMINI_PANEL_DOCKER_TESTS").as_deref() != Ok("1") {
+        eprintln!("skipping: set DYMINI_PANEL_DOCKER_TESTS=1 to run Docker tests");
         return;
     }
     let dir = TempDir::new();
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
-        ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_DATA_DIR".into(), dir.path().display().to_string()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        (
+            "DYMINI_PANEL_DATA_DIR".into(),
+            dir.path().display().to_string(),
+        ),
     ]);
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    let state = rudder_server::AppState::new(pool.clone(), config);
-    let client = Client::owner(rudder_server::router(state.clone())).await;
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    let state = dymini_panel_server::AppState::new(pool.clone(), config);
+    let client = Client::owner(dymini_panel_server::router(state.clone())).await;
     let (_, _, service_id) = client.service("application").await;
     client
         .ok(
@@ -647,7 +655,7 @@ async fn collector_follows_managed_containers_and_redacts_env(pool: PgPool) {
         )
         .await;
 
-    let name = format!("rudder-collect-test-{}", &service_id[..8]);
+    let name = format!("dymini-panel-collect-test-{}", &service_id[..8]);
     let started = std::process::Command::new("docker")
         .args([
             "run",
@@ -656,9 +664,9 @@ async fn collector_follows_managed_containers_and_redacts_env(pool: PgPool) {
             "--name",
             &name,
             "--label",
-            "rudder.managed=true",
+            "dymini-panel.managed=true",
             "--label",
-            &format!("rudder.service={service_id}"),
+            &format!("dymini-panel.service={service_id}"),
             "alpine:3.20",
             "sh",
             "-c",
@@ -668,7 +676,7 @@ async fn collector_follows_managed_containers_and_redacts_env(pool: PgPool) {
         .unwrap();
     assert!(started.status.success(), "{started:?}");
 
-    rudder_server::start_log_pipeline(&state);
+    dymini_panel_server::start_log_pipeline(&state);
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
     let rows = loop {
         let rows: Vec<(String, String, Value)> = sqlx::query_as(

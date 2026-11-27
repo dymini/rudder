@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 
 use chrono::{DateTime, Utc};
-use rudder_core::{
+use dymini_panel_core::{
     render_dynamic_config_mixed, EdgeGate, NodeDriver, ProxyRoute, TlsMaterial, TlsMode,
     TRAEFIK_CERT_DIR,
 };
@@ -113,7 +113,7 @@ async fn publish_server_routes(
     crate::cache::ensure_token(driver.as_ref()).await?;
     driver
         .write_file(
-            rudder_core::CACHE_RULES_FILE,
+            dymini_panel_core::CACHE_RULES_FILE,
             &serde_json::to_vec_pretty(&cache_document).unwrap_or_default(),
         )
         .await
@@ -289,8 +289,8 @@ async fn render_for_server(
                 upstream: format!("{}:{}", route.container, route.port),
                 policy_id,
             });
-            route.container = rudder_core::CACHE_CONTAINER.into();
-            route.port = rudder_core::CACHE_PORT;
+            route.container = dymini_panel_core::CACHE_CONTAINER.into();
+            route.port = dymini_panel_core::CACHE_PORT;
         }
         routes.push(route);
     }
@@ -319,7 +319,7 @@ async fn render_for_server(
                 name: "panel".into(),
                 host: host.clone(),
                 path_prefix: "/".into(),
-                container: "rudder".into(),
+                container: "dymini-panel".into(),
                 port: panel_port,
                 https_redirect: panel.panel_ssl_mode != "none",
                 tls: tls_mode(&panel.panel_ssl_mode)?,
@@ -449,7 +449,7 @@ async fn write_certificates(
     Ok(materials)
 }
 
-fn decrypt_pem(cipher: &rudder_core::Cipher, blob: &[u8]) -> Result<String, ApiError> {
+fn decrypt_pem(cipher: &dymini_panel_core::Cipher, blob: &[u8]) -> Result<String, ApiError> {
     let bytes = cipher.decrypt(blob).map_err(|_| {
         ApiError::new(
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,

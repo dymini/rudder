@@ -15,19 +15,28 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 
 fn app(pool: PgPool, data_dir: &Path, cache_admin: &str) -> axum::Router {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
-        ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
-        ("RUDDER_CACHE_ADMIN_URL".into(), cache_admin.to_owned()),
-        ("RUDDER_HOST_PROC".into(), data_dir.display().to_string()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        (
+            "DYMINI_PANEL_DATA_DIR".into(),
+            data_dir.display().to_string(),
+        ),
+        (
+            "DYMINI_PANEL_CACHE_ADMIN_URL".into(),
+            cache_admin.to_owned(),
+        ),
+        (
+            "DYMINI_PANEL_HOST_PROC".into(),
+            data_dir.display().to_string(),
+        ),
     ]);
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::router(rudder_server::AppState::new(pool, config))
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    dymini_panel_server::router(dymini_panel_server::AppState::new(pool, config))
 }
 
 struct Client {
@@ -59,7 +68,7 @@ impl Client {
             .get("set-cookie")
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.split(';').next())
-            .and_then(|pair| pair.strip_prefix("rudder_session="))
+            .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
             .unwrap()
             .to_owned();
         let body: Value =
@@ -76,7 +85,7 @@ impl Client {
         let builder = Request::builder()
             .method(method)
             .uri(path)
-            .header("cookie", format!("rudder_session={}", self.cookie))
+            .header("cookie", format!("dymini_panel_session={}", self.cookie))
             .header("x-csrf-token", &self.csrf);
         let request = match body {
             Some(body) => builder
@@ -167,7 +176,8 @@ fn rules_json(data_dir: &Path) -> Value {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn policies_routing_purge_and_stats(pool: PgPool) {
-    let data_dir = std::env::temp_dir().join(format!("rudder-cache-api-{}", uuid::Uuid::new_v4()));
+    let data_dir =
+        std::env::temp_dir().join(format!("dymini-panel-cache-api-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&data_dir).unwrap();
     let fake = FakeCache {
         token_file: data_dir.join("cache/admin.token"),
@@ -307,7 +317,10 @@ async fn policies_routing_purge_and_stats(pool: PgPool) {
     assert_eq!(enabled["enabled"], true);
     assert_eq!(enabled["policy_name"], "Blog");
     let routes = std::fs::read_to_string(data_dir.join("traefik/dynamic/routes.yml")).unwrap();
-    assert!(routes.contains("http://rudder-cache:8080"), "{routes}");
+    assert!(
+        routes.contains("http://dymini-panel-cache:8080"),
+        "{routes}"
+    );
     let document = rules_json(&data_dir);
     assert_eq!(document["sites"][0]["host"], "www.example.com");
     assert_eq!(document["sites"][0]["upstream"], "web:8080");
@@ -436,7 +449,7 @@ async fn policies_routing_purge_and_stats(pool: PgPool) {
         )
         .await;
     let routes = std::fs::read_to_string(data_dir.join("traefik/dynamic/routes.yml")).unwrap();
-    assert!(!routes.contains("rudder-cache"));
+    assert!(!routes.contains("dymini-panel-cache"));
     assert!(rules_json(&data_dir)["sites"]
         .as_array()
         .unwrap()
@@ -461,8 +474,10 @@ async fn policies_routing_purge_and_stats(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn cache_memory_settings_and_history(pool: PgPool) {
-    let data_dir =
-        std::env::temp_dir().join(format!("rudder-cache-settings-{}", uuid::Uuid::new_v4()));
+    let data_dir = std::env::temp_dir().join(format!(
+        "dymini-panel-cache-settings-{}",
+        uuid::Uuid::new_v4()
+    ));
     std::fs::create_dir_all(&data_dir).unwrap();
     let client = Client::owner(app(pool.clone(), &data_dir, "http://127.0.0.1:9")).await;
     let settings = client

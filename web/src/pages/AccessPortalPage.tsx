@@ -61,7 +61,7 @@ export function AccessPortalPage() {
   useEffect(() => {
     void accessFetch<PublicConfig>("/api/v1/access/public")
       .then(setConfig)
-      .catch(() => setMessage(t("Rudder Access is not ready")));
+      .catch(() => setMessage(t("Dymini Panel Access is not ready")));
     void loadSession().catch(() => setMe(null));
     // Load once when the portal opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,7 +153,7 @@ export function AccessPortalPage() {
   return (
     <main className="mx-auto grid min-h-screen max-w-lg gap-6 px-4 py-10">
       <div>
-        <h1 className="text-2xl font-semibold">{t("Rudder Access")}</h1>
+        <h1 className="text-2xl font-semibold">{t("Dymini Panel Access")}</h1>
         <p className="text-sm text-muted">
           {t("Sign in to open the internal apps your organization has allowed.")}
         </p>

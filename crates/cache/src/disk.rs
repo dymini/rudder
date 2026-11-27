@@ -446,7 +446,8 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let path = std::env::temp_dir().join(format!("rudder-disk-{}-{nanos}", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("dymini-panel-disk-{}-{nanos}", std::process::id()));
         let _ = fs::remove_dir_all(&path);
         path
     }

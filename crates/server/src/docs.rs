@@ -237,7 +237,7 @@ mod tests {
             [
                 (
                     "cli".to_owned(),
-                    "# Command line client\n\n## Sign in\n\nUse `rudder login --device` for headless hosts.\n\n## Push an image\n\nRun `rudder push` to upload.\n".to_owned(),
+                    "# Command line client\n\n## Sign in\n\nUse `dymini-panel login --device` for headless hosts.\n\n## Push an image\n\nRun `dymini-panel push` to upload.\n".to_owned(),
                 ),
                 (
                     "cache".to_owned(),
@@ -276,7 +276,7 @@ mod tests {
 
     #[test]
     fn limit_is_respected_and_snippet_is_bounded() {
-        let hits = search_in(&sample(), "rudder", 1);
+        let hits = search_in(&sample(), "dymini-panel", 1);
         assert_eq!(hits.len(), 1);
         assert!(hits[0].snippet.chars().count() <= 330);
     }
@@ -286,6 +286,6 @@ mod tests {
         assert!(get("cli").is_some());
         assert!(get("mcp").is_some());
         assert!(get("HARNESS").is_none());
-        assert!(!search("rudder login", 3).is_empty());
+        assert!(!search("dymini-panel login", 3).is_empty());
     }
 }

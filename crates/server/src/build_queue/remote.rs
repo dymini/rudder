@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use dymini_panel_core::NodeDriver;
+use dymini_panel_node::ops::{BuildCacheEntry, BuildEvent, BuildRequest, BuildStatus, Request};
 use futures_util::StreamExt;
-use rudder_core::NodeDriver;
-use rudder_node::ops::{BuildCacheEntry, BuildEvent, BuildRequest, BuildStatus, Request};
 use sqlx::FromRow;
 
 use super::*;
@@ -74,7 +74,10 @@ fn remote_error(session: &RemoteDriver, error: impl std::fmt::Display) -> BuildF
 }
 
 fn cache_key(branch: &str) -> String {
-    format!("branch-{}", rudder_core::sha256_hex(branch.as_bytes()))
+    format!(
+        "branch-{}",
+        dymini_panel_core::sha256_hex(branch.as_bytes())
+    )
 }
 
 async fn default_branch(job: &RemoteBuild<'_>) -> Result<String, String> {
@@ -150,8 +153,8 @@ async fn execute_inner(
         .map_err(|e| remote_error(session, e))?;
     let repo = job.repo.to_owned();
     let bytes = tokio::task::spawn_blocking(move || {
-        let files = rudder_node::tree::git_tracked(&repo)?;
-        rudder_node::tree::pack_files(&repo, &files)
+        let files = dymini_panel_node::tree::git_tracked(&repo)?;
+        dymini_panel_node::tree::pack_files(&repo, &files)
     })
     .await
     .map_err(|_| "could not prepare the tracked build tree".to_owned())?

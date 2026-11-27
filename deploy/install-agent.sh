@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install the Rudder agent on a server and connect it to a panel.
+# Install the Dymini Panel agent on a server and connect it to a panel.
 #
 #   curl -fsSL https://panel.example.com/install-agent.sh | sudo sh -s -- \
 #     --server https://panel.example.com --ca-sha256 <hex> --token join_...
@@ -10,21 +10,21 @@
 #   --ca-sha256 HEX    SHA-256 of the panel's agent CA; enrollment fails if it differs
 #   --version VERSION  Release to fetch from GitHub when the panel has no bundled binary
 #   --email EMAIL      Let's Encrypt account email for this server's Traefik
-#   --no-edge          Do not start the rudder-traefik and rudder-cache containers
+#   --no-edge          Do not start the dymini-panel-traefik and dymini-panel-cache containers
 #   --builder          Enable builds; install Docker/Buildx on Debian or Ubuntu if needed
 #   --with-nixpacks    With --builder, install pinned Nixpacks 1.41.0
 #
 # Every value is passed to programs as its own argument; nothing is evaluated.
 set -eu
 
-REPO="${RUDDER_GITHUB_REPO:-vantanminh/rudder}"
-UPDATE_PUBKEY="${RUDDER_UPDATE_PUBKEY:-__RUDDER_UPDATE_PUBKEY__}"
+REPO="${DYMINI_PANEL_GITHUB_REPO:-vantanminh/rudder}"
+UPDATE_PUBKEY="${DYMINI_PANEL_UPDATE_PUBKEY:-__DYMINI_PANEL_UPDATE_PUBKEY__}"
 BIN_DIR="/usr/local/bin"
-AGENT_DATA="/var/lib/rudder-agent"
-NODE_DATA="/var/lib/rudder"
-UNIT="/etc/systemd/system/rudder-agent.service"
-TRAEFIK_IMAGE="${RUDDER_TRAEFIK_IMAGE:-traefik:v3.3}"
-CACHE_IMAGE="${RUDDER_CACHE_IMAGE:-ghcr.io/vantanminh/rudder-cache:latest}"
+AGENT_DATA="/var/lib/dymini-panel-agent"
+NODE_DATA="/var/lib/dymini-panel"
+UNIT="/etc/systemd/system/dymini-panel-agent.service"
+TRAEFIK_IMAGE="${DYMINI_PANEL_TRAEFIK_IMAGE:-traefik:v3.3}"
+CACHE_IMAGE="${DYMINI_PANEL_CACHE_IMAGE:-ghcr.io/vantanminh/dymini-panel-cache:latest}"
 
 server=""
 token=""
@@ -37,12 +37,12 @@ with_nixpacks=0
 NIXPACKS_VERSION="1.41.0"
 
 die() {
-	printf 'rudder: %s\n' "$1" >&2
+	printf 'dymini-panel: %s\n' "$1" >&2
 	exit 1
 }
 
 info() {
-	printf 'rudder: %s\n' "$1"
+	printf 'dymini-panel: %s\n' "$1"
 }
 
 while [ $# -gt 0 ]; do
@@ -135,7 +135,7 @@ docker_apt_repo() {
 		install -d -m 0755 /etc/apt/keyrings
 		curl -fsSL --proto '=https' "https://download.docker.com/linux/$ID/gpg" -o /etc/apt/keyrings/docker.asc
 		chmod 0644 /etc/apt/keyrings/docker.asc
-		printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' "$(dpkg --print-architecture)" "$ID" "$VERSION_CODENAME" >/etc/apt/sources.list.d/rudder-docker.list
+		printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' "$(dpkg --print-architecture)" "$ID" "$VERSION_CODENAME" >/etc/apt/sources.list.d/dymini-panel-docker.list
 	fi
 	apt-get update
 }
@@ -158,7 +158,7 @@ x86_64 | amd64) arch="x86_64" ;;
 aarch64 | arm64) arch="aarch64" ;;
 *) die "unsupported architecture $(uname -m)" ;;
 esac
-asset="rudder-agent-${arch}-unknown-linux-musl"
+asset="dymini-panel-agent-${arch}-unknown-linux-musl"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -184,10 +184,10 @@ verify() {
 
 verify_minisign() {
 	# verify_minisign MESSAGE_FILE SIGNATURE_FILE; the trusted public key is embedded at release time.
-	[ -n "$UPDATE_PUBKEY" ] && [ "$UPDATE_PUBKEY" != "__RUDDER_UPDATE_PUBKEY__" ] || return 1
+	[ -n "$UPDATE_PUBKEY" ] && [ "$UPDATE_PUBKEY" != "__DYMINI_PANEL_UPDATE_PUBKEY__" ] || return 1
 	command -v python3 >/dev/null 2>&1 || return 1
 	printf '%s\n' "$UPDATE_PUBKEY" >"$tmp/release.pub"
-	python3 - "$tmp/release.pub" "$1" "$2" <<'RUDDER_MINISIGN_PY'
+	python3 - "$tmp/release.pub" "$1" "$2" <<'DYMINI_PANEL_MINISIGN_PY'
 """Verify a minisign signature with only the Python standard library.
 
 Usage: minisign-verify.py PUBLIC_KEY_BASE64 MESSAGE_FILE SIGNATURE_FILE
@@ -316,7 +316,7 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-RUDDER_MINISIGN_PY
+DYMINI_PANEL_MINISIGN_PY
 }
 
 info "downloading $asset"
@@ -343,12 +343,36 @@ if [ -z "$downloaded" ]; then
 	fetch "$base/$asset" "$tmp/agent" || die "could not download $asset"
 	fetch "$base/SHA256SUMS" "$tmp/SHA256SUMS" || die "could not download SHA256SUMS"
 	fetch "$base/SHA256SUMS.minisig" "$tmp/SHA256SUMS.minisig" || die "could not download SHA256SUMS.minisig"
-	verify_minisign "$tmp/SHA256SUMS" "$tmp/SHA256SUMS.minisig" || die "the release checksum signature is missing or invalid; install python3 or set RUDDER_UPDATE_PUBKEY"
+	verify_minisign "$tmp/SHA256SUMS" "$tmp/SHA256SUMS.minisig" || die "the release checksum signature is missing or invalid; install python3 or set DYMINI_PANEL_UPDATE_PUBKEY"
 	grep " $asset\$" "$tmp/SHA256SUMS" | grep -v "$asset\." >"$tmp/agent.sha256" || die "$asset is not in SHA256SUMS"
 	verify "$tmp/agent" "$tmp/agent.sha256" || die "checksum mismatch for $asset"
 fi
-install -m 0755 "$tmp/agent" "$BIN_DIR/rudder-agent"
-info "installed $("$BIN_DIR/rudder-agent" --version)"
+install -m 0755 "$tmp/agent" "$BIN_DIR/dymini-panel-agent"
+info "installed $("$BIN_DIR/dymini-panel-agent" --version)"
+
+# --- migrate a pre-rebrand Rudder agent ---------------------------------------
+# The agent state (enrollment, mTLS keys) lived in rudder-named directories and
+# a rudder-agent.service unit; carry it over so the host does not re-enroll.
+if [ -d /var/lib/rudder-agent ] && [ ! -e "$AGENT_DATA/agent.json" ]; then
+	info "migrating the pre-rebrand Rudder agent state"
+	install -d -m 0700 "$AGENT_DATA"
+	cp -a /var/lib/rudder-agent/. "$AGENT_DATA/"
+fi
+if [ -d /var/lib/rudder ] && [ ! -e "$NODE_DATA/traefik" ]; then
+	install -d -m 0755 "$NODE_DATA"
+	cp -a /var/lib/rudder/. "$NODE_DATA/"
+fi
+if [ -f /etc/systemd/system/rudder-agent.service ]; then
+	systemctl disable --now rudder-agent.service >/dev/null 2>&1 || true
+	rm -f /etc/systemd/system/rudder-agent.service
+	systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+# The old edge containers hold ports 80/443, so they must go before the
+# rebranded ones start; deployed services keep running untouched.
+for old_edge in rudder-traefik rudder-cache; do
+	docker rm -f "$old_edge" >/dev/null 2>&1 && info "removed the old $old_edge container" || true
+done
+
 
 install -d -m 0700 "$AGENT_DATA"
 if [ "$builder" -eq 1 ]; then
@@ -360,22 +384,22 @@ fi
 install -d -m 0755 "$NODE_DATA"
 if [ ! -f "$AGENT_DATA/agent.json" ]; then
 	if [ -n "$ca_sha256" ]; then
-		if "$BIN_DIR/rudder-agent" --help | grep -q -- --ca-sha256; then
-			"$BIN_DIR/rudder-agent" enroll --server "$server" --ca-sha256 "$ca_sha256" --token "$token" --data-dir "$AGENT_DATA"
+		if "$BIN_DIR/dymini-panel-agent" --help | grep -q -- --ca-sha256; then
+			"$BIN_DIR/dymini-panel-agent" enroll --server "$server" --ca-sha256 "$ca_sha256" --token "$token" --data-dir "$AGENT_DATA"
 		else
-			info "this rudder-agent cannot check --ca-sha256; enrolling over https:// without the CA pin"
-			"$BIN_DIR/rudder-agent" enroll --server "$server" --token "$token" --data-dir "$AGENT_DATA"
+			info "this dymini-panel-agent cannot check --ca-sha256; enrolling over https:// without the CA pin"
+			"$BIN_DIR/dymini-panel-agent" enroll --server "$server" --token "$token" --data-dir "$AGENT_DATA"
 		fi
 	else
-		"$BIN_DIR/rudder-agent" enroll --server "$server" --token "$token" --data-dir "$AGENT_DATA"
+		"$BIN_DIR/dymini-panel-agent" enroll --server "$server" --token "$token" --data-dir "$AGENT_DATA"
 	fi
 else
 	info "already enrolled; keeping $AGENT_DATA (delete it to enroll again)"
 fi
 
 if [ "$edge" -eq 1 ]; then
-	info "starting rudder-traefik and rudder-cache"
-	docker network inspect rudder-proxy >/dev/null 2>&1 || docker network create rudder-proxy >/dev/null
+	info "starting dymini-panel-traefik and dymini-panel-cache"
+	docker network inspect dymini-panel-proxy >/dev/null 2>&1 || docker network create dymini-panel-proxy >/dev/null
 	install -d -m 0755 "$NODE_DATA/traefik" "$NODE_DATA/traefik/dynamic" "$NODE_DATA/traefik/certs" "$NODE_DATA/cache"
 	chown -R 65532:65532 "$NODE_DATA/cache" 2>/dev/null || true
 	if [ ! -f "$NODE_DATA/traefik/acme.json" ]; then
@@ -389,7 +413,7 @@ if [ "$edge" -eq 1 ]; then
 		echo "    address: \":443\""
 		echo "providers:"
 		echo "  file:"
-		echo "    directory: /etc/rudder/traefik/dynamic"
+		echo "    directory: /etc/dymini-panel/traefik/dynamic"
 		echo "    watch: true"
 		echo "accessLog:"
 		echo "  format: json"
@@ -398,7 +422,7 @@ if [ "$edge" -eq 1 ]; then
 		echo "certificatesResolvers:"
 		echo "  letsencrypt:"
 		echo "    acme:"
-		echo "      storage: /etc/rudder/traefik/acme.json"
+		echo "      storage: /etc/dymini-panel/traefik/acme.json"
 		echo "      httpChallenge:"
 		echo "        entryPoint: web"
 	} >"$NODE_DATA/traefik/traefik.yml"
@@ -406,20 +430,25 @@ if [ "$edge" -eq 1 ]; then
 		printf '      email: "%s"\n' "$(printf '%s' "$email" | tr -d '"\\\n')" >>"$NODE_DATA/traefik/traefik.yml"
 	fi
 	[ -f "$NODE_DATA/cache/rules.json" ] || printf '{"version":0,"sites":[],"policies":[]}\n' >"$NODE_DATA/cache/rules.json"
-	if ! docker container inspect rudder-traefik >/dev/null 2>&1; then
+	if ! docker container inspect dymini-panel-traefik >/dev/null 2>&1; then
 		docker pull -q "$TRAEFIK_IMAGE" >/dev/null
-		docker run -d --name rudder-traefik --restart unless-stopped \
-			--network rudder-proxy -p 80:80 -p 443:443 \
+		docker run -d --name dymini-panel-traefik --restart unless-stopped \
+			--network dymini-panel-proxy -p 80:80 -p 443:443 \
 			--oom-score-adj -900 --cpu-shares 2048 --memory-reservation 64m \
-			-v "$NODE_DATA/traefik:/etc/rudder/traefik" \
-			"$TRAEFIK_IMAGE" --configFile=/etc/rudder/traefik/traefik.yml >/dev/null
+			-v "$NODE_DATA/traefik:/etc/dymini-panel/traefik" \
+			"$TRAEFIK_IMAGE" --configFile=/etc/dymini-panel/traefik/traefik.yml >/dev/null
 	fi
-	if ! docker container inspect rudder-cache >/dev/null 2>&1; then
+	# Services deployed before the rebrand still sit on rudder-proxy; Traefik
+	# resolves them by container name there until their next deploy.
+	if docker network inspect rudder-proxy >/dev/null 2>&1; then
+		docker network connect rudder-proxy dymini-panel-traefik >/dev/null 2>&1 || true
+	fi
+	if ! docker container inspect dymini-panel-cache >/dev/null 2>&1; then
 		if docker image inspect "$CACHE_IMAGE" >/dev/null 2>&1 || docker pull "$CACHE_IMAGE" >/dev/null 2>&1; then
-			docker run -d --name rudder-cache --restart unless-stopped \
-				--network rudder-proxy -p 127.0.0.1:9090:9090 \
-				-v "$NODE_DATA/cache:/var/lib/rudder/cache" \
-				"$CACHE_IMAGE" --rules /var/lib/rudder/cache/rules.json \
+			docker run -d --name dymini-panel-cache --restart unless-stopped \
+				--network dymini-panel-proxy -p 127.0.0.1:9090:9090 \
+				-v "$NODE_DATA/cache:/var/lib/dymini-panel/cache" \
+				"$CACHE_IMAGE" --rules /var/lib/dymini-panel/cache/rules.json \
 				--listen 0.0.0.0:8080 --admin-listen 0.0.0.0:9090 >/dev/null
 		else
 			info "could not pull $CACHE_IMAGE; caching stays off on this server"
@@ -430,13 +459,13 @@ fi
 install -d -m 0755 "$(dirname "$UNIT")"
 cat >"$UNIT" <<'EOF'
 [Unit]
-Description=Rudder agent
+Description=Dymini Panel agent
 After=network-online.target docker.service
 Wants=network-online.target
 Requires=docker.service
 
 [Service]
-ExecStart=/usr/local/bin/rudder-agent run --data-dir /var/lib/rudder-agent --node-dir /var/lib/rudder
+ExecStart=/usr/local/bin/dymini-panel-agent run --data-dir /var/lib/dymini-panel-agent --node-dir /var/lib/dymini-panel
 Restart=always
 RestartSec=5
 Environment=RUST_LOG=info
@@ -449,13 +478,13 @@ MemoryLow=32M
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable rudder-agent >/dev/null 2>&1
-systemctl restart rudder-agent
-info "rudder-agent is installed; waiting up to 30 seconds for the panel connection"
+systemctl enable dymini-panel-agent >/dev/null 2>&1
+systemctl restart dymini-panel-agent
+info "dymini-panel-agent is installed; waiting up to 30 seconds for the panel connection"
 attempt=0
 connected=0
 while [ "$attempt" -le 30 ]; do
-	if "$BIN_DIR/rudder-agent" status --data-dir "$AGENT_DATA" >"$tmp/status" 2>"$tmp/status-error"; then
+	if "$BIN_DIR/dymini-panel-agent" status --data-dir "$AGENT_DATA" >"$tmp/status" 2>"$tmp/status-error"; then
 		connected=1
 		break
 	fi
@@ -467,5 +496,5 @@ info "installation summary (builder storage: $AGENT_DATA/builder)"
 cat "$tmp/status"
 if [ "$connected" -ne 1 ]; then
 	cat "$tmp/status-error" >&2
-	die "service installed but not connected; inspect journalctl -u rudder-agent and the panel URL/agent port"
+	die "service installed but not connected; inspect journalctl -u dymini-panel-agent and the panel URL/agent port"
 fi

@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use rudder_core::NodeDriver;
+use dymini_panel_core::NodeDriver;
 use uuid::Uuid;
 
 use crate::driver::remote::{RemoteDriver, RemoteHandle};

@@ -10,7 +10,7 @@ use axum::http::StatusCode;
 use axum::routing::get;
 use axum::Json;
 use chrono::{DateTime, Utc};
-use rudder_core::{
+use dymini_panel_core::{
     classify_probe, host_is_ip, validate_host, validate_path_prefix, validate_rate_rule, RateKey,
     RateRule, PROBES,
 };

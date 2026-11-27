@@ -7,11 +7,11 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
+use dymini_panel_core::{ByteStream, Error};
 use futures_util::StreamExt;
 use object_store::aws::AmazonS3Builder;
 use object_store::path::Path as ObjectPath;
 use object_store::{ObjectStore, ObjectStoreExt, PutPayload, WriteMultipart};
-use rudder_core::{ByteStream, Error};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -180,11 +180,11 @@ pub fn object_path(key: &str) -> Result<ObjectPath, Error> {
 /// Write, read back, and delete a small probe object.
 pub async fn test_connection(store: &dyn ObjectStore) -> Result<(), String> {
     let key = format!(
-        ".rudder-probe-{}",
-        hex::encode(rudder_core::random_bytes::<6>())
+        ".dymini-panel-probe-{}",
+        hex::encode(dymini_panel_core::random_bytes::<6>())
     );
     let path = object_path(&key).map_err(|error| error.to_string())?;
-    let body = Bytes::from_static(b"rudder connection test");
+    let body = Bytes::from_static(b"dymini-panel connection test");
     store
         .put(&path, PutPayload::from(body.clone()))
         .await

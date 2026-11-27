@@ -1,14 +1,14 @@
 //! `web/openapi.json` feeds `openapi-typescript`; keep it in sync with the server.
-//! Regenerate with `cargo run -p rudder-server -- openapi > web/openapi.json && pnpm --dir web gen:api`.
+//! Regenerate with `cargo run -p dymini-panel-server -- openapi > web/openapi.json && pnpm --dir web gen:api`.
 
 #[test]
 fn web_openapi_snapshot_is_current() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../web/openapi.json");
     let committed = std::fs::read_to_string(path).unwrap_or_default();
-    let current = rudder_server::openapi_json();
+    let current = dymini_panel_server::openapi_json();
     assert!(
         committed.trim() == current.trim(),
-        "web/openapi.json is stale; run `cargo run -p rudder-server -- openapi > web/openapi.json && pnpm --dir web gen:api`"
+        "web/openapi.json is stale; run `cargo run -p dymini-panel-server -- openapi > web/openapi.json && pnpm --dir web gen:api`"
     );
 }
 
@@ -42,7 +42,8 @@ fn registered_routes() -> Vec<(String, String)> {
 
 #[test]
 fn every_route_is_documented() {
-    let doc: serde_json::Value = serde_json::from_str(&rudder_server::openapi_json()).unwrap();
+    let doc: serde_json::Value =
+        serde_json::from_str(&dymini_panel_server::openapi_json()).unwrap();
     let routes = registered_routes();
     assert!(routes.len() > 100, "found only {} routes", routes.len());
     let missing: Vec<String> = routes

@@ -22,22 +22,22 @@ long-lived shared secrets, and a lost connection must not lose metrics or logs.
 
 ## Decision
 
-- **One driver implementation.** `LocalDriver` moved into a `rudder-node` crate
+- **One driver implementation.** `LocalDriver` moved into a `dymini-panel-node` crate
   used by both the panel and the agent. The agent runs the exact code the panel
   runs for its own machine.
-- **Wire form.** `rudder_node::ops::Request` is a serde enum with one variant per
+- **Wire form.** `dymini_panel_node::ops::Request` is a serde enum with one variant per
   driver call (tagged by `op`). A `Command` carries it as JSON; the agent answers
   with a `CommandResult` holding the JSON return value. Validation errors are
   marked so they surface as `Error::Validation` on the panel.
 - **Transport.** The agent dials out over gRPC (tonic, rustls, aws-lc) to
-  `RUDDER_AGENT_BIND` (default `0.0.0.0:7443`). `Session` is one bidirectional
+  `DYMINI_PANEL_AGENT_BIND` (default `0.0.0.0:7443`). `Session` is one bidirectional
   stream for Hello/Welcome, commands, results, telemetry, and acks. Every
   streaming call (exec read/write, archive read/write, log follow, terminal,
   image save/load) opens its own `Channel` RPC named by a random stream id the
   panel registered first, so bulk transfers get their own HTTP/2 flow control
   and never stall commands. Unclaimed stream slots expire after 60 seconds.
 - **Enrollment.** Adding a remote server creates a one-time join token (SHA-256
-  stored, one hour). `rudder-agent enroll` generates its key locally and posts
+  stored, one hour). `dymini-panel-agent enroll` generates its key locally and posts
   the token and a CSR to `POST /api/v1/agent/enroll` (rate limited, audited). The
   panel signs only the CSR's public key with its own CA (rcgen, key sealed with
   the master key in `agent_ca`), CN = server id, ten-year validity, and stores
@@ -48,11 +48,11 @@ long-lived shared secrets, and a lost connection must not lose metrics or logs.
   unknown fingerprints get `PermissionDenied`. Re-enrolling replaces the
   fingerprint and drops the old session; deleting the server does the same. The
   panel's own certificate is regenerated at each start for the fixed name
-  `rudder-panel`, which the agent verifies against the CA, so the panel address
+  `dymini-panel`, which the agent verifies against the CA, so the panel address
   can be an IP or any hostname.
 - **Telemetry.** The agent samples host and container stats every 10 seconds
-  and follows `rudder.managed` containers plus `rudder-traefik` and
-  `rudder-cache`, whether or not the panel is reachable. Items wait in a bounded
+  and follows `dymini-panel.managed` containers plus `dymini-panel-traefik` and
+  `dymini-panel-cache`, whether or not the panel is reachable. Items wait in a bounded
   buffer (20,000 log lines or 4 MiB, 360 stat samples). Overflow drops the
   oldest and the count travels with the next batch (`servers.telemetry_dropped`).
   Batches stay in flight until acked and are resent after a reconnect, so

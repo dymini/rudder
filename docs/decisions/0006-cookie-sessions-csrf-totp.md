@@ -24,7 +24,7 @@ The panel is a browser SPA plus a token-authenticated CLI. Browser sessions need
 
 ## Decision
 
-Passwords are Argon2id with the crate default parameters. Session cookies are named `rudder_session`, HttpOnly, SameSite=Lax, and stored only as SHA-256 hashes. A second random CSRF token is returned in the JSON body and required as `x-csrf-token` on cookie-authenticated POST, PUT, PATCH, and DELETE. `Authorization: Bearer` skips CSRF. Login attempts are limited to 10 per minute per client IP, trusting `X-Forwarded-For` only when `RUDDER_TRUST_PROXY` is set. TOTP uses SHA-1, 6 digits, 30 second steps, and skew 1. The secret is encrypted with AES-256-GCM under the panel master key before it is written to `users.totp_secret`.
+Passwords are Argon2id with the crate default parameters. Session cookies are named `dymini_panel_session`, HttpOnly, SameSite=Lax, and stored only as SHA-256 hashes. A second random CSRF token is returned in the JSON body and required as `x-csrf-token` on cookie-authenticated POST, PUT, PATCH, and DELETE. `Authorization: Bearer` skips CSRF. Login attempts are limited to 10 per minute per client IP, trusting `X-Forwarded-For` only when `DYMINI_PANEL_TRUST_PROXY` is set. TOTP uses SHA-1, 6 digits, 30 second steps, and skew 1. The secret is encrypted with AES-256-GCM under the panel master key before it is written to `users.totp_secret`.
 
 ## Alternatives Considered
 

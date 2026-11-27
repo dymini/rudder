@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use axum::routing::get;
 use axum::Json;
 use chrono::{DateTime, Utc};
-use rudder_core::{
+use dymini_panel_core::{
     matching_certificate, preview_hostname, validate_host, validate_key_and_chain, validate_name,
     validate_path_prefix, validate_registry_url, HostMatch,
 };
@@ -474,7 +474,7 @@ async fn create_preview(
 ) -> Result<(StatusCode, Json<DomainView>), ApiError> {
     auth.require_write()?;
     let (name, server_id, public_ip) = service_preview(&state, service_id).await?;
-    let nonce = hex::encode(rudder_core::random_bytes::<4>());
+    let nonce = hex::encode(dymini_panel_core::random_bytes::<4>());
     let host =
         preview_hostname(&name, &nonce, public_ip.as_deref().unwrap_or("")).map_err(core_error)?;
     let port = body.target_port.unwrap_or(80);

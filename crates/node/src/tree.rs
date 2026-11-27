@@ -11,7 +11,7 @@ use std::io::{Cursor, Write};
 use std::path::{Component, Path};
 use std::process::Command;
 
-use rudder_core::Error;
+use dymini_panel_core::Error;
 
 /// Largest checkout copied to a remote server.
 pub const MAX_TREE_BYTES: u64 = 512 * 1024 * 1024;
@@ -272,7 +272,7 @@ mod safe {
     use std::os::fd::{AsFd, OwnedFd};
     use std::path::{Component, Path};
 
-    use rudder_core::Error;
+    use dymini_panel_core::Error;
     use rustix::fs::{AtFlags, Mode, OFlags, CWD};
     use rustix::io::Errno;
 
@@ -393,7 +393,7 @@ mod safe {
     use std::fs::{self, File};
     use std::path::{Path, PathBuf};
 
-    use rudder_core::Error;
+    use dymini_panel_core::Error;
 
     pub(super) struct Root(PathBuf);
 
@@ -496,7 +496,7 @@ mod tests {
 
     #[test]
     fn copy_keeps_untracked_files_and_drops_deleted_tracked_ones() {
-        let dir = scratch("rudder-tree");
+        let dir = scratch("dymini-panel-tree");
         let src = dir.0.join("src");
         fs::create_dir_all(src.join("app")).unwrap();
         fs::write(src.join("app/main.txt"), "one").unwrap();
@@ -528,7 +528,7 @@ mod tests {
 
     #[test]
     fn archive_cannot_escape_the_checkout() {
-        let dir = scratch("rudder-tree-escape");
+        let dir = scratch("dymini-panel-tree-escape");
         let bytes = hostile_ustar("../secret", b"nope");
         let dest = dir.0.join("src");
         let err = apply_tree(&dest, &dir.0.join("src.manifest"), &bytes).unwrap_err();
@@ -568,7 +568,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn symlink_outside_the_checkout_is_not_packed() {
-        let dir = scratch("rudder-tree-link");
+        let dir = scratch("dymini-panel-tree-link");
         let src = dir.0.join("src");
         fs::create_dir_all(&src).unwrap();
         let outside = dir.0.join("secret");
@@ -581,7 +581,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn writes_do_not_follow_symlinks_planted_in_the_checkout() {
-        let dir = scratch("rudder-tree-planted");
+        let dir = scratch("dymini-panel-tree-planted");
         let src = dir.0.join("src");
         fs::create_dir_all(src.join("config")).unwrap();
         fs::write(src.join("config/job"), "payload").unwrap();
@@ -613,7 +613,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn stale_cleanup_does_not_follow_symlinks_planted_in_the_checkout() {
-        let dir = scratch("rudder-tree-stale-link");
+        let dir = scratch("dymini-panel-tree-stale-link");
         let src = dir.0.join("src");
         fs::create_dir_all(&src).unwrap();
         fs::write(src.join("README"), "hi").unwrap();
@@ -635,7 +635,7 @@ mod tests {
 
     #[test]
     fn git_lists_tracked_files_and_skips_untracked_ones() {
-        let dir = scratch("rudder-tree-git");
+        let dir = scratch("dymini-panel-tree-git");
         let repo = &dir.0;
         let git = |args: &[&str]| {
             let status = Command::new("git")
@@ -665,7 +665,7 @@ mod tests {
     #[cfg(unix)]
     fn executable_build_scripts_survive_tree_transfer_without_special_permissions() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = scratch("rudder-tree-executable");
+        let dir = scratch("dymini-panel-tree-executable");
         let src = dir.0.join("src");
         fs::create_dir_all(&src).unwrap();
         fs::write(src.join("build.sh"), "#!/bin/sh\nexit 0\n").unwrap();

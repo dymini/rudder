@@ -25,7 +25,7 @@ const ZONES_KEY = ["cloudflare-zones"];
 
 /**
  * The optional Cloudflare Zero Trust mode: a tunnel in front of every app, Access in
- * front of the panel, and SSH through Cloudflare. Nothing here is needed to run Rudder.
+ * front of the panel, and SSH through Cloudflare. Nothing here is needed to run Dymini Panel.
  */
 export function CloudflarePanel() {
   const t = useT();
@@ -190,7 +190,7 @@ function Zones() {
     t("Could not update the Cloudflare zone"),
   );
   return (
-    <Card title={t("Cloudflare zones")} description={t("Enable zones Rudder may manage. New zones start disabled. Disabling a zone never deletes its DNS records or existing tunnel routes.")}
+    <Card title={t("Cloudflare zones")} description={t("Enable zones Dymini Panel may manage. New zones start disabled. Disabling a zone never deletes its DNS records or existing tunnel routes.")}
       actions={<Button quiet disabled={refresh.isPending || toggle.isPending} onClick={() => refresh.mutate(undefined)}>{t("Refresh zones")}</Button>}>
       {zones.isPending ? <p>{t("Loading…")}</p> : null}
       {zones.isError ? <Alert tone="error">{t("Could not load Cloudflare zones")}</Alert> : null}
@@ -313,7 +313,7 @@ function Tunnel({ status }: { status: Status }) {
                 if (
                   window.confirm(
                     t(
-                      "Remove the tunnel? Rudder deletes its replicas, the DNS records it made, and the Access and SSH applications. Your domains stop working until you point them back at this server.",
+                      "Remove the tunnel? Dymini Panel deletes its replicas, the DNS records it made, and the Access and SSH applications. Your domains stop working until you point them back at this server.",
                     ),
                   )
                 ) {
@@ -360,7 +360,7 @@ function Publish({ status }: { status: Status }) {
     <Card
       title={<Step number={3}>{t("Publish domains")}</Step>}
       description={t(
-        "Sends Cloudflare-routed app domains, the panel domain, and the Rudder Access portal through the tunnel. New app domains default to direct routing; opt in to Cloudflare in each domain's settings.",
+        "Sends Cloudflare-routed app domains, the panel domain, and the Dymini Panel Access portal through the tunnel. New app domains default to direct routing; opt in to Cloudflare in each domain's settings.",
       )}
       actions={status.tunnel_published ? <Badge value="published" tone="success" /> : null}
     >
@@ -449,7 +449,7 @@ function Access({ status }: { status: Status }) {
     <Card
       title={<Step number={4}>{t("Protect the panel with Cloudflare Access")}</Step>}
       description={t(
-        "Creates an Access application for the panel domain that only the listed emails can open. Rudder's own sign-in stays in place behind it.",
+        "Creates an Access application for the panel domain that only the listed emails can open. Dymini Panel's own sign-in stays in place behind it.",
       )}
       actions={
         status.access_enforced ? (
@@ -498,7 +498,7 @@ function Access({ status }: { status: Status }) {
         <div className="mt-4 grid gap-3 border-t border-line pt-4">
           <p className="text-sm text-muted">
             {t(
-              "Turn enforcement on only after you opened the panel through its Cloudflare address and signed in with Access. Rudder then refuses requests for the panel domain that do not carry a valid Access token.",
+              "Turn enforcement on only after you opened the panel through its Cloudflare address and signed in with Access. Dymini Panel then refuses requests for the panel domain that do not carry a valid Access token.",
             )}
           </p>
           <div>
@@ -581,7 +581,7 @@ function Ssh({ status }: { status: Status }) {
       >
         <Field
           label={t("Server address")}
-          hint={t("An IPv4 address the tunnel can reach port 22 on, such as the Docker gateway of the rudder-proxy network.")}
+          hint={t("An IPv4 address the tunnel can reach port 22 on, such as the Docker gateway of the dymini-panel-proxy network.")}
         >
           <TextInput required value={address} onChange={(event) => setAddress(event.target.value)} />
         </Field>
@@ -640,7 +640,7 @@ function Ready({ status }: { status: Status }) {
     <Card
       title={<Step number={6}>{t("Close the public ports")}</Step>}
       description={t(
-        "Rudder never closes its own ports, so a mistake cannot lock you out from inside. When every required check passes, run the installer on the server.",
+        "Dymini Panel never closes its own ports, so a mistake cannot lock you out from inside. When every required check passes, run the installer on the server.",
       )}
       actions={
         data ? <Badge value={data.ready ? "ready" : "not ready"} tone={data.ready ? "success" : "warning"} /> : null
@@ -661,7 +661,7 @@ function Ready({ status }: { status: Status }) {
         <div className="mt-4 grid gap-2">
           <p className="text-sm text-muted">
             {t(
-              "Stops Rudder from listening on ports 80, 443, and 3000. Port 7443 stays open for remote servers' agents. Port 22 belongs to your provider's firewall: close it there once SSH through Cloudflare works. To undo it, run the same command with --open-ports.",
+              "Stops Dymini Panel from listening on ports 80, 443, and 3000. Port 7443 stays open for remote servers' agents. Port 22 belongs to your provider's firewall: close it there once SSH through Cloudflare works. To undo it, run the same command with --open-ports.",
             )}
           </p>
           <CodeBlock copy>

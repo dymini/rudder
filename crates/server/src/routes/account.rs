@@ -38,7 +38,7 @@ pub struct SessionResponse {
 
 #[derive(Deserialize, ToSchema)]
 pub struct SetupRequest {
-    /// One-time token from `setup-token` in the data directory, or `RUDDER_SETUP_TOKEN`.
+    /// One-time token from `setup-token` in the data directory, or `DYMINI_PANEL_SETUP_TOKEN`.
     setup_token: String,
     email: String,
     password: String,
@@ -1014,12 +1014,12 @@ async fn cli_auth_start(
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or("rudder-cli");
+        .unwrap_or("dymini-panel-cli");
     if client_name.len() > 64 || client_name.chars().any(|ch| ch.is_control()) {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "invalid_name",
-            "Client name must be at most 64 UTF-8 bytes after trimming and contain no control characters; leave it empty to use rudder-cli.",
+            "Client name must be at most 64 UTF-8 bytes after trimming and contain no control characters; leave it empty to use dymini-panel-cli.",
         ));
     }
     let requested_scopes = body
@@ -1034,7 +1034,7 @@ async fn cli_auth_start(
                 "callback_url is required for browser login",
             ));
         };
-        let clean = rudder_core::validate_cli_callback_url(url).map_err(|err| {
+        let clean = dymini_panel_core::validate_cli_callback_url(url).map_err(|err| {
             ApiError::new(
                 StatusCode::BAD_REQUEST,
                 "invalid_callback_url",
@@ -1051,7 +1051,7 @@ async fn cli_auth_start(
         .await;
 
     let device_code = if method == "device_code" {
-        Some(rudder_core::generate_device_code())
+        Some(dymini_panel_core::generate_device_code())
     } else {
         None
     };
@@ -1157,7 +1157,7 @@ async fn cli_auth_approve(
         .await
         .map_err(ApiError::database)?
     } else if let Some(raw_code) = body.device_code.as_deref() {
-        let code = rudder_core::normalize_device_code(raw_code).map_err(|err| {
+        let code = dymini_panel_core::normalize_device_code(raw_code).map_err(|err| {
             ApiError::new(
                 StatusCode::BAD_REQUEST,
                 "invalid_device_code",
@@ -1480,7 +1480,7 @@ async fn remove_setup_token_file(data_dir: &FsPath) {
 }
 
 /// Writes a one-time setup token to the data directory while the panel has no
-/// users, and removes a leftover one once it has. `RUDDER_SETUP_TOKEN` replaces the file.
+/// users, and removes a leftover one once it has. `DYMINI_PANEL_SETUP_TOKEN` replaces the file.
 pub async fn prepare_setup_token(
     pool: &sqlx::PgPool,
     config: &crate::Config,
@@ -1495,7 +1495,7 @@ pub async fn prepare_setup_token(
         return Ok(());
     }
     if config.setup_token.is_some() {
-        tracing::info!("first-run setup needs the token from RUDDER_SETUP_TOKEN");
+        tracing::info!("first-run setup needs the token from DYMINI_PANEL_SETUP_TOKEN");
         return Ok(());
     }
     let path = setup_token_path(&config.data_dir);
@@ -1586,7 +1586,7 @@ pub(super) async fn consume_recovery(
 fn recovery_codes() -> Vec<String> {
     (0..8)
         .map(|_| {
-            let raw = hex::encode(rudder_core::random_bytes::<5>());
+            let raw = hex::encode(dymini_panel_core::random_bytes::<5>());
             format!("{}-{}", &raw[..5], &raw[5..])
         })
         .collect()
@@ -1653,7 +1653,7 @@ fn build_totp(secret: &[u8], email: &str) -> Result<Totp, ApiError> {
     Builder::new()
         .with_secret(secret.to_vec())
         .with_account_name(email.to_owned())
-        .with_issuer(Some("Rudder"))
+        .with_issuer(Some("Dymini Panel"))
         .build()
         .map_err(|_| {
             ApiError::new(

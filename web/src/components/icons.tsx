@@ -262,15 +262,15 @@ export function Icon({
   );
 }
 
-/** The Knotree mark: a K that grows a leaf, paper glyph on a pine rounded square. */
-export function KnotreeMark({ size = 26 }: { size?: number }) {
+/** The Dymini Panel mark: a D that grows a leaf, paper glyph on a pine rounded square. */
+export function DyminiPanelMark({ size = 26 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" focusable="false">
       <rect width="64" height="64" rx="15" fill="#1f3d32" />
       <g stroke="#f6f5f2" strokeWidth="6.5" strokeLinecap="round" fill="none">
-        <path d="M20 13v38M26 34l14 16" />
+        <path d="M20 13v38M20 13h7c13 0 20 9 20 19s-7 19-20 19h-7" />
       </g>
-      <path d="M23 34C21.85 21.9 32.8 12.06 45 10C41.9 20.41 33.05 32.17 23 34Z" fill="#f6f5f2" />
+      <path d="M22 37C21 27 30 18.5 41 17C39 26.5 31 35 22 37Z" fill="#f6f5f2" />
     </svg>
   );
 }

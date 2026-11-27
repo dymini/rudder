@@ -78,7 +78,7 @@ export default function AccessAdmin() {
         identities.refetch();
       }}
     >
-      <Stack.Screen options={{ title: "Rudder Access" }} />
+      <Stack.Screen options={{ title: "Dymini Panel Access" }} />
       <ErrorBox error={error ?? settings.error} />
       {settings.data ? (
         <Card>

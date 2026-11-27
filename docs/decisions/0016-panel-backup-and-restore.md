@@ -40,8 +40,8 @@ caches state, and would be replaced mid-request.
 - Panel backups reuse backup jobs (`panel_db`, `panel_settings`) for schedules,
   S3 fan-out, verification, retention, and failure events. They can also be
   downloaded directly (`POST /api/v1/system/backup`, admin with write) or taken
-  from the host with `rudder-server backup`.
-- Restore is offline only: `rudder-server restore`, called by
+  from the host with `dymini-panel-server backup`.
+- Restore is offline only: `dymini-panel-server restore`, called by
   `install.sh --restore` before the panel container starts. It refuses archives
   with unknown entries, a newer schema than the binary, a non-empty database, or
   a different existing master key, unless `--force` is given. It restores in one
@@ -54,7 +54,7 @@ caches state, and would be replaced mid-request.
 
 ## Consequences
 
-- Whoever holds a panel backup and its passphrase holds every secret in Rudder.
+- Whoever holds a panel backup and its passphrase holds every secret in Dymini Panel.
   The passphrase is the only protection, so the UI asks for it twice and the docs
   say to store it apart from the backup.
 - Restores need the PostgreSQL client major version to match or exceed the server

@@ -5,7 +5,7 @@
 //!   `release.json` it lists. Only a verified manifest can be applied.
 //! * [`apply_panel`] takes an encrypted local backup, pulls the panel image by
 //!   digest, and starts a one-off updater container from it. The updater
-//!   ([`run_updater`]) swaps the `rudder` container, waits for the new panel to
+//!   ([`run_updater`]) swaps the `dymini-panel` container, waits for the new panel to
 //!   report the new version, and otherwise restores the database from the
 //!   backup and restarts the previous container.
 //! * [`update_components`] brings every server's agent and cache to the panel's
@@ -17,12 +17,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Timelike, Utc};
-use futures_util::StreamExt;
-use rudder_core::{
+use dymini_panel_core::{
     in_maintenance_window, newer_releases, parse_version, verify_release, ByteStream, Error,
     GithubRelease, NodeDriver, ReadyProbe, ReleaseManifest, ReplaceContainer, UpdateChannel,
     CACHE_CONTAINER, RELEASE_MANIFEST, RELEASE_SIGNATURE, RELEASE_SUMS,
 };
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tokio::io::AsyncWriteExt;
@@ -38,7 +38,7 @@ const MAX_ASSET_BYTES: usize = 4 * 1024 * 1024;
 /// Release notes kept per release, and how many unreleased-here releases are listed.
 const MAX_NOTES_CHARS: usize = 8_000;
 const MAX_PENDING_RELEASES: usize = 10;
-const UPDATER_CONTAINER: &str = "rudder-updater";
+const UPDATER_CONTAINER: &str = "dymini-panel-updater";
 const KEEP_PRE_UPDATE_BACKUPS: usize = 3;
 const PANEL_READY_TIMEOUT: Duration = Duration::from_secs(180);
 const AGENT_RETURN_TIMEOUT: Duration = Duration::from_secs(150);
@@ -96,7 +96,7 @@ impl UpdateCheck {
 
 pub(crate) fn http_client() -> Result<reqwest::Client, Error> {
     reqwest::Client::builder()
-        .user_agent(format!("rudder/{}", rudder_core::VERSION))
+        .user_agent(format!("dymini-panel/{}", dymini_panel_core::VERSION))
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|error| Error::Node(format!("http client: {error}")))
@@ -155,7 +155,7 @@ pub async fn check(state: &AppState) -> Result<UpdateCheck, Error> {
         Ok(check) => check,
         Err(error) => UpdateCheck {
             checked_at: Utc::now(),
-            current: rudder_core::VERSION.into(),
+            current: dymini_panel_core::VERSION.into(),
             channel: channel.as_str().into(),
             latest: None,
             pending: Vec::new(),
@@ -197,10 +197,10 @@ async fn discover(
     );
     let releases: Vec<GithubRelease> = serde_json::from_slice(&fetch(&client, &url).await?)
         .map_err(|error| Error::Node(format!("GitHub releases: {error}")))?;
-    let current = parse_version(rudder_core::VERSION)?;
+    let current = parse_version(dymini_panel_core::VERSION)?;
     let mut check = UpdateCheck {
         checked_at: Utc::now(),
-        current: rudder_core::VERSION.into(),
+        current: dymini_panel_core::VERSION.into(),
         channel: channel.as_str().into(),
         latest: None,
         pending: Vec::new(),
@@ -232,7 +232,7 @@ async fn discover(
         .collect();
     let Some(key) = config.update_public_key.as_deref() else {
         check.error = Some(
-            "this build has no release signing key (RUDDER_UPDATE_PUBKEY), so releases cannot be verified or applied"
+            "this build has no release signing key (DYMINI_PANEL_UPDATE_PUBKEY), so releases cannot be verified or applied"
                 .into(),
         );
         return Ok(check);
@@ -283,7 +283,7 @@ pub async fn last_public_check(pool: &PgPool) -> Result<Option<UpdateCheck>, sql
 /// Why the panel cannot replace itself, if it cannot.
 pub async fn apply_blocker(state: &AppState) -> Option<String> {
     if state.config.update_public_key.is_none() {
-        return Some("this build has no release signing key (RUDDER_UPDATE_PUBKEY)".into());
+        return Some("this build has no release signing key (DYMINI_PANEL_UPDATE_PUBKEY)".into());
     }
     match state
         .local_driver
@@ -330,7 +330,7 @@ pub async fn apply_panel(state: &AppState, actor: Option<Uuid>) -> Result<Uuid, 
         VALUES ('panel', $1, $2, 'running', '', $3, $4)
         RETURNING id
         "#,
-        rudder_core::VERSION,
+        dymini_panel_core::VERSION,
         latest.version,
         manifest_json,
         actor,
@@ -418,7 +418,7 @@ async fn prepare_panel(
         id,
         &format!(
             "updating the panel from {} to {}",
-            rudder_core::VERSION,
+            dymini_panel_core::VERSION,
             manifest.version
         ),
     )
@@ -450,7 +450,7 @@ async fn prepare_panel(
         "--backup".to_owned(),
         backup.display().to_string(),
         "--from-version".to_owned(),
-        rudder_core::VERSION.to_owned(),
+        dymini_panel_core::VERSION.to_owned(),
         "--to-version".to_owned(),
         manifest.version.clone(),
         "--migration".to_owned(),
@@ -482,7 +482,7 @@ async fn write_pre_update_backup(state: &AppState) -> Result<PathBuf, Error> {
     .map_err(|error| Error::Node(format!("protect {}: {error}", dir.display())))?;
     let path = dir.join(format!(
         "pre-update-{}-{}.tar.zst.enc",
-        rudder_core::VERSION,
+        dymini_panel_core::VERSION,
         Utc::now().format("%Y%m%d-%H%M%S")
     ));
     let archive = panel::archive(&state.pool, &state.config, false).await?;
@@ -527,7 +527,7 @@ fn prune_backups(dir: &Path) {
     }
 }
 
-/// Arguments of `rudder-server self-update`, which runs in the updater container.
+/// Arguments of `dymini-panel-server self-update`, which runs in the updater container.
 #[derive(Debug, Clone)]
 pub struct UpdaterArgs {
     pub container: String,
@@ -543,14 +543,14 @@ pub struct UpdaterArgs {
 pub async fn run_updater(config: Config, args: UpdaterArgs) -> anyhow::Result<bool> {
     let pool = crate::db::connect(&config).await?;
     let driver =
-        rudder_node::LocalDriver::connect(&config.data_dir, config.docker_socket.as_deref());
+        dymini_panel_node::LocalDriver::connect(&config.data_dir, config.docker_socket.as_deref());
     let id = args.history;
     // Give the old panel a moment to answer the request that started the update.
     tokio::time::sleep(Duration::from_secs(2)).await;
     append_log(
         &pool,
         id,
-        &format!("updater {} started", rudder_core::VERSION),
+        &format!("updater {} started", dymini_panel_core::VERSION),
     )
     .await;
     let swap = match driver
@@ -715,7 +715,7 @@ pub async fn target_cache_image(pool: &PgPool) -> Result<Option<String>, sqlx::E
         WHERE component = 'panel' AND status = 'succeeded' AND to_version = $1 AND manifest IS NOT NULL
         ORDER BY started_at DESC LIMIT 1
         "#,
-        rudder_core::VERSION,
+        dymini_panel_core::VERSION,
     )
     .fetch_optional(pool)
     .await?
@@ -727,10 +727,10 @@ pub async fn target_cache_image(pool: &PgPool) -> Result<Option<String>, sqlx::E
     Ok(last_check(pool)
         .await?
         .and_then(|check| check.manifest)
-        .filter(|manifest| manifest.version == rudder_core::VERSION)
+        .filter(|manifest| manifest.version == dymini_panel_core::VERSION)
         .map(|manifest| manifest.images.cache)
         .or_else(|| {
-            std::env::var("RUDDER_CACHE_IMAGE")
+            std::env::var("DYMINI_PANEL_CACHE_IMAGE")
                 .ok()
                 .filter(|v| !v.is_empty())
         }))
@@ -781,7 +781,7 @@ pub async fn components(state: &AppState) -> Result<Vec<ComponentStatus>, Error>
             && server
                 .agent_version
                 .as_deref()
-                .is_some_and(|version| version != rudder_core::VERSION);
+                .is_some_and(|version| version != dymini_panel_core::VERSION);
         let cache_outdated = matches!((&cache_image, &target_cache), (Some(current), Some(target)) if current != target);
         out.push(ComponentStatus {
             server_id: server.id,
@@ -864,7 +864,7 @@ async fn update_agent(state: &AppState, component: &ComponentStatus, actor: Opti
         "agent",
         component.server_id,
         component.agent_version.as_deref(),
-        rudder_core::VERSION,
+        dymini_panel_core::VERSION,
         actor,
     )
     .await
@@ -880,7 +880,7 @@ async fn update_agent(state: &AppState, component: &ComponentStatus, actor: Opti
                 &format!(
                     "agent on {} reconnected on {}",
                     component.server_name,
-                    rudder_core::VERSION
+                    dymini_panel_core::VERSION
                 ),
             )
             .await;
@@ -912,7 +912,7 @@ async fn push_agent(state: &AppState, component: &ComponentStatus, id: Uuid) -> 
     let info = handle.agent_info().await.map_err(|error| {
         Error::Node(format!("the agent cannot report its target, so it predates self-update; reinstall it with install-agent.sh ({error})"))
     })?;
-    if !rudder_core::AGENT_TARGETS.contains(&info.target.as_str()) {
+    if !dymini_panel_core::AGENT_TARGETS.contains(&info.target.as_str()) {
         return Err(Error::Validation(format!(
             "no agent build for {}",
             info.target
@@ -921,11 +921,11 @@ async fn push_agent(state: &AppState, component: &ComponentStatus, id: Uuid) -> 
     let path = state
         .config
         .dist_dir
-        .join(format!("rudder-agent-{}", info.target));
+        .join(format!("dymini-panel-agent-{}", info.target));
     let bytes = tokio::fs::read(&path)
         .await
         .map_err(|error| Error::Node(format!("read {}: {error}", path.display())))?;
-    let sha256 = rudder_core::sha256_hex(&bytes);
+    let sha256 = dymini_panel_core::sha256_hex(&bytes);
     let published = tokio::fs::read_to_string(path.with_extension("sha256"))
         .await
         .ok()
@@ -942,7 +942,7 @@ async fn push_agent(state: &AppState, component: &ComponentStatus, id: Uuid) -> 
         .flatten()
         .and_then(|c| c.manifest)
     {
-        if manifest.version == rudder_core::VERSION {
+        if manifest.version == dymini_panel_core::VERSION {
             if let Some(expected) = manifest.agents.get(&info.target) {
                 if *expected != sha256 {
                     return Err(Error::Validation(
@@ -971,7 +971,7 @@ async fn push_agent(state: &AppState, component: &ComponentStatus, id: Uuid) -> 
             .collect::<Vec<_>>(),
     ));
     handle
-        .update_agent(rudder_core::VERSION, &sha256, stream)
+        .update_agent(dymini_panel_core::VERSION, &sha256, stream)
         .await?;
     append_log(
         &state.pool,
@@ -994,7 +994,7 @@ async fn push_agent(state: &AppState, component: &ComponentStatus, id: Uuid) -> 
             .fetch_one(&state.pool)
             .await
             .map_err(db_error)?;
-            if version.as_deref() == Some(rudder_core::VERSION) {
+            if version.as_deref() == Some(dymini_panel_core::VERSION) {
                 return Ok(());
             }
             return Err(Error::Node(format!(
@@ -1203,7 +1203,7 @@ mod tests {
 
     #[test]
     fn only_three_pre_update_backups_are_kept() {
-        let dir = std::env::temp_dir().join(format!("rudder-updates-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("dymini-panel-updates-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         for day in 1..=5 {
             std::fs::write(

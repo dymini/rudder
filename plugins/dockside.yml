@@ -70,11 +70,11 @@ variables:
     label: R2 prefix
     kind: string
     default: cas/v1
-  - name: RUDDER_URL
-    label: Rudder URL
+  - name: DYMINI_PANEL_URL
+    label: Dymini Panel URL
     kind: string
-  - name: RUDDER_TOKEN
-    label: Rudder token
+  - name: DYMINI_PANEL_TOKEN
+    label: Dymini Panel token
     kind: secret
     default: ''
   - name: CLOUDFLARE_API_TOKEN
@@ -99,8 +99,8 @@ compose: |
         DOCKSIDE_R2_SECRET_ACCESS_KEY: ${DOCKSIDE_R2_SECRET_ACCESS_KEY:-}
         DOCKSIDE_R2_REGION: ${DOCKSIDE_R2_REGION:-auto}
         DOCKSIDE_R2_PREFIX: ${DOCKSIDE_R2_PREFIX:-cas/v1}
-        RUDDER_URL: ${RUDDER_URL:-}
-        RUDDER_TOKEN: ${RUDDER_TOKEN:-}
+        DYMINI_PANEL_URL: ${DYMINI_PANEL_URL:-}
+        DYMINI_PANEL_TOKEN: ${DYMINI_PANEL_TOKEN:-}
         CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
         CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
       volumes: [data:/data]

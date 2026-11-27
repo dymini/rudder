@@ -1,7 +1,7 @@
 //! Databases, S3 destinations, backup jobs, runs, and restores.
 //!
 //! `api_without_docker` runs everywhere. `docker_backup_round_trip` starts real
-//! Postgres, Redis, and S3-compatible (RustFS) containers and only runs with `RUDDER_DOCKER_TESTS=1`.
+//! Postgres, Redis, and S3-compatible (RustFS) containers and only runs with `DYMINI_PANEL_DOCKER_TESTS=1`.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -16,18 +16,24 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 
 fn app(pool: PgPool, data_dir: &Path) -> axum::Router {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
-        ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_PUBLIC_URL".into(), "https://panel.example".into()),
-        ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        (
+            "DYMINI_PANEL_PUBLIC_URL".into(),
+            "https://panel.example".into(),
+        ),
+        (
+            "DYMINI_PANEL_DATA_DIR".into(),
+            data_dir.display().to_string(),
+        ),
     ]);
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::router(rudder_server::AppState::new(pool, config))
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    dymini_panel_server::router(dymini_panel_server::AppState::new(pool, config))
 }
 
 struct Reply {
@@ -53,7 +59,7 @@ async fn send(
     let mut builder = Request::builder().method(method).uri(path);
     if let Some((cookie, csrf)) = session {
         builder = builder
-            .header("cookie", format!("rudder_session={cookie}"))
+            .header("cookie", format!("dymini_panel_session={cookie}"))
             .header("x-csrf-token", csrf);
     }
     let request = match body {
@@ -70,7 +76,7 @@ async fn send(
         .get("set-cookie")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .and_then(|pair| pair.strip_prefix("rudder_session="))
+        .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
         .map(str::to_owned);
     let raw = response
         .into_body()
@@ -181,7 +187,7 @@ impl Client {
 }
 
 fn temp_dir(label: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("rudder-{label}-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("dymini-panel-{label}-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -459,7 +465,7 @@ impl Drop for Container {
 /// so this uses RustFS and creates the bucket with rclone.
 async fn start_s3() -> (Container, String) {
     let name = format!(
-        "rudder-s3-{}",
+        "dymini-panel-s3-{}",
         &uuid::Uuid::new_v4().simple().to_string()[..8]
     );
     docker(&[
@@ -470,9 +476,9 @@ async fn start_s3() -> (Container, String) {
         "-p",
         "127.0.0.1::9000",
         "-e",
-        "RUSTFS_ACCESS_KEY=rudderadmin",
+        "RUSTFS_ACCESS_KEY=dymini-paneladmin",
         "-e",
-        "RUSTFS_SECRET_KEY=rudder-secret-key",
+        "RUSTFS_SECRET_KEY=dymini-panel-secret-key",
         "rustfs/rustfs:1.0.1",
     ]);
     let guard = Container(name.clone());
@@ -501,9 +507,9 @@ async fn start_s3() -> (Container, String) {
                 "--s3-endpoint",
                 &endpoint,
                 "--s3-access-key-id",
-                "rudderadmin",
+                "dymini-paneladmin",
                 "--s3-secret-access-key",
-                "rudder-secret-key",
+                "dymini-panel-secret-key",
             ])
             .output()
             .unwrap();
@@ -541,8 +547,8 @@ fn psql(container: &str, sql: &str) -> Option<String> {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn docker_backup_round_trip(pool: PgPool) {
-    if std::env::var("RUDDER_DOCKER_TESTS").as_deref() != Ok("1") {
-        eprintln!("skipping: set RUDDER_DOCKER_TESTS=1 to run Docker backup tests");
+    if std::env::var("DYMINI_PANEL_DOCKER_TESTS").as_deref() != Ok("1") {
+        eprintln!("skipping: set DYMINI_PANEL_DOCKER_TESTS=1 to run Docker backup tests");
         return;
     }
     let data_dir = temp_dir("docker-backups");
@@ -556,8 +562,8 @@ async fn docker_backup_round_trip(pool: PgPool) {
             "/api/v1/s3-destinations",
             Some(json!({
                 "name": "s3-test", "endpoint": endpoint, "region": "us-east-1",
-                "bucket": "backups", "access_key_id": "rudderadmin",
-                "secret_access_key": "rudder-secret-key", "path_style": true
+                "bucket": "backups", "access_key_id": "dymini-paneladmin",
+                "secret_access_key": "dymini-panel-secret-key", "path_style": true
             })),
         )
         .await;
@@ -851,7 +857,7 @@ async fn docker_backup_round_trip(pool: PgPool) {
     );
 
     let restored_volume = format!(
-        "rudder-test-restore-{}",
+        "dymini-panel-test-restore-{}",
         &uuid::Uuid::new_v4().simple().to_string()[..8]
     );
     let volume_restore = client
@@ -944,8 +950,8 @@ async fn backup_and_restore(
 
 #[sqlx::test(migrations = "./migrations")]
 async fn docker_mariadb_mongo_round_trip(pool: PgPool) {
-    if std::env::var("RUDDER_DOCKER_TESTS").as_deref() != Ok("1") {
-        eprintln!("skipping: set RUDDER_DOCKER_TESTS=1 to run Docker backup tests");
+    if std::env::var("DYMINI_PANEL_DOCKER_TESTS").as_deref() != Ok("1") {
+        eprintln!("skipping: set DYMINI_PANEL_DOCKER_TESTS=1 to run Docker backup tests");
         return;
     }
     let data_dir = temp_dir("docker-engines");
@@ -958,8 +964,8 @@ async fn docker_mariadb_mongo_round_trip(pool: PgPool) {
             "/api/v1/s3-destinations",
             Some(json!({
                 "name": "s3-test", "endpoint": endpoint, "region": "us-east-1",
-                "bucket": "backups", "access_key_id": "rudderadmin",
-                "secret_access_key": "rudder-secret-key", "path_style": true
+                "bucket": "backups", "access_key_id": "dymini-paneladmin",
+                "secret_access_key": "dymini-panel-secret-key", "path_style": true
             })),
         )
         .await;

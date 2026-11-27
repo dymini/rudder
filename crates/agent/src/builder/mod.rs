@@ -13,14 +13,14 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use bytes::Bytes;
-use futures_util::{Stream, StreamExt};
-use rudder_core::{
+use dymini_panel_core::{
     buildx_argv, docker_build_argv, nixpacks_generate_argv, static_dockerfile, validate_rel_path,
     BuildStrategy, ByteStream, Error, NodeDriver,
 };
-use rudder_node::ops::{
+use dymini_panel_node::ops::{
     BuildCacheEntry, BuildCachePrune, BuildCachePruned, BuildEvent, BuildRequest, BuildStatus,
 };
+use futures_util::{Stream, StreamExt};
 use tokio::sync::{mpsc, watch};
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -77,7 +77,7 @@ impl Builder {
         let workspace = checked(&self.root, &format!("workspaces/{job}"))?;
         std::fs::create_dir_all(&workspace)
             .map_err(|_| node("could not create builder directory"))?;
-        rudder_node::LocalDriver::connect(&workspace, self.socket.as_deref())
+        dymini_panel_node::LocalDriver::connect(&workspace, self.socket.as_deref())
             .extract_tree("src", input)
             .await
     }
@@ -251,7 +251,7 @@ impl Builder {
                 if !publish.is_dir() {
                     return Err(invalid("static publish directory is missing"));
                 }
-                let file = checked(&context, "Dockerfile.rudder")?;
+                let file = checked(&context, "Dockerfile.dymini-panel")?;
                 std::fs::write(file, static_dockerfile(&plan.publish_dir)?)
                     .map_err(|_| node("could not write static Dockerfile"))?;
             }
@@ -278,7 +278,7 @@ impl Builder {
                     "run".into(),
                     "--rm".into(),
                     "--name".into(),
-                    format!("rudder-build-test-{}", request.job_id),
+                    format!("dymini-panel-build-test-{}", request.job_id),
                     plan.image.clone(),
                     "sh".into(),
                     "-c".into(),

@@ -12,10 +12,10 @@ use base64::Engine;
 use thiserror::Error;
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
-const DEFAULT_DATA_DIR: &str = "/var/lib/rudder";
+const DEFAULT_DATA_DIR: &str = "/var/lib/dymini-panel";
 const DEFAULT_GITHUB_REPO: &str = "vantanminh/rudder";
 const DEFAULT_AGENT_BIND: &str = "0.0.0.0:7443";
-const DEFAULT_DIST_DIR: &str = "/usr/share/rudder/dist";
+const DEFAULT_DIST_DIR: &str = "/usr/share/dymini-panel/dist";
 /// Loopback and private networks: Traefik on the Docker networks, a local reverse proxy.
 const DEFAULT_TRUSTED_PROXIES: &str =
     "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128,fc00::/7";
@@ -138,15 +138,35 @@ pub struct Config {
 }
 
 /// Release signing key compiled into official builds.
-const BUILT_IN_UPDATE_KEY: Option<&str> = option_env!("RUDDER_UPDATE_PUBKEY");
+const BUILT_IN_UPDATE_KEY: Option<&str> = option_env!("DYMINI_PANEL_UPDATE_PUBKEY");
 /// Published example key rejected at startup. It was present in older `.env.example` copies.
 const EXAMPLE_MASTER_KEY_HEX: &str =
     "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
 
+/// Copy every `RUDDER_*` variable onto its `DYMINI_PANEL_*` successor unless the
+/// successor is already set.
+fn apply_legacy_env(vars: &mut HashMap<String, String>) {
+    let legacy: Vec<(String, String)> = vars
+        .iter()
+        .filter_map(|(name, value)| {
+            name.strip_prefix("RUDDER_")
+                .map(|rest| (format!("DYMINI_PANEL_{rest}"), value.clone()))
+        })
+        .collect();
+    for (renamed, value) in legacy {
+        vars.entry(renamed).or_insert(value);
+    }
+}
+
 impl Config {
     /// Load configuration from process environment variables.
+    ///
+    /// Pre-rebrand `RUDDER_*` variables still apply when their `DYMINI_PANEL_*`
+    /// successor is unset, so a container carried over by an in-place update or
+    /// a hand-written compose file keeps its settings across the rebrand.
     pub fn load() -> Result<Self, ConfigError> {
-        let vars: HashMap<String, String> = std::env::vars().collect();
+        let mut vars: HashMap<String, String> = std::env::vars().collect();
+        apply_legacy_env(&mut vars);
         Self::from_map(&vars, |path| fs::read(path))
     }
 
@@ -161,36 +181,36 @@ impl Config {
     ) -> Result<Self, ConfigError> {
         let database_url = required(vars, "DATABASE_URL")?;
         let bind = vars
-            .get("RUDDER_BIND")
+            .get("DYMINI_PANEL_BIND")
             .map(String::as_str)
             .unwrap_or(DEFAULT_BIND)
             .parse::<std::net::SocketAddr>()
             .map_err(|error| ConfigError::Invalid {
-                name: "RUDDER_BIND",
+                name: "DYMINI_PANEL_BIND",
                 reason: error.to_string(),
             })?;
         let data_dir = PathBuf::from(
-            vars.get("RUDDER_DATA_DIR")
+            vars.get("DYMINI_PANEL_DATA_DIR")
                 .map(String::as_str)
                 .unwrap_or(DEFAULT_DATA_DIR),
         );
         let public_url = vars
-            .get("RUDDER_PUBLIC_URL")
+            .get("DYMINI_PANEL_PUBLIC_URL")
             .cloned()
             .filter(|v| !v.is_empty());
         let github_repo = vars
-            .get("RUDDER_GITHUB_REPO")
+            .get("DYMINI_PANEL_GITHUB_REPO")
             .cloned()
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| DEFAULT_GITHUB_REPO.to_owned());
         if !github_repo.contains('/') || github_repo.contains(' ') {
             return Err(ConfigError::Invalid {
-                name: "RUDDER_GITHUB_REPO",
+                name: "DYMINI_PANEL_GITHUB_REPO",
                 reason: "expected owner/name".into(),
             });
         }
         let log_format = match vars
-            .get("RUDDER_LOG_FORMAT")
+            .get("DYMINI_PANEL_LOG_FORMAT")
             .map(String::as_str)
             .unwrap_or("json")
         {
@@ -198,21 +218,21 @@ impl Config {
             "pretty" => LogFormat::Pretty,
             other => {
                 return Err(ConfigError::Invalid {
-                    name: "RUDDER_LOG_FORMAT",
+                    name: "DYMINI_PANEL_LOG_FORMAT",
                     reason: format!("unknown format '{other}'"),
                 });
             }
         };
-        let cookie_secure = parse_bool(vars, "RUDDER_COOKIE_SECURE", true)?;
-        let trust_proxy = parse_bool(vars, "RUDDER_TRUST_PROXY", true)?;
+        let cookie_secure = parse_bool(vars, "DYMINI_PANEL_COOKIE_SECURE", true)?;
+        let trust_proxy = parse_bool(vars, "DYMINI_PANEL_TRUST_PROXY", true)?;
         let trusted_proxies = if trust_proxy {
             TrustedProxies::parse(
-                vars.get("RUDDER_TRUSTED_PROXIES")
+                vars.get("DYMINI_PANEL_TRUSTED_PROXIES")
                     .map(String::as_str)
                     .unwrap_or(DEFAULT_TRUSTED_PROXIES),
             )
             .map_err(|reason| ConfigError::Invalid {
-                name: "RUDDER_TRUSTED_PROXIES",
+                name: "DYMINI_PANEL_TRUSTED_PROXIES",
                 reason,
             })?
         } else {
@@ -220,25 +240,25 @@ impl Config {
         };
         let master_key = load_master_key(vars, read_file)?;
         let docker_socket = vars
-            .get("RUDDER_DOCKER_SOCKET")
+            .get("DYMINI_PANEL_DOCKER_SOCKET")
             .filter(|v| !v.is_empty())
             .map(PathBuf::from);
         let cache_admin_url = vars
-            .get("RUDDER_CACHE_ADMIN_URL")
+            .get("DYMINI_PANEL_CACHE_ADMIN_URL")
             .filter(|v| !v.is_empty())
             .cloned()
             .unwrap_or_else(|| crate::driver::DEFAULT_CACHE_ADMIN.to_owned());
         if !cache_admin_url.starts_with("http://") && !cache_admin_url.starts_with("https://") {
             return Err(ConfigError::Invalid {
-                name: "RUDDER_CACHE_ADMIN_URL",
+                name: "DYMINI_PANEL_CACHE_ADMIN_URL",
                 reason: "expected an http:// or https:// URL".into(),
             });
         }
         let host_proc = vars
-            .get("RUDDER_HOST_PROC")
+            .get("DYMINI_PANEL_HOST_PROC")
             .filter(|v| !v.is_empty())
             .map_or_else(|| PathBuf::from("/proc"), PathBuf::from);
-        let agent_bind = match vars.get("RUDDER_AGENT_BIND").map(String::as_str) {
+        let agent_bind = match vars.get("DYMINI_PANEL_AGENT_BIND").map(String::as_str) {
             Some("off") => None,
             value => Some(
                 value
@@ -246,126 +266,128 @@ impl Config {
                     .unwrap_or(DEFAULT_AGENT_BIND)
                     .parse::<SocketAddr>()
                     .map_err(|error| ConfigError::Invalid {
-                        name: "RUDDER_AGENT_BIND",
+                        name: "DYMINI_PANEL_AGENT_BIND",
                         reason: error.to_string(),
                     })?,
             ),
         };
         let agent_url = vars
-            .get("RUDDER_AGENT_URL")
+            .get("DYMINI_PANEL_AGENT_URL")
             .filter(|v| !v.is_empty())
             .cloned();
         if let Some(url) = &agent_url {
             if !url.starts_with("https://") {
                 return Err(ConfigError::Invalid {
-                    name: "RUDDER_AGENT_URL",
+                    name: "DYMINI_PANEL_AGENT_URL",
                     reason: "expected an https:// URL".into(),
                 });
             }
         }
         let dist_dir = PathBuf::from(
-            vars.get("RUDDER_DIST_DIR")
+            vars.get("DYMINI_PANEL_DIST_DIR")
                 .filter(|v| !v.is_empty())
                 .map_or(DEFAULT_DIST_DIR, String::as_str),
         );
         let pg_dump = PathBuf::from(
-            vars.get("RUDDER_PG_DUMP")
+            vars.get("DYMINI_PANEL_PG_DUMP")
                 .filter(|v| !v.is_empty())
                 .map_or("pg_dump", String::as_str),
         );
         let pg_restore = PathBuf::from(
-            vars.get("RUDDER_PG_RESTORE")
+            vars.get("DYMINI_PANEL_PG_RESTORE")
                 .filter(|v| !v.is_empty())
                 .map_or("pg_restore", String::as_str),
         );
         let master_key_file = vars
-            .get("RUDDER_MASTER_KEY_FILE")
+            .get("DYMINI_PANEL_MASTER_KEY_FILE")
             .filter(|v| !v.is_empty())
             .map(PathBuf::from);
         let update_api_url = vars
-            .get("RUDDER_UPDATE_API_URL")
+            .get("DYMINI_PANEL_UPDATE_API_URL")
             .filter(|v| !v.is_empty())
             .map_or("https://api.github.com", String::as_str)
             .trim_end_matches('/')
             .to_owned();
         if !update_api_url.starts_with("https://") && !update_api_url.starts_with("http://") {
             return Err(ConfigError::Invalid {
-                name: "RUDDER_UPDATE_API_URL",
+                name: "DYMINI_PANEL_UPDATE_API_URL",
                 reason: "expected an http:// or https:// URL".into(),
             });
         }
         let github_api_url = vars
-            .get("RUDDER_GITHUB_API_URL")
+            .get("DYMINI_PANEL_GITHUB_API_URL")
             .filter(|v| !v.is_empty())
             .map_or("https://api.github.com", String::as_str)
             .trim_end_matches('/')
             .to_owned();
         if !github_api_url.starts_with("https://") && !github_api_url.starts_with("http://") {
             return Err(ConfigError::Invalid {
-                name: "RUDDER_GITHUB_API_URL",
+                name: "DYMINI_PANEL_GITHUB_API_URL",
                 reason: "expected an http:// or https:// URL".into(),
             });
         }
         let update_public_key = vars
-            .get("RUDDER_UPDATE_PUBKEY")
+            .get("DYMINI_PANEL_UPDATE_PUBKEY")
             .map(String::as_str)
             .or(BUILT_IN_UPDATE_KEY)
             .map(str::trim)
             .filter(|v| !v.is_empty())
             .map(str::to_owned);
         let self_container = vars
-            .get("RUDDER_SELF_CONTAINER")
+            .get("DYMINI_PANEL_SELF_CONTAINER")
             .filter(|v| !v.is_empty())
-            .map_or("rudder", String::as_str)
+            .map_or("dymini-panel", String::as_str)
             .to_owned();
-        rudder_core::validate_name(&self_container).map_err(|error| ConfigError::Invalid {
-            name: "RUDDER_SELF_CONTAINER",
-            reason: error.to_string(),
+        dymini_panel_core::validate_name(&self_container).map_err(|error| {
+            ConfigError::Invalid {
+                name: "DYMINI_PANEL_SELF_CONTAINER",
+                reason: error.to_string(),
+            }
         })?;
-        let update_check_secs = match vars.get("RUDDER_UPDATE_CHECK_SECS") {
+        let update_check_secs = match vars.get("DYMINI_PANEL_UPDATE_CHECK_SECS") {
             None => 6 * 3600,
             Some(value) => value.parse().map_err(|_| ConfigError::Invalid {
-                name: "RUDDER_UPDATE_CHECK_SECS",
+                name: "DYMINI_PANEL_UPDATE_CHECK_SECS",
                 reason: "expected a number of seconds".into(),
             })?,
         };
-        let stack_timeout_secs = match vars.get("RUDDER_STACK_TIMEOUT_SECS") {
+        let stack_timeout_secs = match vars.get("DYMINI_PANEL_STACK_TIMEOUT_SECS") {
             None => 3600,
             Some(value) => value.parse().map_err(|_| ConfigError::Invalid {
-                name: "RUDDER_STACK_TIMEOUT_SECS",
+                name: "DYMINI_PANEL_STACK_TIMEOUT_SECS",
                 reason: "expected a number of seconds".into(),
             })?,
         };
         let turnstile_siteverify_url = debug_url(
             vars,
-            "RUDDER_TURNSTILE_SITEVERIFY_URL",
+            "DYMINI_PANEL_TURNSTILE_SITEVERIFY_URL",
             "https://challenges.cloudflare.com/turnstile/v0/siteverify",
         )?;
         let google_token_url = debug_url(
             vars,
-            "RUDDER_GOOGLE_TOKEN_URL",
+            "DYMINI_PANEL_GOOGLE_TOKEN_URL",
             "https://oauth2.googleapis.com/token",
         )?;
         let google_userinfo_url = debug_url(
             vars,
-            "RUDDER_GOOGLE_USERINFO_URL",
+            "DYMINI_PANEL_GOOGLE_USERINFO_URL",
             "https://openidconnect.googleapis.com/v1/userinfo",
         )?;
         let cloudflare_api_url = debug_url(
             vars,
-            "RUDDER_CLOUDFLARE_API_URL",
+            "DYMINI_PANEL_CLOUDFLARE_API_URL",
             "https://api.cloudflare.com/client/v4",
         )?;
         let cloudflared_image = vars
-            .get("RUDDER_CLOUDFLARED_IMAGE")
+            .get("DYMINI_PANEL_CLOUDFLARED_IMAGE")
             .cloned()
             .filter(|v| !v.is_empty())
-            .unwrap_or_else(|| rudder_core::DEFAULT_CLOUDFLARED_IMAGE.to_owned());
+            .unwrap_or_else(|| dymini_panel_core::DEFAULT_CLOUDFLARED_IMAGE.to_owned());
         let cloudflared_image_overridden = vars
-            .get("RUDDER_CLOUDFLARED_IMAGE")
+            .get("DYMINI_PANEL_CLOUDFLARED_IMAGE")
             .is_some_and(|v| !v.is_empty());
         let setup_token = vars
-            .get("RUDDER_SETUP_TOKEN")
+            .get("DYMINI_PANEL_SETUP_TOKEN")
             .map(|v| v.trim().to_owned())
             .filter(|v| !v.is_empty());
         Ok(Self {
@@ -490,14 +512,14 @@ fn load_master_key(
     vars: &HashMap<String, String>,
     read_file: impl Fn(&Path) -> std::io::Result<Vec<u8>>,
 ) -> Result<[u8; 32], ConfigError> {
-    if let Some(path) = vars.get("RUDDER_MASTER_KEY_FILE") {
+    if let Some(path) = vars.get("DYMINI_PANEL_MASTER_KEY_FILE") {
         let bytes = read_file(Path::new(path)).map_err(ConfigError::Io)?;
         return decode_master_key_bytes(&bytes);
     }
-    if let Some(raw) = vars.get("RUDDER_MASTER_KEY") {
+    if let Some(raw) = vars.get("DYMINI_PANEL_MASTER_KEY") {
         return decode_master_key_text(raw);
     }
-    Err(ConfigError::Missing("RUDDER_MASTER_KEY"))
+    Err(ConfigError::Missing("DYMINI_PANEL_MASTER_KEY"))
 }
 
 fn decode_master_key_bytes(bytes: &[u8]) -> Result<[u8; 32], ConfigError> {
@@ -516,7 +538,7 @@ fn decode_master_key_text(raw: &str) -> Result<[u8; 32], ConfigError> {
         return finish_master_key(key);
     }
     Err(ConfigError::Invalid {
-        name: "RUDDER_MASTER_KEY",
+        name: "DYMINI_PANEL_MASTER_KEY",
         reason: "expected 32 raw bytes, 64 hex characters, or standard base64".into(),
     })
 }
@@ -525,7 +547,7 @@ fn finish_master_key(key: [u8; 32]) -> Result<[u8; 32], ConfigError> {
     let example = decode_hex_key(EXAMPLE_MASTER_KEY_HEX).expect("example key is valid hex");
     if key == example {
         return Err(ConfigError::Invalid {
-            name: "RUDDER_MASTER_KEY",
+            name: "DYMINI_PANEL_MASTER_KEY",
             reason: "the published .env.example key is not secret; generate a random key".into(),
         });
     }
@@ -592,9 +614,9 @@ mod tests {
         HashMap::from([
             (
                 "DATABASE_URL".into(),
-                "postgres://rudder:secret@localhost/rudder".into(),
+                "postgres://dymini-panel:secret@localhost/dymini-panel".into(),
             ),
-            ("RUDDER_MASTER_KEY".into(), "11".repeat(32)),
+            ("DYMINI_PANEL_MASTER_KEY".into(), "11".repeat(32)),
         ])
     }
 
@@ -616,21 +638,39 @@ mod tests {
     #[test]
     fn github_api_url_is_trimmed_and_checked() {
         let mut vars = base_vars();
-        vars.insert("RUDDER_GITHUB_API_URL".into(), "http://127.0.0.1:9/".into());
+        vars.insert(
+            "DYMINI_PANEL_GITHUB_API_URL".into(),
+            "http://127.0.0.1:9/".into(),
+        );
         let config = Config::from_map(&vars, |_| unreachable!()).unwrap();
         assert_eq!(config.github_api_url, "http://127.0.0.1:9");
-        vars.insert("RUDDER_GITHUB_API_URL".into(), "ftp://github".into());
+        vars.insert("DYMINI_PANEL_GITHUB_API_URL".into(), "ftp://github".into());
         assert!(Config::from_map(&vars, |_| unreachable!()).is_err());
+    }
+
+    #[test]
+    fn legacy_rudder_variables_apply_only_when_the_successor_is_unset() {
+        let mut vars = base_vars();
+        vars.insert("RUDDER_BIND".into(), "127.0.0.1:9999".into());
+        vars.insert("RUDDER_COOKIE_SECURE".into(), "false".into());
+        apply_legacy_env(&mut vars);
+        assert_eq!(vars["DYMINI_PANEL_BIND"], "127.0.0.1:9999");
+        assert_eq!(vars["DYMINI_PANEL_COOKIE_SECURE"], "false");
+        // An explicit new variable wins over its legacy counterpart.
+        vars.insert("DYMINI_PANEL_BIND".into(), "127.0.0.1:7777".into());
+        vars.insert("RUDDER_BIND".into(), "127.0.0.1:1111".into());
+        apply_legacy_env(&mut vars);
+        assert_eq!(vars["DYMINI_PANEL_BIND"], "127.0.0.1:7777");
     }
 
     #[test]
     fn accepts_standard_base64_master_key() {
         let encoded = base64::engine::general_purpose::STANDARD.encode([7u8; 32]);
         let mut vars = base_vars();
-        vars.insert("RUDDER_MASTER_KEY".into(), encoded);
-        vars.insert("RUDDER_BIND".into(), "127.0.0.1:8080".into());
-        vars.insert("RUDDER_LOG_FORMAT".into(), "pretty".into());
-        vars.insert("RUDDER_COOKIE_SECURE".into(), "false".into());
+        vars.insert("DYMINI_PANEL_MASTER_KEY".into(), encoded);
+        vars.insert("DYMINI_PANEL_BIND".into(), "127.0.0.1:8080".into());
+        vars.insert("DYMINI_PANEL_LOG_FORMAT".into(), "pretty".into());
+        vars.insert("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into());
         let config = Config::from_map(&vars, |_| unreachable!()).unwrap();
         assert_eq!(config.master_key(), &[7u8; 32]);
         assert_eq!(config.bind, "127.0.0.1:8080".parse().unwrap());
@@ -641,8 +681,8 @@ mod tests {
     #[test]
     fn reads_master_key_file_as_raw_bytes() {
         let mut vars = base_vars();
-        vars.remove("RUDDER_MASTER_KEY");
-        vars.insert("RUDDER_MASTER_KEY_FILE".into(), "/keys/master".into());
+        vars.remove("DYMINI_PANEL_MASTER_KEY");
+        vars.insert("DYMINI_PANEL_MASTER_KEY_FILE".into(), "/keys/master".into());
         let config = Config::from_map(&vars, |path| {
             assert_eq!(path, Path::new("/keys/master"));
             Ok(vec![9u8; 32])
@@ -659,12 +699,12 @@ mod tests {
         assert!(matches!(error, ConfigError::Missing("DATABASE_URL")));
 
         let mut vars = base_vars();
-        vars.insert("RUDDER_MASTER_KEY".into(), "abcd".into());
+        vars.insert("DYMINI_PANEL_MASTER_KEY".into(), "abcd".into());
         let error = Config::from_map(&vars, |_| unreachable!()).unwrap_err();
         assert!(matches!(
             error,
             ConfigError::Invalid {
-                name: "RUDDER_MASTER_KEY",
+                name: "DYMINI_PANEL_MASTER_KEY",
                 ..
             }
         ));
@@ -673,19 +713,22 @@ mod tests {
     #[test]
     fn rejects_the_published_example_master_key() {
         let mut vars = base_vars();
-        vars.insert("RUDDER_MASTER_KEY".into(), EXAMPLE_MASTER_KEY_HEX.into());
+        vars.insert(
+            "DYMINI_PANEL_MASTER_KEY".into(),
+            EXAMPLE_MASTER_KEY_HEX.into(),
+        );
         let error = Config::from_map(&vars, |_| unreachable!()).unwrap_err();
         assert!(matches!(
             error,
             ConfigError::Invalid {
-                name: "RUDDER_MASTER_KEY",
+                name: "DYMINI_PANEL_MASTER_KEY",
                 ..
             }
         ));
 
         let example = decode_hex_key(EXAMPLE_MASTER_KEY_HEX).unwrap();
         vars.insert(
-            "RUDDER_MASTER_KEY".into(),
+            "DYMINI_PANEL_MASTER_KEY".into(),
             base64::engine::general_purpose::STANDARD.encode(example),
         );
         assert!(Config::from_map(&vars, |_| unreachable!()).is_err());

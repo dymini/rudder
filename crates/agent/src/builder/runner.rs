@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
-use rudder_core::Error;
-use rudder_node::ops::BuildEvent;
+use dymini_panel_core::Error;
+use dymini_panel_node::ops::BuildEvent;
 use tokio::io::AsyncReadExt;
 use tokio::process::{Child, Command};
 
@@ -89,7 +89,7 @@ pub(super) async fn probe(program: &Tool, args: &[&str], docker_socket: Option<&
 }
 
 pub(super) async fn remove_test_container(builder: &Builder, job: &str) {
-    let name = format!("rudder-build-test-{job}");
+    let name = format!("dymini-panel-build-test-{job}");
     let _ = probe(
         &builder.docker,
         &["rm", "-f", &name],

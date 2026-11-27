@@ -324,7 +324,7 @@ mod tests {
         let ca_key = KeyPair::generate().unwrap();
         let mut ca_params = CertificateParams::default();
         ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
-        ca_params.distinguished_name = dn("Rudder Test CA");
+        ca_params.distinguished_name = dn("Dymini Panel Test CA");
         let ca = ca_params.self_signed(&ca_key).unwrap();
 
         let leaf_key = KeyPair::generate().unwrap();

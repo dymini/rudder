@@ -123,7 +123,7 @@ fn request_origin(state: &AppState, headers: &HeaderMap) -> Result<String, ApiEr
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "invalid_host",
-            "set RUDDER_PUBLIC_URL so agents know the panel address",
+            "set DYMINI_PANEL_PUBLIC_URL so agents know the panel address",
         ));
     }
     let proto = if state.config.trust_proxy {
@@ -147,7 +147,7 @@ fn request_origin(state: &AppState, headers: &HeaderMap) -> Result<String, ApiEr
 }
 
 fn scopes_supported() -> Vec<&'static str> {
-    rudder_core::MCP_SCOPES
+    dymini_panel_core::MCP_SCOPES
         .iter()
         .map(|scope| scope.id)
         .collect()
@@ -164,7 +164,7 @@ async fn protected_resource(
             "authorization_servers": [origin],
             "scopes_supported": scopes_supported(),
             "bearer_methods_supported": ["header"],
-            "resource_name": "Rudder",
+            "resource_name": "Dymini Panel",
         }))
         .into_response(),
     ))
@@ -761,8 +761,8 @@ fn initialize(params: &Value) -> Result<Value, Value> {
     Ok(json!({
         "protocolVersion": version,
         "capabilities": {"tools": {"listChanged": false}},
-        "serverInfo": {"name": "rudder", "version": rudder_core::VERSION},
-        "instructions": "Call rudder_whoami to see this approval. Other tools are the panel API. Full control can read and change every setting and all data. Pass path parameters, query parameters, and a JSON body.",
+        "serverInfo": {"name": "dymini-panel", "version": dymini_panel_core::VERSION},
+        "instructions": "Call dymini_panel_whoami to see this approval. Other tools are the panel API. Full control can read and change every setting and all data. Pass path parameters, query parameters, and a JSON body.",
     }))
 }
 
@@ -775,7 +775,7 @@ fn tools_list(user: &AuthUser) -> Value {
     tools.insert(
         0,
         json!({
-            "name": "rudder_whoami",
+            "name": "dymini_panel_whoami",
             "description": "Who this agent is, which permission template was approved, and which scopes it has.",
             "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false},
         }),
@@ -913,7 +913,7 @@ async fn execute_tool(
         .get("name")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    if name == "rudder_whoami" {
+    if name == "dymini_panel_whoami" {
         let described = tokens::describe(state, token)
             .await
             .map_err(|_| "could not read this approval")?;
@@ -1054,7 +1054,8 @@ fn unauthorized_mcp(origin: &str, id: Value) -> Response {
         Json(rpc_error(id, -32001, "sign in required")),
     )
         .into_response();
-    if let Ok(value) = format!("Bearer realm=\"rudder\", resource_metadata=\"{metadata}\"").parse()
+    if let Ok(value) =
+        format!("Bearer realm=\"dymini-panel\", resource_metadata=\"{metadata}\"").parse()
     {
         response
             .headers_mut()

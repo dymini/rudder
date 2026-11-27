@@ -277,7 +277,7 @@ mod tests {
 
     #[tokio::test]
     async fn plain_http_is_rejected_before_any_request() {
-        let dir = std::env::temp_dir().join("rudder-agent-enroll-http-test");
+        let dir = std::env::temp_dir().join("dymini-panel-agent-enroll-http-test");
         let error = enroll("http://192.0.2.1:9", "join_x", None, &dir)
             .await
             .unwrap_err();

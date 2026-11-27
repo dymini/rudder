@@ -4,9 +4,9 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use dymini_panel_server::AppState;
 use governor::{Quota, RateLimiter};
 use http_body_util::BodyExt;
-use rudder_server::AppState;
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use tokio::{
@@ -36,17 +36,17 @@ struct Reply {
     cookie: Option<String>,
 }
 
-fn config() -> rudder_server::Config {
-    rudder_server::Config::from_map(
+fn config() -> dymini_panel_server::Config {
+    dymini_panel_server::Config::from_map(
         &HashMap::from([
             (
                 "DATABASE_URL".into(),
                 std::env::var("DATABASE_URL").unwrap(),
             ),
-            ("RUDDER_MASTER_KEY".into(), "bb".repeat(32)),
-            ("RUDDER_SETUP_TOKEN".into(), "mfa-test-setup".into()),
-            ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-            ("RUDDER_PUBLIC_URL".into(), ORIGIN.into()),
+            ("DYMINI_PANEL_MASTER_KEY".into(), "bb".repeat(32)),
+            ("DYMINI_PANEL_SETUP_TOKEN".into(), "mfa-test-setup".into()),
+            ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+            ("DYMINI_PANEL_PUBLIC_URL".into(), ORIGIN.into()),
         ]),
         |_| unreachable!(),
     )
@@ -108,7 +108,7 @@ async fn fixture(pool: &PgPool) -> Fixture {
     state.login_limiter = std::sync::Arc::new(RateLimiter::keyed(Quota::per_minute(
         NonZeroU32::new(1000).unwrap(),
     )));
-    let app = rudder_server::router(state.clone());
+    let app = dymini_panel_server::router(state.clone());
     let reply = request(
         &app,
         "POST",
@@ -388,7 +388,7 @@ async fn discoverable_signin_expiry_origin_and_counter_protection(pool: PgPool) 
     let wrong_origin = assertion(&f, &mut client).await;
     let mut other_config = config();
     other_config.public_url = Some("https://different.example.test".into());
-    let other = rudder_server::router(AppState::new(pool.clone(), other_config));
+    let other = dymini_panel_server::router(AppState::new(pool.clone(), other_config));
     assert_eq!(
         request(
             &other,
@@ -513,7 +513,7 @@ async fn email_delivery_enrollment_expiry_reuse_attempts_and_disable(pool: PgPoo
     );
     let (port, mut rx) = smtp().await;
     let encrypted=f.state.cipher.encrypt(&serde_json::to_vec(&json!({"kind":"smtp","host":"127.0.0.1","port":port,"security":"none","username":null,"password":null})).unwrap()).unwrap();
-    sqlx::query("UPDATE access_settings SET email_provider='smtp',email_from='Rudder <no-reply@example.test>',email_config_enc=$1").bind(encrypted).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE access_settings SET email_provider='smtp',email_from='Dymini Panel <no-reply@example.test>',email_config_enc=$1").bind(encrypted).execute(&pool).await.unwrap();
     let send = json!({"password":PASSWORD,"purpose":"enable"});
     let sent = f
         .call("POST", "/api/v1/me/mfa/email/send", Some(send.clone()))
@@ -662,7 +662,7 @@ async fn email_delivery_enrollment_expiry_reuse_attempts_and_disable(pool: PgPoo
 #[sqlx::test(migrations = "./migrations")]
 async fn challenge_requests_are_ip_rate_limited(pool: PgPool) {
     let state = AppState::new(pool, config());
-    let app = rudder_server::router(state);
+    let app = dymini_panel_server::router(state);
     for _ in 0..10 {
         assert_eq!(
             request(

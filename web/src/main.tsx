@@ -5,7 +5,7 @@ import "./index.css";
 
 let stored: string | null = null;
 try {
-  stored = localStorage.getItem("rudder_theme");
+  stored = localStorage.getItem("dymini_panel_theme");
 } catch {
   // Storage can be blocked; fall back to the system preference.
 }

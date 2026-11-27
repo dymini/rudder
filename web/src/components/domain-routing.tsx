@@ -75,7 +75,7 @@ export function DomainRouting({
             onChange={(event) => onOverwrite(event.target.checked)}
           />
           {t(
-            "Replace conflicting DNS records (including records not created by Rudder)",
+            "Replace conflicting DNS records (including records not created by Dymini Panel)",
           )}
         </label>
       ) : null}

@@ -1,7 +1,7 @@
 # Domains
 
 Open **Security → Domains** for the hostname inventory across all services and
-servers, plus the panel and Rudder Access portal. Each entry identifies its
+servers, plus the panel and Dymini Panel Access portal. Each entry identifies its
 service or stack and server, routing, TLS mode, uploaded certificate validity
 when known, and a fresh DNS check. Let's Encrypt certificate state is unknown;
 configured TLS is not proof a certificate has been issued.
@@ -16,13 +16,13 @@ Add or edit a hostname in a service's **Domains** tab:
   zone. Wildcards are not supported by this managed routing option.
   - A local server with a published tunnel uses a proxied CNAME to the tunnel.
     Ingress and DNS are synchronized automatically, including later changes.
-  - Without a tunnel, Rudder creates a **proxied A or AAAA** record pointing to
+  - Without a tunnel, Dymini Panel creates a **proxied A or AAAA** record pointing to
     the server's configured public IPv4 or IPv6 address. Set that address first.
     The server still needs reachable public ports and appropriate origin TLS.
 
 Tunnels are currently managed on the panel's local server only; remote servers
 use proxied DNS. Paths on one hostname must use the same routing mode, and a
-Cloudflare hostname cannot point to two different Rudder servers.
+Cloudflare hostname cannot point to two different Dymini Panel servers.
 
 Cloudflare routing is opt-in even on tunnel servers. Upgrading preserves existing
 local service domains when a tunnel is already published. New domains default
@@ -38,12 +38,12 @@ on direct routing.
 
 Existing DNS records are not replaced unless you explicitly select **Replace
 conflicting DNS records** (`overwrite_dns: true` in the API). This permission
-also allows replacing records not created by Rudder.
+also allows replacing records not created by Dymini Panel.
 
-Deleting a domain or switching to direct removes only Rudder-created records.
-Rudder tracks the zone, record ID, hostname, type and last-written target; it
+Deleting a domain or switching to direct removes only Dymini-Panel-created records.
+Dymini Panel tracks the zone, record ID, hostname, type and last-written target; it
 leaves independently modified records alone. Older tunnel records are recognized
-by their `Managed by Rudder` Cloudflare comment. Records without ownership
+by their `Managed by Dymini Panel` Cloudflare comment. Records without ownership
 evidence are left alone. Shared hostnames retain DNS until their last Cloudflare
 route is removed. Before changing credentials to a different account or zone,
 clean up old records; the new credentials may no longer have access to them.

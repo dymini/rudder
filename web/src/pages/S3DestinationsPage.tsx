@@ -125,13 +125,13 @@ export function S3DestinationsPage() {
         )}
       </p>
       <Card
-        title={t("Rudder Image")}
+        title={t("Dymini Panel Image")}
         description={t(
-          "To store Docker images pushed with `rudder push` on one of these buckets, pick it on the Rudder Image page.",
+          "To store Docker images pushed with `dymini-panel push` on one of these buckets, pick it on the Dymini Panel Image page.",
         )}
         actions={
-          <Link to="/rudder-image" className={buttonClass({ variant: "secondary", size: "sm" })}>
-            {t("Open Rudder Image")}
+          <Link to="/dymini-panel-image" className={buttonClass({ variant: "secondary", size: "sm" })}>
+            {t("Open Dymini Panel Image")}
           </Link>
         }
       />

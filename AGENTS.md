@@ -167,11 +167,11 @@ feature, not as paperwork.
 - In the **same pull request** as the change, add a line under `## [Unreleased]`
   in the right section (**Added**, **Changed**, **Fixed**, **Security**,
   **Removed**). One line per thing a person can notice or that changes how
-  Rudder behaves: new screens and actions, new or changed settings and
+  Dymini Panel behaves: new screens and actions, new or changed settings and
   environment variables, behavior that differs from before, fixes for bugs users
   could hit, security changes, and anything that needs action on upgrade
   (migrations, new required variables, removed options).
-- Write for the person running Rudder, in plain words: what they can now do or
+- Write for the person running Dymini Panel, in plain words: what they can now do or
   what changed for them, in bold lead-in plus a sentence. Not file names, not
   commit titles, not "refactor". Mention a breaking or manual step explicitly.
 - Commit the changelog line with the slice it describes (small commits), so
@@ -188,7 +188,7 @@ feature, not as paperwork.
 
 ## MCP parity (mandatory)
 
-Every user-facing Rudder feature must be controllable by an authorized AI agent
+Every user-facing Dymini Panel feature must be controllable by an authorized AI agent
 through the panel's MCP server (`docs/mcp.md`).
 
 When you add or change a panel feature:
@@ -198,7 +198,7 @@ When you add or change a panel feature:
 2. Use an OpenAPI tag that already has an MCP scope (`auth`, `catalog`,
    `agent`, `edge`, `source`, `databases`, `backups`, `stacks`, `cache`,
    `logs`, `monitoring`, `system`), or add the new scope to
-   `rudder_core::MCP_SCOPES` and to the permission templates in the same change.
+   `dymini_panel_core::MCP_SCOPES` and to the permission templates in the same change.
    **Full control** must include the new read and write scopes.
 3. Leave the route off the MCP exclusion list unless it cannot be a normal
    request/response tool (browser sign-in, inbound webhooks, WebSockets, public

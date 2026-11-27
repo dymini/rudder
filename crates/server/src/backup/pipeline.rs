@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 use async_compression::tokio::bufread::{GzipDecoder, GzipEncoder, ZstdDecoder, ZstdEncoder};
 use async_compression::Level;
 use bytes::Bytes;
+use dymini_panel_core::{ByteStream, Compression, Decryptor, Encryptor, Error};
 use futures_util::{StreamExt, TryStreamExt};
-use rudder_core::{ByteStream, Compression, Decryptor, Encryptor, Error};
 use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 use tokio_util::io::{ReaderStream, StreamReader};
@@ -64,7 +64,7 @@ enum Sealing {
     Done,
 }
 
-/// Wrap `stream` in the Rudder envelope. Key derivation happens here, once.
+/// Wrap `stream` in the Dymini Panel envelope. Key derivation happens here, once.
 pub fn encrypt(stream: ByteStream, passphrase: &str) -> Result<ByteStream, Error> {
     let encryptor = Encryptor::new(passphrase)?;
     let state = Sealing::Open(stream, Box::new(encryptor));

@@ -10,8 +10,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use rudder_core::{ComposeAction, ComposeOptions, LogSink, NodeDriver, RegistryAuth};
-use rudder_node::LocalDriver;
+use dymini_panel_core::{ComposeAction, ComposeOptions, LogSink, NodeDriver, RegistryAuth};
+use dymini_panel_node::LocalDriver;
 
 /// Tests share one `PATH`, so they take turns.
 static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -37,7 +37,7 @@ async fn setup(
     LocalDriver,
 ) {
     let turn = TURN.lock().await;
-    let root = std::env::temp_dir().join(format!("rudder-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("dymini-panel-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("stacks/blog")).unwrap();
     std::fs::write(root.join("stacks/blog/compose.yml"), "services: {}\n").unwrap();

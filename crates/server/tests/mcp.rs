@@ -5,29 +5,32 @@ use std::collections::HashMap;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use base64::Engine;
+use dymini_panel_server::AppState;
 use http_body_util::BodyExt;
-use rudder_server::AppState;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use tower::ServiceExt;
 
-fn test_config(database_url: &str) -> rudder_server::Config {
+fn test_config(database_url: &str) -> dymini_panel_server::Config {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), database_url.to_owned()),
-        ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_LOG_FORMAT".into(), "pretty".into()),
-        ("RUDDER_PUBLIC_URL".into(), "https://panel.example".into()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        ("DYMINI_PANEL_LOG_FORMAT".into(), "pretty".into()),
+        (
+            "DYMINI_PANEL_PUBLIC_URL".into(),
+            "https://panel.example".into(),
+        ),
     ]);
-    rudder_server::Config::from_map(&vars, |_| unreachable!("no key file")).expect("config")
+    dymini_panel_server::Config::from_map(&vars, |_| unreachable!("no key file")).expect("config")
 }
 
 fn app(pool: PgPool) -> axum::Router {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
-    rudder_server::router(AppState::new(pool, test_config(&url)))
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
+    dymini_panel_server::router(AppState::new(pool, test_config(&url)))
 }
 
 struct Reply {
@@ -49,7 +52,7 @@ async fn call(
 ) -> Reply {
     let mut builder = Request::builder().method(method).uri(path);
     if let Some(cookie) = cookie {
-        builder = builder.header("cookie", format!("rudder_session={cookie}"));
+        builder = builder.header("cookie", format!("dymini_panel_session={cookie}"));
     }
     if let Some(csrf) = csrf {
         builder = builder.header("x-csrf-token", csrf);
@@ -84,7 +87,7 @@ fn session_of(reply: &Reply) -> (String, String) {
         .get("set-cookie")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .and_then(|pair| pair.strip_prefix("rudder_session="))
+        .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
         .unwrap()
         .to_owned();
     let csrf = reply.body["csrf_token"].as_str().unwrap().to_owned();
@@ -332,7 +335,7 @@ async fn agent_login_refreshes_and_can_control_the_panel(pool: PgPool) {
         .iter()
         .map(|tool| tool["name"].as_str().unwrap())
         .collect();
-    assert!(names.contains(&"rudder_whoami"));
+    assert!(names.contains(&"dymini_panel_whoami"));
     assert!(names.contains(&"get_v1_projects"));
     assert!(names.contains(&"post_v1_projects"));
     assert!(!names.contains(&"post_v1_login"));
@@ -852,7 +855,7 @@ async fn token_request(app: &axum::Router, form: &str) -> Reply {
 async fn long_authorization_state_survives_consent_and_token_exchange(pool: PgPool) {
     let app = app(pool);
     let redirect_uri = "https://api.devin.ai/mcp/oauth/callback";
-    let resource = "https://rudder.dymini.com/mcp";
+    let resource = "https://dymini-panel.dymini.com/mcp";
     let registered = client_request(
         &app,
         "/oauth/register",
@@ -864,7 +867,7 @@ async fn long_authorization_state_survives_consent_and_token_exchange(pool: PgPo
     .await;
     assert_eq!(registered.status, StatusCode::CREATED);
     let id = registered.body["client_id"].as_str().unwrap();
-    let scopes: Vec<&str> = rudder_core::MCP_SCOPES
+    let scopes: Vec<&str> = dymini_panel_core::MCP_SCOPES
         .iter()
         .map(|scope| scope.id)
         .collect();

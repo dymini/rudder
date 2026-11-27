@@ -14,7 +14,7 @@ use crate::agent::AgentRegistry;
 use crate::driver::LocalDriver;
 use crate::logs::LogHub;
 use crate::Config;
-use rudder_core::Cipher;
+use dymini_panel_core::Cipher;
 
 /// Per-server backup concurrency limit and its semaphore.
 pub type BackupSlots = Mutex<HashMap<Uuid, (usize, Arc<Semaphore>)>>;

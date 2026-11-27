@@ -563,7 +563,7 @@ mod tests {
     #[tokio::test]
     async fn a_restart_reads_the_object_back_from_disk() {
         let dir = std::env::temp_dir().join(format!(
-            "rudder-cache-disk-{}-{}",
+            "dymini-panel-cache-disk-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

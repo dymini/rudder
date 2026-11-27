@@ -9,8 +9,10 @@ use std::sync::{Arc, LazyLock, RwLock};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
+use dymini_panel_core::{
+    ContainerInfo, LogStreamKind, NodeDriver, CACHE_CONTAINER, TRAEFIK_CONTAINER,
+};
 use futures_util::StreamExt;
-use rudder_core::{ContainerInfo, LogStreamKind, NodeDriver, CACHE_CONTAINER, TRAEFIK_CONTAINER};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
@@ -40,7 +42,7 @@ pub async fn run(state: AppState) {
     let mut followed: HashMap<String, JoinHandle<()>> = HashMap::new();
     loop {
         if let Err(error) = tick(&state, &mut followed).await {
-            tracing::debug!(target: "rudder_server::logs", %error, "log collector tick failed");
+            tracing::debug!(target: "dymini_panel_server::logs", %error, "log collector tick failed");
         }
         tokio::time::sleep(TICK).await;
     }
@@ -120,11 +122,21 @@ pub(crate) async fn resolve(
     if container.name == CACHE_CONTAINER {
         return Ok(Some(system_target("cache")));
     }
-    if container.labels.get("rudder.managed").map(String::as_str) != Some("true") {
+    // Pre-rebrand containers carry `rudder.*` labels; accept them until redeployed.
+    let labels = &container.labels;
+    let managed = labels
+        .get("dymini-panel.managed")
+        .or_else(|| labels.get("rudder.managed"));
+    if managed.map(String::as_str) != Some("true") {
         return Ok(None);
     }
-    let service_label = container.labels.get("rudder.service");
-    let row = if let Some(project) = container.labels.get("rudder.project") {
+    let service_label = labels
+        .get("dymini-panel.service")
+        .or_else(|| labels.get("rudder.service"));
+    let row = if let Some(project) = labels
+        .get("dymini-panel.project")
+        .or_else(|| labels.get("rudder.project"))
+    {
         sqlx::query!(
             r#"
             SELECT s.id, e.project_id
@@ -160,7 +172,7 @@ pub(crate) async fn resolve(
         project_id: Some(project_id),
         compose_service: container
             .labels
-            .contains_key("rudder.project")
+            .contains_key("dymini-panel.project")
             .then(|| service_label.cloned())
             .flatten(),
         secrets: service_secrets(state, service_id).await,
@@ -181,7 +193,7 @@ fn system_target(source: &'static str) -> Target {
 async fn service_secrets(state: &AppState, service_id: Uuid) -> Vec<String> {
     let mut out: Vec<String> = crate::stacks::load_env(state, service_id)
         .await
-        .map(|env| rudder_core::env_secrets(&env))
+        .map(|env| dymini_panel_core::env_secrets(&env))
         .unwrap_or_default();
     if let Ok(info) = crate::routes::databases::load_database(state, service_id).await {
         out.extend(info.secrets().into_iter().map(str::to_owned));
@@ -222,7 +234,7 @@ async fn follow(
     let mut stream = match driver.follow_logs(&container.id, since.timestamp()).await {
         Ok(stream) => stream,
         Err(error) => {
-            tracing::debug!(target: "rudder_server::logs", %error, container = %container.name, "follow failed");
+            tracing::debug!(target: "dymini_panel_server::logs", %error, container = %container.name, "follow failed");
             return;
         }
     };
@@ -231,7 +243,7 @@ async fn follow(
         let logged_at = line
             .timestamp
             .as_deref()
-            .and_then(rudder_core::parse_docker_timestamp)
+            .and_then(dymini_panel_core::parse_docker_timestamp)
             .unwrap_or_else(Utc::now);
         if logged_at <= since {
             continue;
@@ -294,9 +306,9 @@ pub(crate) fn to_entry(
         text
     } else {
         let secrets: Vec<&str> = target.secrets.iter().map(String::as_str).collect();
-        rudder_core::redact(&text, &secrets)
+        dymini_panel_core::redact(&text, &secrets)
     };
-    let parsed = rudder_core::parse_line(&text);
+    let parsed = dymini_panel_core::parse_line(&text);
     let mut fields = parsed.fields;
     fields.insert("container".into(), container.name.clone().into());
     fields.insert("container_id".into(), container.id.clone().into());

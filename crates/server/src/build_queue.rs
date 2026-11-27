@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use rudder_core::{
+use dymini_panel_core::{
     can_start, docker_build_argv, git_clone_argv, github_app_jwt, nixpacks_argv, redact,
     static_dockerfile, validate_env_key, BuildPlan, BuildStrategy, NodeDriver,
 };
@@ -189,7 +189,7 @@ pub async fn cancel(state: &AppState, queue_id: Uuid) -> Result<(), ApiError> {
         tx.commit().await.map_err(ApiError::database)?;
         if let Some(builder) = row.builder_id.and_then(|id| state.agents.session(id)) {
             let _ = builder
-                .call::<bool>(rudder_node::ops::Request::BuildCancel {
+                .call::<bool>(dymini_panel_node::ops::Request::BuildCancel {
                     job_id: queue_id.to_string(),
                 })
                 .await;
@@ -370,7 +370,7 @@ async fn execute_local(
         return Err("build cancelled".into());
     }
     let tag = deployment_id.simple().to_string();
-    let image = format!("rudder-{service_name}:{}", &tag[..12]);
+    let image = format!("dymini-panel-{service_name}:{}", &tag[..12]);
     let plan = BuildPlan {
         strategy: source.strategy,
         context: source.context.clone(),
@@ -407,7 +407,7 @@ async fn execute_local(
             };
             std::fs::create_dir_all(&dockerfile_dir)
                 .map_err(|_| "could not write the static dockerfile")?;
-            let path = dockerfile_dir.join("Dockerfile.rudder");
+            let path = dockerfile_dir.join("Dockerfile.dymini-panel");
             std::fs::write(&path, dockerfile)
                 .map_err(|_| "could not write the static dockerfile")?;
         }
@@ -431,7 +431,7 @@ async fn execute_local(
                 Duration::from_secs(5),
                 state
                     .local_driver
-                    .remove_container(&format!("rudder-build-test-{queue_id}"), true),
+                    .remove_container(&format!("dymini-panel-build-test-{queue_id}"), true),
             )
             .await;
         }
@@ -487,7 +487,7 @@ fn panel_commands(
             "run".into(),
             "--rm".into(),
             "--name".into(),
-            format!("rudder-build-test-{queue}"),
+            format!("dymini-panel-build-test-{queue}"),
             plan.image.clone(),
             "sh".into(),
             "-c".into(),
@@ -810,7 +810,7 @@ pub(crate) async fn installation_token(
         .post(url)
         .header("authorization", format!("Bearer {jwt}"))
         .header("accept", "application/vnd.github+json")
-        .header("user-agent", "rudder")
+        .header("user-agent", "dymini-panel")
         .header("x-github-api-version", "2022-11-28")
         .send()
         .await

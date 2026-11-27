@@ -14,7 +14,7 @@ variables:
   - name: ACCESS_KEY
     label: Access key
     kind: string
-    default: rudder
+    default: dymini-panel
   - name: SECRET_KEY
     label: Secret key
     kind: secret

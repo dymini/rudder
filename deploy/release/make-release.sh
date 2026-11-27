@@ -1,13 +1,13 @@
 #!/bin/sh
-# Write release.json and SHA256SUMS for a Rudder release.
+# Write release.json and SHA256SUMS for a Dymini Panel release.
 #
 #   deploy/release/make-release.sh VERSION DIR PANEL_IMAGE CACHE_IMAGE
 #
 # DIR holds the release files (binaries, install scripts) and an agents/
-# directory with rudder-agent-<target>. Both images must be pinned by digest
+# directory with dymini-panel-agent-<target>. Both images must be pinned by digest
 # (name@sha256:...). Sign the result with:
 #
-#   minisign -S -s rudder.key -m DIR/SHA256SUMS -t "rudder VERSION"
+#   minisign -S -s dymini-panel.key -m DIR/SHA256SUMS -t "dymini-panel VERSION"
 set -eu
 
 if [ "$#" -ne 4 ]; then
@@ -32,10 +32,10 @@ done
 
 agents=""
 for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
-    file="$dir/agents/rudder-agent-$target"
+    file="$dir/agents/dymini-panel-agent-$target"
     if [ -f "$file" ]; then
         sum=$(sha256sum "$file" | cut -d ' ' -f 1)
-        cp "$file" "$dir/rudder-agent-$target"
+        cp "$file" "$dir/dymini-panel-agent-$target"
         [ -z "$agents" ] || agents="$agents,"
         agents="$agents
     \"$target\": \"$sum\""
@@ -48,7 +48,7 @@ fi
 
 cat > "$dir/release.json" <<EOF
 {
-  "format": "rudder-release",
+  "format": "dymini-panel-release",
   "version": "$version",
   "images": {
     "panel": "$panel",

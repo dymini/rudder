@@ -11,18 +11,21 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-fn state(pool: PgPool) -> rudder_server::AppState {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+fn state(pool: PgPool) -> dymini_panel_server::AppState {
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
-        ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_PUBLIC_URL".into(), "https://panel.example".into()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        (
+            "DYMINI_PANEL_PUBLIC_URL".into(),
+            "https://panel.example".into(),
+        ),
     ]);
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::AppState::new(pool, config)
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    dymini_panel_server::AppState::new(pool, config)
 }
 
 struct Client {
@@ -54,7 +57,7 @@ impl Client {
             .get("set-cookie")
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.split(';').next())
-            .and_then(|pair| pair.strip_prefix("rudder_session="))
+            .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
             .unwrap()
             .to_owned();
         let body: Value =
@@ -71,7 +74,7 @@ impl Client {
         let builder = Request::builder()
             .method(method)
             .uri(path)
-            .header("cookie", format!("rudder_session={}", self.cookie))
+            .header("cookie", format!("dymini_panel_session={}", self.cookie))
             .header("x-csrf-token", &self.csrf);
         let request = match body {
             Some(body) => builder
@@ -141,7 +144,7 @@ async fn queued_build(pool: &PgPool) -> (Uuid, Uuid) {
 #[sqlx::test(migrations = "./migrations")]
 async fn paused_builds_wait_and_resume(pool: PgPool) {
     let app_state = state(pool.clone());
-    let client = Client::owner(rudder_server::router(app_state.clone())).await;
+    let client = Client::owner(dymini_panel_server::router(app_state.clone())).await;
     let (_, queue) = queued_build(&pool).await;
 
     let (status, view) = client.call("GET", "/api/v1/load", None).await;
@@ -169,7 +172,7 @@ async fn paused_builds_wait_and_resume(pool: PgPool) {
     assert!(paused);
 
     // The queue does not claim the build while builds are paused.
-    assert!(!rudder_server::build_once(&app_state).await.unwrap());
+    assert!(!dymini_panel_server::build_once(&app_state).await.unwrap());
     let still: String = sqlx::query_scalar("SELECT status FROM build_queue WHERE id = $1")
         .bind(queue)
         .fetch_one(&pool)
@@ -197,7 +200,7 @@ async fn paused_builds_wait_and_resume(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn settings_are_validated_and_saved(pool: PgPool) {
-    let client = Client::owner(rudder_server::router(state(pool.clone()))).await;
+    let client = Client::owner(dymini_panel_server::router(state(pool.clone()))).await;
     let (status, _) = client
         .call(
             "PUT",
@@ -256,7 +259,7 @@ async fn settings_are_validated_and_saved(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn cancelling_clears_queued_builds(pool: PgPool) {
-    let client = Client::owner(rudder_server::router(state(pool.clone()))).await;
+    let client = Client::owner(dymini_panel_server::router(state(pool.clone()))).await;
     let (deployment, queue) = queued_build(&pool).await;
     let (status, body) = client
         .call("POST", "/api/v1/load/cancel-builds", None)
@@ -282,7 +285,7 @@ async fn cancelling_clears_queued_builds(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn viewers_can_look_but_not_act(pool: PgPool) {
-    let client = Client::owner(rudder_server::router(state(pool.clone()))).await;
+    let client = Client::owner(dymini_panel_server::router(state(pool.clone()))).await;
     let (status, _) = client
         .call(
             "POST",
@@ -309,7 +312,7 @@ async fn viewers_can_look_but_not_act(pool: PgPool) {
         .get("set-cookie")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .and_then(|pair| pair.strip_prefix("rudder_session="))
+        .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
         .unwrap()
         .to_owned();
     let body: Value =
@@ -338,7 +341,7 @@ async fn viewers_can_look_but_not_act(pool: PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 async fn cancel_all_includes_running_builder_jobs(pool: PgPool) {
     let state = state(pool.clone());
-    let client = Client::owner(rudder_server::router(state.clone())).await;
+    let client = Client::owner(dymini_panel_server::router(state.clone())).await;
     let (_, queue) = queued_build(&pool).await;
     let builder: Uuid = sqlx::query_scalar("INSERT INTO servers (name, kind, builder_enabled) VALUES ('builder', 'remote', TRUE) RETURNING id").fetch_one(&pool).await.unwrap();
     sqlx::query("UPDATE build_queue SET status = 'running', builder_id = $2 WHERE id = $1")

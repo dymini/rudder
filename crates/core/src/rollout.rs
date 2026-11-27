@@ -297,7 +297,7 @@ mod tests {
             memory_bytes: None,
             nano_cpus: None,
             restart: "unless-stopped".into(),
-            network: Some("rudder-proxy".into()),
+            network: Some("dymini-panel-proxy".into()),
             labels: Vec::new(),
             auth: Some(RegistryAuth {
                 server: "ghcr.io".into(),

@@ -13,15 +13,15 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures_util::StreamExt;
-use rudder_core::{
+use dymini_panel_core::{
     ArchiveSource, ByteStream, CachePurge, CachePurgeResult, CacheStats, ComposeAction,
     ComposeOptions, ContainerInfo, ContainerSpec, ContainerStats, DockerInfo, Error, ExecOutput,
     ExecSpec, HealthState, HostStats, LogLine, LogLineStream, LogSink, NodeDriver, RegistryAuth,
     ReplaceContainer, ReplaceReport, TerminalInput, TerminalInputStream,
 };
-use rudder_node::ops::{self, Request};
-use rudder_proto::agent::{server_message, Command, CommandResult, Frame, ServerMessage};
+use dymini_panel_node::ops::{self, Request};
+use dymini_panel_proto::agent::{server_message, Command, CommandResult, Frame, ServerMessage};
+use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
@@ -34,6 +34,10 @@ const STREAM_BUFFER: usize = 16;
 
 pub type ServerSender = mpsc::Sender<Result<ServerMessage, Status>>;
 pub type FrameSender = mpsc::Sender<Result<Frame, Status>>;
+/// The agent's side of a `Channel` RPC, boxed so the pre-rebrand legacy
+/// service can feed converted frames through the same plumbing.
+pub type FrameIncoming =
+    std::pin::Pin<Box<dyn futures_util::Stream<Item = Result<Frame, Status>> + Send>>;
 
 enum Slot {
     /// Agent to panel.
@@ -218,7 +222,7 @@ impl RemoteDriver {
     pub fn attach_channel(
         &self,
         first: Frame,
-        mut incoming: tonic::Streaming<Frame>,
+        mut incoming: FrameIncoming,
         outgoing: FrameSender,
     ) -> Result<(), Status> {
         let stream_id = first.stream_id.clone();

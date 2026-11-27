@@ -4,28 +4,28 @@ use std::collections::HashMap;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
+use dymini_panel_server::AppState;
 use http_body_util::BodyExt;
-use rudder_server::AppState;
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use totp_rs::{Builder, Secret};
 use tower::ServiceExt;
 
-fn test_config(database_url: &str) -> rudder_server::Config {
+fn test_config(database_url: &str) -> dymini_panel_server::Config {
     let vars = HashMap::from([
         ("DATABASE_URL".into(), database_url.to_owned()),
-        ("RUDDER_MASTER_KEY".into(), "bb".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_LOG_FORMAT".into(), "pretty".into()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "bb".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        ("DYMINI_PANEL_LOG_FORMAT".into(), "pretty".into()),
     ]);
-    rudder_server::Config::from_map(&vars, |_| unreachable!("no key file")).expect("config")
+    dymini_panel_server::Config::from_map(&vars, |_| unreachable!("no key file")).expect("config")
 }
 
 fn app(pool: PgPool) -> axum::Router {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
-    rudder_server::router(AppState::new(pool, test_config(&url)))
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
+    dymini_panel_server::router(AppState::new(pool, test_config(&url)))
 }
 
 struct Reply {
@@ -45,7 +45,7 @@ async fn call(
 ) -> Reply {
     let mut builder = Request::builder().method(method).uri(path);
     if let Some(cookie) = cookie {
-        builder = builder.header("cookie", format!("rudder_session={cookie}"));
+        builder = builder.header("cookie", format!("dymini_panel_session={cookie}"));
     }
     if let Some(csrf) = csrf {
         builder = builder.header("x-csrf-token", csrf);
@@ -68,7 +68,7 @@ async fn call(
         .get("set-cookie")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .and_then(|pair| pair.strip_prefix("rudder_session="))
+        .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
         .map(str::to_owned);
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let body = if bytes.is_empty() {
@@ -218,7 +218,7 @@ async fn setup_login_logout_and_csrf(pool: PgPool) {
     assert_eq!(spec.status, StatusCode::OK);
     let text = spec.body.to_string();
     assert!(text.contains("/api/v1/login"));
-    assert!(text.contains("Rudder API"));
+    assert!(text.contains("Dymini Panel API"));
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -771,7 +771,7 @@ fn current_code(secret_b32: &str, email: &str) -> String {
     let totp = Builder::new()
         .with_secret(secret)
         .with_account_name(email)
-        .with_issuer(Some("Rudder"))
+        .with_issuer(Some("Dymini Panel"))
         .build()
         .unwrap();
     totp.generate_current().to_string()
@@ -798,21 +798,25 @@ async fn setup_requires_the_setup_token(pool: PgPool) {
         .unwrap();
     assert_eq!(users, 0);
 
-    let data_dir = std::env::temp_dir().join(format!("rudder-setup-{}", uuid::Uuid::new_v4()));
+    let data_dir =
+        std::env::temp_dir().join(format!("dymini-panel-setup-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&data_dir).unwrap();
     let vars = HashMap::from([
         (
             "DATABASE_URL".into(),
-            "postgres://localhost/rudder".to_owned(),
+            "postgres://localhost/dymini-panel".to_owned(),
         ),
-        ("RUDDER_MASTER_KEY".into(), "bb".repeat(32)),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_LOG_FORMAT".into(), "pretty".into()),
-        ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "bb".repeat(32)),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        ("DYMINI_PANEL_LOG_FORMAT".into(), "pretty".into()),
+        (
+            "DYMINI_PANEL_DATA_DIR".into(),
+            data_dir.display().to_string(),
+        ),
     ]);
-    let config =
-        rudder_server::Config::from_map(&vars, |_| unreachable!("no key file")).expect("config");
-    let from_file = rudder_server::router(AppState::new(pool.clone(), config));
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!("no key file"))
+        .expect("config");
+    let from_file = dymini_panel_server::router(AppState::new(pool.clone(), config));
     let reply = call(
         &from_file,
         "POST",

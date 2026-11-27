@@ -1,4 +1,4 @@
-//! Shared domain primitives for the Rudder control plane, agent, and CLI.
+//! Shared domain primitives for the Dymini Panel control plane, agent, and CLI.
 //!
 //! Infrastructure crates depend on this crate. It does not talk to Docker,
 //! PostgreSQL, or the network.
@@ -13,6 +13,7 @@ mod compose;
 mod crypto;
 mod database;
 mod driver;
+mod dymini_panel_image;
 mod envelope;
 mod envfile;
 mod error;
@@ -28,7 +29,6 @@ mod ratelimit;
 mod release;
 mod retention;
 mod rollout;
-mod rudder_image;
 mod schedule;
 mod stack;
 mod template;
@@ -84,6 +84,12 @@ pub use driver::{
     NodeDriver, PortMapping, ReadyProbe, RegistryAuth, ReplaceContainer, ReplaceReport,
     TerminalInput, TerminalInputStream, VolumeMount,
 };
+pub use dymini_panel_image::{
+    compose_image_env_vars, generate_device_code, image_env_slug, image_object_key,
+    is_dymini_panel_image_env_var, normalize_device_code, select_images_to_prune,
+    select_images_to_prune_protecting, validate_cli_callback_url, validate_image_tag,
+    ImageVersionEntry,
+};
 pub use envelope::{Decryptor, Encryptor, MAGIC as ENVELOPE_MAGIC};
 pub use envfile::{
     parse_env_text, EnvEntry, EnvParse, EnvParseError, MAX_ENV_VALUE_BYTES, MAX_IMPORT_ENTRIES,
@@ -134,12 +140,6 @@ pub use retention::{expired_ids, BackupPoint, RetentionPolicy};
 pub use rollout::{
     retire_container, rollout, HealthKind, HealthSpec, RolloutOutput, RolloutPlan, StartedContainer,
 };
-pub use rudder_image::{
-    compose_image_env_vars, generate_device_code, image_env_slug, image_object_key,
-    is_rudder_image_env_var, normalize_device_code, select_images_to_prune,
-    select_images_to_prune_protecting, validate_cli_callback_url, validate_image_tag,
-    ImageVersionEntry,
-};
 pub use schedule::{is_due, next_after, parse_timezone, validate_schedule, PRESETS};
 pub use stack::{
     compose_variable_refs, compose_variables, render_env_file, transform_compose,
@@ -163,12 +163,12 @@ pub fn random_bytes<const N: usize>() -> [u8; N] {
     bytes
 }
 
-/// Version shared by every Rudder binary. Release builds set
-/// `RUDDER_BUILD_VERSION` from the tag; other builds use the crate version.
-pub const VERSION: &str = match option_env!("RUDDER_BUILD_VERSION") {
+/// Version shared by every Dymini Panel binary. Release builds set
+/// `DYMINI_PANEL_BUILD_VERSION` from the tag; other builds use the crate version.
+pub const VERSION: &str = match option_env!("DYMINI_PANEL_BUILD_VERSION") {
     Some(version) => version,
     None => env!("CARGO_PKG_VERSION"),
 };
 
 /// Product name used in logs, installers, and the panel.
-pub const PRODUCT: &str = "rudder";
+pub const PRODUCT: &str = "dymini-panel";

@@ -62,7 +62,7 @@ pub async fn load(pool: &PgPool) -> Result<RetentionSettings, sqlx::Error> {
         .await?;
     let mut log_days: BTreeMap<String, u32> =
         serde_json::from_value(row.log_days).unwrap_or_default();
-    for source in rudder_core::LOG_SOURCES {
+    for source in dymini_panel_core::LOG_SOURCES {
         log_days
             .entry(source.to_string())
             .or_insert(DEFAULT_LOG_DAYS);
@@ -83,7 +83,7 @@ pub struct RetentionReport {
 pub async fn run_once(pool: &PgPool) -> Result<RetentionReport, sqlx::Error> {
     for offset in 0_i32..=2 {
         sqlx::query!(
-            "SELECT rudder_ensure_daily_partition('log_entries', (CURRENT_DATE + $1::int))",
+            "SELECT dymini_panel_ensure_daily_partition('log_entries', (CURRENT_DATE + $1::int))",
             offset
         )
         .execute(pool)
@@ -119,8 +119,8 @@ pub async fn run_once(pool: &PgPool) -> Result<RetentionReport, sqlx::Error> {
     .fetch_all(pool)
     .await?;
     let today = Utc::now().date_naive();
-    for name in rudder_core::partitions_to_drop(
-        rudder_core::LOG_PARTITION_PREFIX,
+    for name in dymini_panel_core::partitions_to_drop(
+        dymini_panel_core::LOG_PARTITION_PREFIX,
         &names,
         today,
         keep.saturating_add(1),

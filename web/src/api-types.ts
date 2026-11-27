@@ -72,7 +72,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/_rudder/callback": {
+    "/_dymini_panel/callback": {
         parameters: {
             query?: never;
             header?: never;
@@ -80,7 +80,7 @@ export interface paths {
             cookie?: never;
         };
         /** Redeem a one-time Access code on its gated service hostname */
-        get: operations["get___rudder_callback"];
+        get: operations["get___dymini_panel_callback"];
         put?: never;
         post?: never;
         delete?: never;
@@ -183,10 +183,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List people allowed into Rudder Access */
+        /** List people allowed into Dymini Panel Access */
         get: operations["get_v1_access_identities"];
         put?: never;
-        /** Allow a person into Rudder Access (admin, write) */
+        /** Allow a person into Dymini Panel Access (admin, write) */
         post: operations["post_v1_access_identities"];
         delete?: never;
         options?: never;
@@ -204,11 +204,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Remove a Rudder Access person (admin, write) */
+        /** Remove a Dymini Panel Access person (admin, write) */
         delete: operations["delete_v1_access_identities__id_"];
         options?: never;
         head?: never;
-        /** Update a Rudder Access person (admin, write) */
+        /** Update a Dymini Panel Access person (admin, write) */
         patch: operations["patch_v1_access_identities__id_"];
         trace?: never;
     };
@@ -256,7 +256,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Email a 6-digit Rudder Access code */
+        /** Email a 6-digit Dymini Panel Access code */
         post: operations["post_v1_access_login_email"];
         delete?: never;
         options?: never;
@@ -273,7 +273,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sign in to Rudder Access with an email code */
+        /** Sign in to Dymini Panel Access with an email code */
         post: operations["post_v1_access_login_email_verify"];
         delete?: never;
         options?: never;
@@ -290,7 +290,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start Google sign-in for Rudder Access */
+        /** Start Google sign-in for Dymini Panel Access */
         post: operations["post_v1_access_login_google"];
         delete?: never;
         options?: never;
@@ -305,7 +305,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Finish Google sign-in for Rudder Access */
+        /** Finish Google sign-in for Dymini Panel Access */
         get: operations["get_v1_access_login_google_callback"];
         put?: never;
         post?: never;
@@ -324,7 +324,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sign out of Rudder Access */
+        /** Sign out of Dymini Panel Access */
         post: operations["post_v1_access_logout"];
         delete?: never;
         options?: never;
@@ -339,7 +339,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The signed-in Rudder Access person */
+        /** The signed-in Dymini Panel Access person */
         get: operations["get_v1_access_me"];
         put?: never;
         post?: never;
@@ -356,7 +356,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Public Rudder Access sign-in settings */
+        /** Public Dymini Panel Access sign-in settings */
         get: operations["get_v1_access_public"];
         put?: never;
         post?: never;
@@ -409,7 +409,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read whether an app requires Rudder Access */
+        /** Read whether an app requires Dymini Panel Access */
         get: operations["get_v1_access_services__id_"];
         /** Set who may open an app (admin, write) */
         put: operations["put_v1_access_services__id_"];
@@ -444,9 +444,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Rudder Access provider settings */
+        /** Dymini Panel Access provider settings */
         get: operations["get_v1_access_settings"];
-        /** Save Rudder Access provider settings (admin, write) */
+        /** Save Dymini Panel Access provider settings (admin, write) */
         put: operations["put_v1_access_settings"];
         post?: never;
         delete?: never;
@@ -1056,7 +1056,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve a rudder CLI browser callback or 8-character device code login */
+        /** Approve a dymini-panel CLI browser callback or 8-character device code login */
         post: operations["post_v1_cli_auth_approve"];
         delete?: never;
         options?: never;
@@ -1073,7 +1073,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Poll a rudder CLI login request for the issued API token */
+        /** Poll a dymini-panel CLI login request for the issued API token */
         post: operations["post_v1_cli_auth_poll"];
         delete?: never;
         options?: never;
@@ -1088,7 +1088,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Inspect a pending rudder CLI login request before approving it */
+        /** Inspect a pending dymini-panel CLI login request before approving it */
         get: operations["get_v1_cli_auth_requests__id_"];
         put?: never;
         post?: never;
@@ -1107,7 +1107,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start a browser or 8-character device-code login flow for rudder CLI */
+        /** Start a browser or 8-character device-code login flow for dymini-panel CLI */
         post: operations["post_v1_cli_auth_start"];
         delete?: never;
         options?: never;
@@ -1430,7 +1430,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the built-in Rudder guides of this panel version */
+        /** List the built-in Dymini Panel guides of this panel version */
         get: operations["get_v1_docs"];
         put?: never;
         post?: never;
@@ -1447,7 +1447,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Search the Rudder documentation of this panel version. Query: q (required), limit (default 5, max 20) */
+        /** Search the Dymini Panel documentation of this panel version. Query: q (required), limit (default 5, max 20) */
         get: operations["get_v1_docs_search"];
         put?: never;
         post?: never;
@@ -1464,7 +1464,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read one Rudder guide as Markdown by name, as listed by the docs list or search */
+        /** Read one Dymini Panel guide as Markdown by name, as listed by the docs list or search */
         get: operations["get_v1_docs__name_"];
         put?: never;
         post?: never;
@@ -1858,7 +1858,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Rudder Image dashboard: setup status, push and build statistics, per-service usage, recent pushes, and signed-in CLI clients */
+        /** Dymini Panel Image dashboard: setup status, push and build statistics, per-service usage, recent pushes, and signed-in CLI clients */
         get: operations["get_v1_image-store_overview"];
         put?: never;
         post?: never;
@@ -1875,9 +1875,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Rudder Image store settings (Cloudflare R2 / S3 destination and default retention) */
+        /** Dymini Panel Image store settings (Cloudflare R2 / S3 destination and default retention) */
         get: operations["get_v1_image-store_settings"];
-        /** Configure the Cloudflare R2 / S3 destination and default retention for Rudder Images */
+        /** Configure the Cloudflare R2 / S3 destination and default retention for Dymini Panel Images */
         put: operations["put_v1_image-store_settings"];
         post?: never;
         delete?: never;
@@ -1895,7 +1895,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Check the Rudder Image bucket by writing, reading, and deleting a probe object */
+        /** Check the Dymini Panel Image bucket by writing, reading, and deleting a probe object */
         post: operations["post_v1_image-store_test"];
         delete?: never;
         options?: never;
@@ -3360,9 +3360,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a service's Rudder Image auto-deploy and R2 retention policy */
+        /** Get a service's Dymini Panel Image auto-deploy and R2 retention policy */
         get: operations["get_v1_services__id__image-policy"];
-        /** Set whether pushed Rudder Images deploy immediately or notify only, plus R2 retention */
+        /** Set whether pushed Dymini Panel Images deploy immediately or notify only, plus R2 retention */
         put: operations["put_v1_services__id__image-policy"];
         post?: never;
         delete?: never;
@@ -3378,7 +3378,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Rudder Image versions pushed for a service and their Cloudflare R2 presence */
+        /** List Dymini Panel Image versions pushed for a service and their Cloudflare R2 presence */
         get: operations["get_v1_services__id__images"];
         put?: never;
         /** Push a locally built Docker image archive to Cloudflare R2, prune old R2 objects, and optionally deploy */
@@ -3398,7 +3398,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Deploy the latest or specified Rudder Image stored in Cloudflare R2 */
+        /** Deploy the latest or specified Dymini Panel Image stored in Cloudflare R2 */
         post: operations["post_v1_services__id__images_deploy"];
         delete?: never;
         options?: never;
@@ -3416,7 +3416,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete a Rudder Image from Cloudflare R2 and/or version history */
+        /** Delete a Dymini Panel Image from Cloudflare R2 and/or version history */
         delete: operations["delete_v1_services__id__images__image_id_"];
         options?: never;
         head?: never;
@@ -3432,7 +3432,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Deploy a specific Rudder Image version from Cloudflare R2 */
+        /** Deploy a specific Dymini Panel Image version from Cloudflare R2 */
         post: operations["post_v1_services__id__images__image_id__deploy"];
         delete?: never;
         options?: never;
@@ -4517,7 +4517,7 @@ export interface components {
             image_deploy_failures_30d: number;
             /**
              * Format: int64
-             * @description Deployments rolled out from a Rudder Image in the last 30 days.
+             * @description Deployments rolled out from a Dymini Panel Image in the last 30 days.
              */
             image_deploys_30d: number;
             /** Format: int64 */
@@ -5087,7 +5087,7 @@ export interface components {
             registry_id?: string | null;
             watch_tag?: boolean | null;
         };
-        DeployRudderImageRequest: {
+        DeployDyminiPanelImageRequest: {
             /** Format: uuid */
             image_id?: string | null;
             tag?: string | null;
@@ -5224,6 +5224,27 @@ export interface components {
             ssl_mode: string;
             /** Format: int32 */
             target_port: number;
+        };
+        DyminiPanelImageView: {
+            compression: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            destination_id?: string | null;
+            git_sha?: string | null;
+            /** Format: uuid */
+            id: string;
+            image_ref: string;
+            object_key: string;
+            /** Format: uuid */
+            pushed_by?: string | null;
+            r2_present: boolean;
+            /** Format: uuid */
+            service_id: string;
+            sha256: string;
+            /** Format: int64 */
+            size_bytes: number;
+            tag: string;
         };
         EdgeStats: {
             /** Format: int64 */
@@ -5603,7 +5624,7 @@ export interface components {
             pushes_7d: number;
             /**
              * Format: int64
-             * @description Bytes the bucket holds for Rudder Images.
+             * @description Bytes the bucket holds for Dymini Panel Images.
              */
             r2_bytes: number;
             /**
@@ -6199,7 +6220,7 @@ export interface components {
             deploy_error?: string | null;
             deployed: boolean;
             deployment?: components["schemas"]["DeploymentView"] | null;
-            image: components["schemas"]["RudderImageView"];
+            image: components["schemas"]["DyminiPanelImageView"];
             pruned_tags: string[];
         };
         PutEnvVar: {
@@ -6295,27 +6316,6 @@ export interface components {
         RollbackBody: {
             /** Format: uuid */
             deployment_id: string;
-        };
-        RudderImageView: {
-            compression: string;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: uuid */
-            destination_id?: string | null;
-            git_sha?: string | null;
-            /** Format: uuid */
-            id: string;
-            image_ref: string;
-            object_key: string;
-            /** Format: uuid */
-            pushed_by?: string | null;
-            r2_present: boolean;
-            /** Format: uuid */
-            service_id: string;
-            sha256: string;
-            /** Format: int64 */
-            size_bytes: number;
-            tag: string;
         };
         RuleAction: {
             /**
@@ -6764,13 +6764,13 @@ export interface components {
             display_name?: string | null;
             email: string;
             password: string;
-            /** @description One-time token from `setup-token` in the data directory, or `RUDDER_SETUP_TOKEN`. */
+            /** @description One-time token from `setup-token` in the data directory, or `DYMINI_PANEL_SETUP_TOKEN`. */
             setup_token: string;
         };
         SetupSsh: {
             /**
              * @description IPv4 address `cloudflared` reaches the server's SSH daemon on, for
-             *     example the Docker gateway of the `rudder-proxy` network.
+             *     example the Docker gateway of the `dymini-panel-proxy` network.
              */
             address: string;
             /** @description Unix accounts Cloudflare may log people in as. */
@@ -6878,7 +6878,7 @@ export interface components {
             compose_yaml: string;
             /** @description A push to the Git branch deploys the stack. */
             deploy_on_push: boolean;
-            /** @description The file Rudder runs: project name, labels, and proxy network applied. */
+            /** @description The file Dymini Panel runs: project name, labels, and proxy network applied. */
             generated_yaml: string;
             git?: components["schemas"]["StackGit"] | null;
             main_service?: string | null;
@@ -6900,7 +6900,7 @@ export interface components {
             warnings: string[];
         };
         StartGithubApp: {
-            /** @description Name of the app. Defaults to `Rudder-` and four random characters. */
+            /** @description Name of the app. Defaults to `Dymini-Panel-` and four random characters. */
             name?: string | null;
             /** @description Create the app under this organization instead of your own account. */
             organization?: string | null;
@@ -6988,7 +6988,7 @@ export interface components {
         SyncReport: {
             dns: components["schemas"]["DnsOutcome"][];
             hostnames: string[];
-            /** @description Hostnames whose DNS record Rudder did not change. */
+            /** @description Hostnames whose DNS record Dymini Panel did not change. */
             pending: number;
             skipped: components["schemas"]["SkippedHost"][];
             zones: components["schemas"]["ZonePublishResult"][];
@@ -7009,7 +7009,7 @@ export interface components {
             version: string;
         };
         TeardownReport: {
-            /** @description Hostnames whose DNS record Rudder removed. Point them back at this server. */
+            /** @description Hostnames whose DNS record Dymini Panel removed. Point them back at this server. */
             removed_dns: string[];
             /** @description Steps that did not finish; the rest was removed. */
             warnings: string[];
@@ -7516,7 +7516,7 @@ export interface operations {
             };
         };
     };
-    get___rudder_callback: {
+    get___dymini_panel_callback: {
         parameters: {
             query?: never;
             header?: never;
@@ -7687,7 +7687,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description List people allowed into Rudder Access */
+            /** @description List people allowed into Dymini Panel Access */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7711,7 +7711,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Allow a person into Rudder Access (admin, write) */
+            /** @description Allow a person into Dymini Panel Access (admin, write) */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7731,7 +7731,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Remove a Rudder Access person (admin, write) */
+            /** @description Remove a Dymini Panel Access person (admin, write) */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -7753,7 +7753,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Update a Rudder Access person (admin, write) */
+            /** @description Update a Dymini Panel Access person (admin, write) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7845,7 +7845,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Email a 6-digit Rudder Access code */
+            /** @description Email a 6-digit Dymini Panel Access code */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -7867,7 +7867,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Sign in to Rudder Access with an email code */
+            /** @description Sign in to Dymini Panel Access with an email code */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7891,7 +7891,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Start Google sign-in for Rudder Access */
+            /** @description Start Google sign-in for Dymini Panel Access */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7911,7 +7911,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Finish Google sign-in for Rudder Access */
+            /** @description Finish Google sign-in for Dymini Panel Access */
             302: {
                 headers: {
                     [name: string]: unknown;
@@ -7929,7 +7929,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Sign out of Rudder Access */
+            /** @description Sign out of Dymini Panel Access */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7947,7 +7947,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The signed-in Rudder Access person */
+            /** @description The signed-in Dymini Panel Access person */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7967,7 +7967,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Public Rudder Access sign-in settings */
+            /** @description Public Dymini Panel Access sign-in settings */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8073,7 +8073,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Read whether an app requires Rudder Access */
+            /** @description Read whether an app requires Dymini Panel Access */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8137,7 +8137,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Rudder Access provider settings */
+            /** @description Dymini Panel Access provider settings */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8161,7 +8161,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Save Rudder Access provider settings (admin, write) */
+            /** @description Save Dymini Panel Access provider settings (admin, write) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9193,7 +9193,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Approve a rudder CLI browser callback or 8-character device code login */
+            /** @description Approve a dymini-panel CLI browser callback or 8-character device code login */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9217,7 +9217,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Poll a rudder CLI login request for the issued API token */
+            /** @description Poll a dymini-panel CLI login request for the issued API token */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9237,7 +9237,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Inspect a pending rudder CLI login request before approving it */
+            /** @description Inspect a pending dymini-panel CLI login request before approving it */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9261,7 +9261,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Start a browser or 8-character device-code login flow for rudder CLI */
+            /** @description Start a browser or 8-character device-code login flow for dymini-panel CLI */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -9719,7 +9719,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description List the built-in Rudder guides of this panel version */
+            /** @description List the built-in Dymini Panel guides of this panel version */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9739,7 +9739,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Search the Rudder documentation of this panel version. Query: q (required), limit (default 5, max 20) */
+            /** @description Search the Dymini Panel documentation of this panel version. Query: q (required), limit (default 5, max 20) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9759,7 +9759,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Read one Rudder guide as Markdown by name, as listed by the docs list or search */
+            /** @description Read one Dymini Panel guide as Markdown by name, as listed by the docs list or search */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -10313,7 +10313,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Rudder Image dashboard: setup status, push and build statistics, per-service usage, recent pushes, and signed-in CLI clients */
+            /** @description Dymini Panel Image dashboard: setup status, push and build statistics, per-service usage, recent pushes, and signed-in CLI clients */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -10333,7 +10333,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Rudder Image store settings (Cloudflare R2 / S3 destination and default retention) */
+            /** @description Dymini Panel Image store settings (Cloudflare R2 / S3 destination and default retention) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -10357,7 +10357,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Configure the Cloudflare R2 / S3 destination and default retention for Rudder Images */
+            /** @description Configure the Cloudflare R2 / S3 destination and default retention for Dymini Panel Images */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -10377,7 +10377,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Check the Rudder Image bucket by writing, reading, and deleting a probe object */
+            /** @description Check the Dymini Panel Image bucket by writing, reading, and deleting a probe object */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -12637,7 +12637,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Get a service's Rudder Image auto-deploy and R2 retention policy */
+            /** @description Get a service's Dymini Panel Image auto-deploy and R2 retention policy */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -12661,7 +12661,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Set whether pushed Rudder Images deploy immediately or notify only, plus R2 retention */
+            /** @description Set whether pushed Dymini Panel Images deploy immediately or notify only, plus R2 retention */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -12681,13 +12681,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description List Rudder Image versions pushed for a service and their Cloudflare R2 presence */
+            /** @description List Dymini Panel Image versions pushed for a service and their Cloudflare R2 presence */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RudderImageView"][];
+                    "application/json": components["schemas"]["DyminiPanelImageView"][];
                 };
             };
         };
@@ -12725,11 +12725,11 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["DeployRudderImageRequest"];
+                "application/json": components["schemas"]["DeployDyminiPanelImageRequest"];
             };
         };
         responses: {
-            /** @description Deploy the latest or specified Rudder Image stored in Cloudflare R2 */
+            /** @description Deploy the latest or specified Dymini Panel Image stored in Cloudflare R2 */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -12749,7 +12749,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Delete a Rudder Image from Cloudflare R2 and/or version history */
+            /** @description Delete a Dymini Panel Image from Cloudflare R2 and/or version history */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -12767,7 +12767,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Deploy a specific Rudder Image version from Cloudflare R2 */
+            /** @description Deploy a specific Dymini Panel Image version from Cloudflare R2 */
             202: {
                 headers: {
                     [name: string]: unknown;

@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use rudder_core::{decide_rate, Bucket, RateKey, RateRequest, RateRule};
+use dymini_panel_core::{decide_rate, Bucket, RateKey, RateRequest, RateRule};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -49,7 +49,7 @@ impl EdgeMemory {
         method: &str,
         ip: &str,
         headers: &HashMap<String, String>,
-    ) -> Result<rudder_core::RateDecision, ApiError> {
+    ) -> Result<dymini_panel_core::RateDecision, ApiError> {
         self.refresh(state).await?;
         let rules = self.rules.lock().await.clone();
         let mut buckets = self.buckets.lock().await;

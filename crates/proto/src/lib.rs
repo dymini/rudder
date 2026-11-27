@@ -1,9 +1,17 @@
 //! Generated gRPC types for the agent session.
 //!
 //! The heavy operation payloads are JSON bytes inside [`agent::Command`] so
-//! `rudder_core` stays the source of truth for request and response shapes.
+//! `dymini_panel_core` stays the source of truth for request and response shapes.
 
 pub mod agent {
+    #![allow(clippy::all, clippy::pedantic, missing_docs, unused_imports)]
+    tonic::include_proto!("dymini_panel.agent.v1");
+}
+
+/// The pre-rebrand `rudder.agent.v1` package, wire-compatible with [`agent`].
+/// The panel serves it alongside the current package so older agents stay
+/// connected until they receive the rebranded binary.
+pub mod legacy {
     #![allow(clippy::all, clippy::pedantic, missing_docs, unused_imports)]
     tonic::include_proto!("rudder.agent.v1");
 }
@@ -11,3 +19,5 @@ pub mod agent {
 /// Re-export so callers can name the service without walking the module tree.
 pub use agent::node_agent_client::NodeAgentClient;
 pub use agent::node_agent_server::{NodeAgent, NodeAgentServer};
+/// The exact prost build the generated types implement, for wire conversion.
+pub use prost;

@@ -104,7 +104,7 @@ export function McpActivity({
           ])}
           {select("tool", t("MCP tool"), [
             ["", t("All MCP tools")],
-            ["rudder_whoami", "rudder_whoami"],
+            ["dymini_panel_whoami", "dymini_panel_whoami"],
             ["unknown", t("Unknown MCP tool")],
             ...tools.map((tool): [string, string] => [tool.name, tool.name]),
           ])}

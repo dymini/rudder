@@ -1,4 +1,4 @@
-//! Rudder node agent.
+//! Dymini Panel node agent.
 //!
 //! The agent dials the panel over gRPC with a client certificate, runs the
 //! panel's [`NodeDriver`] calls against the local Docker Engine, and ships
@@ -21,8 +21,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
-use rudder_core::NodeDriver;
-use rudder_node::LocalDriver;
+use dymini_panel_core::NodeDriver;
+use dymini_panel_node::LocalDriver;
 
 pub use identity::{enroll, Identity};
 pub use telemetry::Buffer;
@@ -31,13 +31,13 @@ pub use update::SelfUpdate;
 const CURSOR_FILE: &str = "log-cursors.json";
 const STATS_INTERVAL: Duration = Duration::from_secs(10);
 
-/// `rudder-agent run` settings.
+/// `dymini-panel-agent run` settings.
 #[derive(Debug, Clone)]
 pub struct AgentConfig {
     pub builder: bool,
-    /// Identity and cursors, `/var/lib/rudder-agent`.
+    /// Identity and cursors, `/var/lib/dymini-panel-agent`.
     pub data_dir: PathBuf,
-    /// Root for files the panel writes, `/var/lib/rudder`.
+    /// Root for files the panel writes, `/var/lib/dymini-panel`.
     pub node_dir: PathBuf,
     pub docker_socket: Option<PathBuf>,
     pub cache_admin_url: Option<String>,
@@ -65,7 +65,7 @@ pub struct RunOptions {
 pub async fn run(config: AgentConfig) -> anyhow::Result<()> {
     let identity = Identity::load(&config.data_dir).with_context(|| {
         format!(
-            "not enrolled; run `rudder-agent enroll --server <panel> --token <token> --data-dir {}`",
+            "not enrolled; run `dymini-panel-agent enroll --server <panel> --token <token> --data-dir {}`",
             config.data_dir.display()
         )
     })?;
@@ -83,10 +83,10 @@ pub async fn run(config: AgentConfig) -> anyhow::Result<()> {
     )));
     collect::ship_own_logs(buffer.clone());
     tracing::info!(
-        version = rudder_core::VERSION,
+        version = dymini_panel_core::VERSION,
         server_id = %identity.meta.server_id,
         panel = %identity.meta.grpc_url,
-        "rudder-agent starting"
+        "dymini-panel-agent starting"
     );
     let binary = match config.binary {
         Some(binary) => binary,
@@ -118,7 +118,7 @@ pub async fn run(config: AgentConfig) -> anyhow::Result<()> {
         shutdown_signal(),
     )
     .await;
-    tracing::info!("rudder-agent stopped");
+    tracing::info!("dymini-panel-agent stopped");
     Ok(())
 }
 

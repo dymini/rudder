@@ -20,18 +20,18 @@ Accepted
 
 ## Context
 
-Rudder is one product with a control plane, a node agent, a cache server, and a CLI. They share validation and the agent wire contract, but they must ship as separate static binaries so a remote server does not run the panel.
+Dymini Panel is one product with a control plane, a node agent, a cache server, and a CLI. They share validation and the agent wire contract, but they must ship as separate static binaries so a remote server does not run the panel.
 
 ## Decision
 
 Use a Cargo workspace with six crates:
 
-- `rudder-core` holds domain errors and validation. It does not open sockets or talk to Docker.
-- `rudder-proto` holds the agent gRPC contract.
-- `rudder-server` is the panel binary.
-- `rudder-agent`, `rudder-cache`, and `rudder-cli` are the other binaries.
+- `dymini-panel-core` holds domain errors and validation. It does not open sockets or talk to Docker.
+- `dymini-panel-proto` holds the agent gRPC contract.
+- `dymini-panel-server` is the panel binary.
+- `dymini-panel-agent`, `dymini-panel-cache`, and `dymini-panel-cli` are the other binaries.
 
-The agent session carries opaque JSON payloads for driver operations. Protobuf defines the stream envelope (register, heartbeat, command, logs, metrics, terminal bytes). Serde types in `rudder-core` will be the source of truth for those payloads when the driver trait lands.
+The agent session carries opaque JSON payloads for driver operations. Protobuf defines the stream envelope (register, heartbeat, command, logs, metrics, terminal bytes). Serde types in `dymini-panel-core` will be the source of truth for those payloads when the driver trait lands.
 
 ## Alternatives Considered
 
@@ -51,4 +51,4 @@ Tradeoffs:
 
 ## Follow-Up
 
-- Implement `NodeDriver` in `rudder-core` and the local driver in the server crate.
+- Implement `NodeDriver` in `dymini-panel-core` and the local driver in the server crate.

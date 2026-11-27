@@ -1,5 +1,5 @@
 //! Search and read the built-in user guides. Open to any signed-in user or agent grant that can
-//! read `system`, so an AI agent can look up how Rudder works on the panel it is connected to.
+//! read `system`, so an AI agent can look up how Dymini Panel works on the panel it is connected to.
 
 use axum::extract::{Path, Query};
 use axum::routing::get;
@@ -93,7 +93,7 @@ async fn search(
     let limit = query.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     Ok(Json(DocSearchResponse {
         query: q.to_owned(),
-        version: rudder_core::VERSION.to_owned(),
+        version: dymini_panel_core::VERSION.to_owned(),
         results: docs::search(q, limit)
             .into_iter()
             .map(|hit| DocHit {
@@ -112,7 +112,7 @@ async fn read(_auth: AuthUser, Path(name): Path<String>) -> Result<Json<DocPage>
     Ok(Json(DocPage {
         name: guide.name.clone(),
         title: guide.title.clone(),
-        version: rudder_core::VERSION.to_owned(),
+        version: dymini_panel_core::VERSION.to_owned(),
         content: guide.content.clone(),
     }))
 }

@@ -1,14 +1,14 @@
 [package]
-name = "rudder-node"
+name = "dymini-panel-node"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
-description = "Docker Engine driver shared by the Rudder panel and node agent"
+description = "Docker Engine driver shared by the Dymini Panel and node agent"
 
 [dependencies]
-rudder-core = { path = "../core" }
+dymini-panel-core = { path = "../core" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

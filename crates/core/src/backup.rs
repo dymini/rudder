@@ -386,7 +386,7 @@ fn mongo_password_wrapper(argv: Vec<String>) -> Vec<String> {
         "sh".to_owned(),
         "-c".to_owned(),
         "exec \"$@\" --password=\"$MONGO_PASSWORD\"".to_owned(),
-        "rudder".to_owned(),
+        "dymini-panel".to_owned(),
     ];
     wrapped.extend(argv);
     wrapped
@@ -828,8 +828,8 @@ mod tests {
             unix: 1_700_000_000,
         };
         assert_eq!(
-            object_key("rudder/", "{name}-{timestamp}", &vars, ".dump.zst").unwrap(),
-            "rudder/nightly-20231114T221320Z.dump.zst"
+            object_key("dymini-panel/", "{name}-{timestamp}", &vars, ".dump.zst").unwrap(),
+            "dymini-panel/nightly-20231114T221320Z.dump.zst"
         );
         assert_eq!(
             object_key("", "{service}/{date}/{unix}", &vars, ".tar").unwrap(),

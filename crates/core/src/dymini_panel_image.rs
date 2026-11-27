@@ -1,4 +1,4 @@
-//! Domain primitives for Rudder Image (local build, R2 retention, project config)
+//! Domain primitives for Dymini Panel Image (local build, R2 retention, project config)
 //! and CLI authentication (browser loopback callback and 8-character device codes).
 
 use chrono::{DateTime, Duration, Utc};
@@ -54,7 +54,7 @@ pub fn normalize_device_code(raw: &str) -> Result<String, Error> {
     Ok(cleaned)
 }
 
-/// Validate a loopback callback URL used by `rudder login --browser`.
+/// Validate a loopback callback URL used by `dymini-panel login --browser`.
 pub fn validate_cli_callback_url(raw: &str) -> Result<String, Error> {
     let trimmed = raw.trim();
     if trimmed.is_empty()
@@ -90,7 +90,7 @@ pub fn validate_cli_callback_url(raw: &str) -> Result<String, Error> {
     Ok(trimmed.to_owned())
 }
 
-/// Validate a Rudder Image version tag (e.g. `20261105-163000-a1b2c3d` or `v1.2.0`).
+/// Validate a Dymini Panel Image version tag (e.g. `20261105-163000-a1b2c3d` or `v1.2.0`).
 pub fn validate_image_tag(tag: &str) -> Result<String, Error> {
     let trimmed = tag.trim();
     if trimmed.is_empty() || trimmed.len() > 128 {
@@ -110,7 +110,7 @@ pub fn validate_image_tag(tag: &str) -> Result<String, Error> {
     Ok(trimmed.to_owned())
 }
 
-/// Build the object key in Cloudflare R2 / S3 for a pushed Rudder Image archive.
+/// Build the object key in Cloudflare R2 / S3 for a pushed Dymini Panel Image archive.
 pub fn image_object_key(
     prefix: &str,
     service_id: &str,
@@ -139,7 +139,7 @@ pub fn image_object_key(
     }
 }
 
-/// Metadata of a stored Rudder Image version for retention evaluation.
+/// Metadata of a stored Dymini Panel Image version for retention evaluation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImageVersionEntry {
     pub id: String,
@@ -196,14 +196,14 @@ pub fn select_images_to_prune_protecting(
     prune
 }
 
-/// Returns `true` when `name` is a built-in Rudder Image variable automatically
-/// injected into a Compose stack's `.env` file (`RUDDER_IMAGE_TAG`, `RUDDER_IMAGE_REF`,
-/// or a per-image variant `RUDDER_IMAGE_TAG_<SLUG>` / `RUDDER_IMAGE_REF_<SLUG>`).
-pub fn is_rudder_image_env_var(name: &str) -> bool {
-    matches!(name, "RUDDER_IMAGE_TAG" | "RUDDER_IMAGE_REF")
+/// Returns `true` when `name` is a built-in Dymini Panel Image variable automatically
+/// injected into a Compose stack's `.env` file (`DYMINI_PANEL_IMAGE_TAG`, `DYMINI_PANEL_IMAGE_REF`,
+/// or a per-image variant `DYMINI_PANEL_IMAGE_TAG_<SLUG>` / `DYMINI_PANEL_IMAGE_REF_<SLUG>`).
+pub fn is_dymini_panel_image_env_var(name: &str) -> bool {
+    matches!(name, "DYMINI_PANEL_IMAGE_TAG" | "DYMINI_PANEL_IMAGE_REF")
         || name
-            .strip_prefix("RUDDER_IMAGE_TAG_")
-            .or_else(|| name.strip_prefix("RUDDER_IMAGE_REF_"))
+            .strip_prefix("DYMINI_PANEL_IMAGE_TAG_")
+            .or_else(|| name.strip_prefix("DYMINI_PANEL_IMAGE_REF_"))
             .is_some_and(|slug| {
                 !slug.is_empty()
                     && slug
@@ -212,8 +212,8 @@ pub fn is_rudder_image_env_var(name: &str) -> bool {
             })
 }
 
-/// Convert an image reference (such as `rudder-image/knotree-api:20261114-abc`) into an
-/// uppercase environment variable suffix slug (such as `KNOTREE_API`).
+/// Convert an image reference (such as `dymini-panel-image/dymini-panel-api:20261114-abc`) into an
+/// uppercase environment variable suffix slug (such as `DYMINI_PANEL_API`).
 pub fn image_env_slug(image_ref: &str) -> Option<String> {
     let without_tag = image_ref
         .rsplit_once(':')
@@ -242,12 +242,12 @@ pub fn image_env_slug(image_ref: &str) -> Option<String> {
     (!slug.is_empty()).then_some(slug)
 }
 
-/// Compute the built-in Rudder Image environment variables (`RUDDER_IMAGE_TAG`,
-/// `RUDDER_IMAGE_REF`, and per-image `RUDDER_IMAGE_TAG_<SLUG>` / `RUDDER_IMAGE_REF_<SLUG>`)
+/// Compute the built-in Dymini Panel Image environment variables (`DYMINI_PANEL_IMAGE_TAG`,
+/// `DYMINI_PANEL_IMAGE_REF`, and per-image `DYMINI_PANEL_IMAGE_TAG_<SLUG>` / `DYMINI_PANEL_IMAGE_REF_<SLUG>`)
 /// to inject into a Compose stack's `.env` file.
 ///
 /// `current_image` is the service's active `current_image` (if any), and `recent_images`
-/// are `(tag, image_ref)` pairs ordered newest-first from `rudder_images`.
+/// are `(tag, image_ref)` pairs ordered newest-first from `dymini_panel_images`.
 pub fn compose_image_env_vars(
     current_image: Option<&str>,
     recent_images: &[(String, String)],
@@ -266,14 +266,14 @@ pub fn compose_image_env_vars(
         return out;
     };
 
-    out.push(("RUDDER_IMAGE_TAG".to_owned(), primary_tag.clone()));
-    out.push(("RUDDER_IMAGE_REF".to_owned(), primary_ref.clone()));
+    out.push(("DYMINI_PANEL_IMAGE_TAG".to_owned(), primary_tag.clone()));
+    out.push(("DYMINI_PANEL_IMAGE_REF".to_owned(), primary_ref.clone()));
 
     let mut seen_slugs = std::collections::BTreeSet::new();
     if let Some(slug) = image_env_slug(&primary_ref) {
         seen_slugs.insert(slug.clone());
-        out.push((format!("RUDDER_IMAGE_TAG_{slug}"), primary_tag));
-        out.push((format!("RUDDER_IMAGE_REF_{slug}"), primary_ref));
+        out.push((format!("DYMINI_PANEL_IMAGE_TAG_{slug}"), primary_tag));
+        out.push((format!("DYMINI_PANEL_IMAGE_REF_{slug}"), primary_ref));
     }
 
     for (tag, image_ref) in recent_images {
@@ -281,8 +281,8 @@ pub fn compose_image_env_vars(
             continue;
         };
         if seen_slugs.insert(slug.clone()) {
-            out.push((format!("RUDDER_IMAGE_TAG_{slug}"), tag.clone()));
-            out.push((format!("RUDDER_IMAGE_REF_{slug}"), image_ref.clone()));
+            out.push((format!("DYMINI_PANEL_IMAGE_TAG_{slug}"), tag.clone()));
+            out.push((format!("DYMINI_PANEL_IMAGE_REF_{slug}"), image_ref.clone()));
         }
     }
     out
@@ -345,52 +345,64 @@ mod tests {
 
     #[test]
     fn compose_image_env_vars_derive_tag_ref_and_per_image_slugs() {
-        assert!(is_rudder_image_env_var("RUDDER_IMAGE_TAG"));
-        assert!(is_rudder_image_env_var("RUDDER_IMAGE_REF"));
-        assert!(is_rudder_image_env_var("RUDDER_IMAGE_TAG_KNOTREE_API"));
-        assert!(is_rudder_image_env_var("RUDDER_IMAGE_REF_DOC_QUEST"));
-        assert!(!is_rudder_image_env_var("RUDDER_IMAGE_TAG_"));
-        assert!(!is_rudder_image_env_var("RUDDER_IMAGE_TAG_lower"));
-        assert!(!is_rudder_image_env_var("DATABASE_URL"));
+        assert!(is_dymini_panel_image_env_var("DYMINI_PANEL_IMAGE_TAG"));
+        assert!(is_dymini_panel_image_env_var("DYMINI_PANEL_IMAGE_REF"));
+        assert!(is_dymini_panel_image_env_var(
+            "DYMINI_PANEL_IMAGE_TAG_DYMINI_PANEL_API"
+        ));
+        assert!(is_dymini_panel_image_env_var(
+            "DYMINI_PANEL_IMAGE_REF_DOC_QUEST"
+        ));
+        assert!(!is_dymini_panel_image_env_var("DYMINI_PANEL_IMAGE_TAG_"));
+        assert!(!is_dymini_panel_image_env_var(
+            "DYMINI_PANEL_IMAGE_TAG_lower"
+        ));
+        assert!(!is_dymini_panel_image_env_var("DATABASE_URL"));
 
         let recent = vec![
             (
                 "20261114-abc".to_owned(),
-                "rudder-image/knotree-api:20261114-abc".to_owned(),
+                "dymini-panel-image/dymini-panel-api:20261114-abc".to_owned(),
             ),
             (
                 "20261114-def".to_owned(),
-                "rudder-image/doc-quest:20261114-def".to_owned(),
+                "dymini-panel-image/doc-quest:20261114-def".to_owned(),
             ),
             (
                 "20261113-old".to_owned(),
-                "rudder-image/knotree-api:20261113-old".to_owned(),
+                "dymini-panel-image/dymini-panel-api:20261113-old".to_owned(),
             ),
         ];
-        let vars = compose_image_env_vars(Some("rudder-image/knotree-api:20261113-old"), &recent);
+        let vars = compose_image_env_vars(
+            Some("dymini-panel-image/dymini-panel-api:20261113-old"),
+            &recent,
+        );
         assert_eq!(
             vars,
             vec![
-                ("RUDDER_IMAGE_TAG".to_owned(), "20261113-old".to_owned()),
                 (
-                    "RUDDER_IMAGE_REF".to_owned(),
-                    "rudder-image/knotree-api:20261113-old".to_owned()
-                ),
-                (
-                    "RUDDER_IMAGE_TAG_KNOTREE_API".to_owned(),
+                    "DYMINI_PANEL_IMAGE_TAG".to_owned(),
                     "20261113-old".to_owned()
                 ),
                 (
-                    "RUDDER_IMAGE_REF_KNOTREE_API".to_owned(),
-                    "rudder-image/knotree-api:20261113-old".to_owned()
+                    "DYMINI_PANEL_IMAGE_REF".to_owned(),
+                    "dymini-panel-image/dymini-panel-api:20261113-old".to_owned()
                 ),
                 (
-                    "RUDDER_IMAGE_TAG_DOC_QUEST".to_owned(),
+                    "DYMINI_PANEL_IMAGE_TAG_DYMINI_PANEL_API".to_owned(),
+                    "20261113-old".to_owned()
+                ),
+                (
+                    "DYMINI_PANEL_IMAGE_REF_DYMINI_PANEL_API".to_owned(),
+                    "dymini-panel-image/dymini-panel-api:20261113-old".to_owned()
+                ),
+                (
+                    "DYMINI_PANEL_IMAGE_TAG_DOC_QUEST".to_owned(),
                     "20261114-def".to_owned()
                 ),
                 (
-                    "RUDDER_IMAGE_REF_DOC_QUEST".to_owned(),
-                    "rudder-image/doc-quest:20261114-def".to_owned()
+                    "DYMINI_PANEL_IMAGE_REF_DOC_QUEST".to_owned(),
+                    "dymini-panel-image/doc-quest:20261114-def".to_owned()
                 ),
             ]
         );

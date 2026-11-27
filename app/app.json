@@ -1,21 +1,21 @@
 {
   "expo": {
-    "name": "Rudder",
-    "slug": "rudder-panel",
+    "name": "Dymini Panel",
+    "slug": "dymini-panel",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.vantanminh.rudder",
+      "bundleIdentifier": "com.vantanminh.dyminipanel",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#1f3d32",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -30,7 +30,7 @@
       "expo-secure-store",
       "expo-web-browser"
     ],
-    "scheme": "rudder",
+    "scheme": "dymini-panel",
     "owner": "vantanminhs-team",
     "extra": {
       "router": {

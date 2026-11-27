@@ -1,4 +1,4 @@
-//! Rudder control plane library.
+//! Dymini Panel control plane library.
 //!
 //! The binary in `main.rs` loads configuration, initializes tracing, and calls
 //! [`run`]. Tests construct an [`AppState`] and the [`router`] directly.
@@ -211,7 +211,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         .await
         .with_context(|| format!("bind {addr}"))?;
     let bound = listener.local_addr().context("local address")?;
-    tracing::info!(%bound, "rudder control plane listening");
+    tracing::info!(%bound, "dymini-panel control plane listening");
 
     axum::serve(
         listener,
@@ -220,7 +220,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     .with_graceful_shutdown(shutdown_signal())
     .await
     .context("http server")?;
-    tracing::info!("rudder control plane stopped");
+    tracing::info!("dymini-panel control plane stopped");
     Ok(())
 }
 

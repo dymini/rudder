@@ -12,8 +12,8 @@ use axum::routing::{get, post};
 use axum::Json;
 use bytes::Bytes;
 use chrono::{DateTime, Duration, Utc};
+use dymini_panel_core::{TerminalInput, LOG_LEVELS, LOG_SOURCES, MAX_LOG_MESSAGE};
 use futures_util::{SinkExt, StreamExt};
-use rudder_core::{TerminalInput, LOG_LEVELS, LOG_SOURCES, MAX_LOG_MESSAGE};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::{broadcast, mpsc};
@@ -130,7 +130,7 @@ pub fn router() -> axum::Router<AppState> {
 
 fn parse_filter(query: &LogQuery) -> Result<LogFilter, ApiError> {
     if let Some(source) = &query.source {
-        rudder_core::validate_log_source(source).map_err(core_error)?;
+        dymini_panel_core::validate_log_source(source).map_err(core_error)?;
     }
     let mut levels = Vec::new();
     for level in query.level.iter().flat_map(|l| l.split(',')) {
@@ -235,7 +235,7 @@ async fn ingest(
     let mut services: HashMap<Uuid, Uuid> = HashMap::new();
     let mut rows = Vec::with_capacity(body.entries.len());
     for entry in body.entries {
-        rudder_core::validate_log_source(&entry.source).map_err(core_error)?;
+        dymini_panel_core::validate_log_source(&entry.source).map_err(core_error)?;
         let logged_at = entry.timestamp.unwrap_or(now);
         if logged_at < now - Duration::days(30) || logged_at > now + Duration::minutes(5) {
             return Err(bad(
@@ -246,9 +246,9 @@ async fn ingest(
         if entry.message.len() > MAX_LOG_MESSAGE * 4 {
             return Err(bad("too_large", "message is too long"));
         }
-        let parsed = rudder_core::parse_line(&entry.message);
+        let parsed = dymini_panel_core::parse_line(&entry.message);
         let level = match entry.level.as_deref() {
-            Some(level) => rudder_core::normalize_level(level)
+            Some(level) => dymini_panel_core::normalize_level(level)
                 .ok_or_else(|| bad("invalid_level", "unknown level"))?,
             None => parsed.level,
         };
@@ -405,9 +405,9 @@ async fn export(
         Some((Ok::<_, std::io::Error>(Bytes::from(chunk)), cursor))
     });
     let (content_type, name) = if csv {
-        ("text/csv; charset=utf-8", "rudder-logs.csv")
+        ("text/csv; charset=utf-8", "dymini-panel-logs.csv")
     } else {
-        ("application/x-ndjson", "rudder-logs.ndjson")
+        ("application/x-ndjson", "dymini-panel-logs.ndjson")
     };
     Ok((
         [
@@ -617,7 +617,7 @@ async fn terminal(
 async fn run_terminal(
     socket: WebSocket,
     input: mpsc::Sender<TerminalInput>,
-    mut output: rudder_core::ByteStream,
+    mut output: dymini_panel_core::ByteStream,
 ) {
     let (mut sink, mut incoming) = socket.split();
     loop {

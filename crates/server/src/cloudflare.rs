@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::http::{Method, StatusCode};
-use rudder_core::{
+use dymini_panel_core::{
     cloudflared_spec, plan_dns, replica_container_name, tunnel_cname, tunnel_config, validate_host,
     DnsAction, DnsRecord, NodeDriver, MAX_TUNNEL_REPLICAS,
 };
@@ -217,7 +217,7 @@ impl Cf {
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_ascii_lowercase();
-                rudder_core::validate_cloudflare_id("zone id", id).map_err(core_error)?;
+                dymini_panel_core::validate_cloudflare_id("zone id", id).map_err(core_error)?;
                 validate_host(&name).map_err(core_error)?;
                 zones.push(crate::cloudflare_zones::CloudflareZone {
                     zone_id: id.into(),
@@ -454,7 +454,7 @@ impl Cf {
                     "content": tunnel_cname(tunnel_id),
                     "proxied": true,
                     "ttl": 1,
-                    "comment": "Managed by Rudder (Cloudflare tunnel)",
+                    "comment": "Managed by Dymini Panel (Cloudflare tunnel)",
                 })),
             )
             .await
@@ -484,7 +484,7 @@ impl Cf {
                 Some(&json!({
                     "type": if ip.is_ipv4() { "A" } else { "AAAA" }, "name": host,
                     "content": ip.to_string(), "proxied": true, "ttl": 1,
-                    "comment": "Managed by Rudder (service domain)"
+                    "comment": "Managed by Dymini Panel (service domain)"
                 })),
             )
             .await
@@ -521,11 +521,11 @@ impl Cf {
         content: &str,
     ) -> Result<(), ApiError> {
         self.call(Method::PUT, &format!("/zones/{zone}/dns_records/{id}"), Some(&json!({
-            "type":kind,"name":host,"content":content,"proxied":true,"ttl":1,"comment":"Managed by Rudder (service domain)"
+            "type":kind,"name":host,"content":content,"proxied":true,"ttl":1,"comment":"Managed by Dymini Panel (service domain)"
         }))).await.map(|_|()).map_err(|e|e.into_api("updating a DNS record"))
     }
 
-    pub async fn rudder_record(&self, zone: &str, id: &str) -> Result<bool, ApiError> {
+    pub async fn dymini_panel_record(&self, zone: &str, id: &str) -> Result<bool, ApiError> {
         let record = self
             .call(
                 Method::GET,
@@ -535,7 +535,7 @@ impl Cf {
             .await
             .map_err(|e| e.into_api("checking DNS ownership"))?;
         Ok(record.get("comment").and_then(Value::as_str)
-            == Some("Managed by Rudder (Cloudflare tunnel)"))
+            == Some("Managed by Dymini Panel (Cloudflare tunnel)"))
     }
 
     /// Create or update a self-hosted or infrastructure Access application.
@@ -669,7 +669,7 @@ impl Cf {
                     "network": format!("{address}/32"),
                     "tunnel_id": tunnel_id,
                     "virtual_network_id": vnet,
-                    "comment": "Rudder SSH",
+                    "comment": "Dymini Panel SSH",
                 })),
             )
             .await;
@@ -877,7 +877,7 @@ pub async fn owned_record_or_legacy(
     if tracked {
         return crate::domain_routing::owned(state, zone, record).await;
     }
-    client.rudder_record(zone, &record.id).await
+    client.dymini_panel_record(zone, &record.id).await
 }
 
 pub fn tunnel_token(state: &AppState, settings: &Settings) -> Result<String, ApiError> {
@@ -973,7 +973,7 @@ pub struct HostZone {
 }
 
 /// Hostnames the local server answers for: app domains, the panel domain, and
-/// the Rudder Access portal.
+/// the Dymini Panel Access portal.
 pub async fn wanted_hosts(pool: &PgPool) -> Result<(Vec<HostZone>, Vec<SkippedHost>), ApiError> {
     let zones = crate::cloudflare_zones::list(pool).await?;
     let rows: Vec<String> = sqlx::query_scalar(
@@ -1040,7 +1040,7 @@ pub struct SyncReport {
     pub skipped: Vec<SkippedHost>,
     pub dns: Vec<DnsOutcome>,
     pub zones: Vec<ZonePublishResult>,
-    /// Hostnames whose DNS record Rudder did not change.
+    /// Hostnames whose DNS record Dymini Panel did not change.
     pub pending: usize,
 }
 
@@ -1400,7 +1400,7 @@ impl Runtime {
             let domain = domain?.to_ascii_lowercase();
             (enforced && !team.is_empty()).then(|| Guard {
                 host: domain,
-                issuer: rudder_core::access_issuer(&team),
+                issuer: dymini_panel_core::access_issuer(&team),
                 audience: aud,
                 bypass,
             })
@@ -1445,11 +1445,11 @@ impl Runtime {
     /// Whether `token` is a valid Access token for this team and application.
     /// Used before enforcement is turned on, to prove Access works end to end.
     pub async fn verify(&self, team_domain: &str, audience: &str, token: &str) -> bool {
-        let issuer = rudder_core::access_issuer(team_domain);
+        let issuer = dymini_panel_core::access_issuer(team_domain);
         let Some(keys) = self.keys(&issuer).await else {
             return false;
         };
-        rudder_core::verify_access_jwt(
+        dymini_panel_core::verify_access_jwt(
             token,
             &keys,
             &issuer,
@@ -1480,7 +1480,7 @@ impl Runtime {
         let Some(keys) = self.keys(&issuer).await else {
             return Verdict::Unavailable;
         };
-        match rudder_core::verify_access_jwt(
+        match dymini_panel_core::verify_access_jwt(
             token,
             &keys,
             &issuer,
@@ -1503,7 +1503,7 @@ pub enum Verdict {
     Unavailable,
 }
 
-fn has_rudder_bearer_token(headers: &axum::http::HeaderMap) -> bool {
+fn has_dymini_panel_bearer_token(headers: &axum::http::HeaderMap) -> bool {
     let Some(raw) = headers
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
@@ -1524,10 +1524,10 @@ pub fn is_cli_or_api_client_request(path: &str, headers: &axum::http::HeaderMap)
     if path == "/api/v1/cli/auth/start" || path == "/api/v1/cli/auth/poll" {
         return true;
     }
-    path.starts_with("/api/v1/") && has_rudder_bearer_token(headers)
+    path.starts_with("/api/v1/") && has_dymini_panel_bearer_token(headers)
 }
 
-/// Rewrite `/mcp/api/v1/...` (used by `rudder` CLI to traverse Cloudflare's `/mcp` edge bypass
+/// Rewrite `/mcp/api/v1/...` (used by `dymini-panel` CLI to traverse Cloudflare's `/mcp` edge bypass
 /// rule when Cloudflare Access is enabled) to `/api/v1/...`, stripping any `Cookie` header so
 /// browser sessions can never use the `/mcp/api/v1` prefix.
 fn rewrite_cli_bypass_uri(request: &mut axum::extract::Request) {

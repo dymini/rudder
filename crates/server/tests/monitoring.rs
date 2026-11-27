@@ -1,7 +1,7 @@
 //! Metrics rollups and charts, alerts, notification delivery, and Docker prune.
 //!
 //! Notification endpoints are in-test HTTP and SMTP servers. The Docker test runs
-//! only with `RUDDER_DOCKER_TESTS=1`.
+//! only with `DYMINI_PANEL_DOCKER_TESTS=1`.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -23,7 +23,7 @@ struct TempDir(std::path::PathBuf);
 
 impl TempDir {
     fn new() -> Self {
-        let path = std::env::temp_dir().join(format!("rudder-mon-{}", Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("dymini-panel-mon-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&path).unwrap();
         Self(path)
     }
@@ -39,18 +39,21 @@ impl Drop for TempDir {
     }
 }
 
-fn state(pool: PgPool, data_dir: &Path) -> rudder_server::AppState {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+fn state(pool: PgPool, data_dir: &Path) -> dymini_panel_server::AppState {
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
-        ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_DATA_DIR".into(), data_dir.display().to_string()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        (
+            "DYMINI_PANEL_DATA_DIR".into(),
+            data_dir.display().to_string(),
+        ),
     ]);
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::AppState::new(pool, config)
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    dymini_panel_server::AppState::new(pool, config)
 }
 
 struct Client {
@@ -82,7 +85,7 @@ impl Client {
             .get("set-cookie")
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.split(';').next())
-            .and_then(|pair| pair.strip_prefix("rudder_session="))
+            .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
             .unwrap()
             .to_owned();
         let body: Value =
@@ -106,7 +109,7 @@ impl Client {
         builder = match bearer {
             Some(token) => builder.header("authorization", format!("Bearer {token}")),
             None => builder
-                .header("cookie", format!("rudder_session={}", self.cookie))
+                .header("cookie", format!("dymini_panel_session={}", self.cookie))
                 .header("x-csrf-token", &self.csrf),
         };
         let request = match body {
@@ -187,8 +190,8 @@ fn sample(
     service: Option<Uuid>,
     metric: &'static str,
     value: f64,
-) -> rudder_server::Sample {
-    rudder_server::Sample {
+) -> dymini_panel_server::Sample {
+    dymini_panel_server::Sample {
         server_id: server,
         service_id: service,
         source: if service.is_some() {
@@ -218,7 +221,7 @@ fn values(view: &Value, metric: &str) -> Vec<f64> {
 #[sqlx::test(migrations = "./migrations")]
 async fn samples_roll_up_and_chart(pool: PgPool) {
     let dir = TempDir::new();
-    let client = Client::owner(rudder_server::router(state(pool.clone(), dir.path()))).await;
+    let client = Client::owner(dymini_panel_server::router(state(pool.clone(), dir.path()))).await;
     let (server, service) = client.service().await;
 
     let minute = Utc::now()
@@ -227,7 +230,7 @@ async fn samples_roll_up_and_chart(pool: PgPool) {
     let three_ago = minute - chrono::Duration::minutes(3);
     for (offset, cpu) in [(0, 10.0), (10, 20.0), (20, 30.0)] {
         let at = three_ago + chrono::Duration::seconds(offset);
-        rudder_server::insert_samples(
+        dymini_panel_server::insert_samples(
             &pool,
             at,
             &[
@@ -238,7 +241,7 @@ async fn samples_roll_up_and_chart(pool: PgPool) {
         .await
         .unwrap();
     }
-    rudder_server::insert_samples(
+    dymini_panel_server::insert_samples(
         &pool,
         Utc::now(),
         &[sample(server, None, "cpu_percent", 55.0)],
@@ -259,11 +262,11 @@ async fn samples_roll_up_and_chart(pool: PgPool) {
     .await
     .unwrap();
 
-    let first = rudder_server::rollup_metrics(&pool, Utc::now())
+    let first = dymini_panel_server::rollup_metrics(&pool, Utc::now())
         .await
         .unwrap();
     assert!(first.m1 >= 4, "{first:?}");
-    let again = rudder_server::rollup_metrics(&pool, Utc::now())
+    let again = dymini_panel_server::rollup_metrics(&pool, Utc::now())
         .await
         .unwrap();
     assert_eq!(again.m1, 0, "watermark prevents double counting");
@@ -338,18 +341,20 @@ async fn samples_roll_up_and_chart(pool: PgPool) {
     let overview = client.ok("GET", "/api/v1/metrics/overview", None).await;
     assert_eq!(overview["servers"][0]["cpu_percent"], 55.0);
 
-    sqlx::query("SELECT rudder_ensure_daily_partition('metrics_samples', CURRENT_DATE - 5)")
+    sqlx::query("SELECT dymini_panel_ensure_daily_partition('metrics_samples', CURRENT_DATE - 5)")
         .execute(&pool)
         .await
         .unwrap();
-    rudder_server::insert_samples(
+    dymini_panel_server::insert_samples(
         &pool,
         Utc::now() - chrono::Duration::days(5),
         &[sample(server, None, "cpu_percent", 1.0)],
     )
     .await
     .unwrap();
-    let report = rudder_server::apply_metrics_retention(&pool).await.unwrap();
+    let report = dymini_panel_server::apply_metrics_retention(&pool)
+        .await
+        .unwrap();
     assert!(report.deleted_rows >= 1, "{report:?}");
     assert!(
         report
@@ -446,7 +451,7 @@ async fn serve_smtp() -> (u16, Arc<Mutex<Vec<String>>>) {
 async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
     let dir = TempDir::new();
     let app_state = state(pool.clone(), dir.path());
-    let client = Client::owner(rudder_server::router(app_state.clone())).await;
+    let client = Client::owner(dymini_panel_server::router(app_state.clone())).await;
     let (server, service) = client.service().await;
     let (base, inbox) = serve_inbox().await;
     let (smtp_port, mail) = serve_smtp().await;
@@ -493,7 +498,7 @@ async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
             "/api/v1/notification-channels",
             Some(json!({ "name": "mail", "config": {
                 "kind": "smtp", "host": "127.0.0.1", "port": smtp_port, "security": "none",
-                "from": "Rudder <rudder@example.com>", "to": ["ops@example.com"]
+                "from": "Dymini Panel <dymini-panel@example.com>", "to": ["ops@example.com"]
             }})),
         )
         .await;
@@ -621,19 +626,19 @@ async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
         .await;
 
     // Events that existed before any matching rule are marked delivered without sending.
-    rudder_server::deliver_notifications(&pool, &app_state.cipher)
+    dymini_panel_server::deliver_notifications(&pool, &app_state.cipher)
         .await
         .unwrap();
     inbox.requests.lock().unwrap().clear();
 
-    rudder_server::insert_samples(
+    dymini_panel_server::insert_samples(
         &pool,
         Utc::now() - chrono::Duration::seconds(5),
         &[sample(server, None, "cpu_percent", 90.0)],
     )
     .await
     .unwrap();
-    rudder_server::evaluate_alerts(&pool, Utc::now())
+    dymini_panel_server::evaluate_alerts(&pool, Utc::now())
         .await
         .unwrap();
     let alerts = client.ok("GET", "/api/v1/alerts", None).await;
@@ -653,7 +658,7 @@ async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
         .unwrap();
     assert_eq!(down["state"], "ok", "service not expected to run");
 
-    rudder_server::deliver_notifications(&pool, &app_state.cipher)
+    dymini_panel_server::deliver_notifications(&pool, &app_state.cipher)
         .await
         .unwrap();
     {
@@ -671,14 +676,14 @@ async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
             .iter()
             .find(|(path, _, _)| path == "/hook")
             .expect("webhook delivery");
-        let expected = rudder_server::sign_webhook("s3cret-value", body).unwrap();
-        assert_eq!(headers["x-rudder-signature"], expected.as_str());
-        assert_eq!(headers["x-rudder-event"], "alert.fired");
+        let expected = dymini_panel_server::sign_webhook("s3cret-value", body).unwrap();
+        assert_eq!(headers["x-dymini-panel-signature"], expected.as_str());
+        assert_eq!(headers["x-dymini-panel-event"], "alert.fired");
     }
     let messages = mail.lock().unwrap().clone();
     assert_eq!(messages.len(), 1);
     assert!(
-        messages[0].contains("Subject: Rudder: Alert firing: cpu"),
+        messages[0].contains("Subject: Dymini Panel: Alert firing: cpu"),
         "{}",
         messages[0]
     );
@@ -693,7 +698,7 @@ async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
     assert_eq!(pending.1, 1);
     assert!(pending.2.unwrap().contains("500"));
     inbox.requests.lock().unwrap().clear();
-    rudder_server::deliver_notifications(&pool, &app_state.cipher)
+    dymini_panel_server::deliver_notifications(&pool, &app_state.cipher)
         .await
         .unwrap();
     {
@@ -708,14 +713,14 @@ async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    rudder_server::insert_samples(
+    dymini_panel_server::insert_samples(
         &pool,
         Utc::now(),
         &[sample(server, None, "cpu_percent", 5.0)],
     )
     .await
     .unwrap();
-    rudder_server::evaluate_alerts(&pool, Utc::now())
+    dymini_panel_server::evaluate_alerts(&pool, Utc::now())
         .await
         .unwrap();
     let resolved: i64 =
@@ -732,7 +737,7 @@ async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    rudder_server::deliver_notifications(&pool, &app_state.cipher)
+    dymini_panel_server::deliver_notifications(&pool, &app_state.cipher)
         .await
         .unwrap();
     let hook_events: Vec<String> = inbox
@@ -741,7 +746,7 @@ async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
         .unwrap()
         .iter()
         .filter(|(path, _, _)| path == "/hook")
-        .map(|(_, headers, _)| headers["x-rudder-event"].to_str().unwrap().to_owned())
+        .map(|(_, headers, _)| headers["x-dymini-panel-event"].to_str().unwrap().to_owned())
         .collect();
     assert!(
         hook_events.contains(&"backup.failed".to_owned()),
@@ -771,15 +776,15 @@ async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn monitoring_samples_real_containers_and_prunes(pool: PgPool) {
-    if std::env::var("RUDDER_DOCKER_TESTS").as_deref() != Ok("1") {
-        eprintln!("skipping: set RUDDER_DOCKER_TESTS=1 to run Docker tests");
+    if std::env::var("DYMINI_PANEL_DOCKER_TESTS").as_deref() != Ok("1") {
+        eprintln!("skipping: set DYMINI_PANEL_DOCKER_TESTS=1 to run Docker tests");
         return;
     }
     let dir = TempDir::new();
     let app_state = state(pool.clone(), dir.path());
-    let client = Client::owner(rudder_server::router(app_state.clone())).await;
+    let client = Client::owner(dymini_panel_server::router(app_state.clone())).await;
     let (server, service) = client.service().await;
-    let name = format!("rudder-mon-test-{}", &service.to_string()[..8]);
+    let name = format!("dymini-panel-mon-test-{}", &service.to_string()[..8]);
     let started = std::process::Command::new("docker")
         .args([
             "run",
@@ -788,9 +793,9 @@ async fn monitoring_samples_real_containers_and_prunes(pool: PgPool) {
             "--name",
             &name,
             "--label",
-            "rudder.managed=true",
+            "dymini-panel.managed=true",
             "--label",
-            &format!("rudder.service={service}"),
+            &format!("dymini-panel.service={service}"),
             "alpine:3.20",
             "sh",
             "-c",
@@ -800,7 +805,7 @@ async fn monitoring_samples_real_containers_and_prunes(pool: PgPool) {
         .unwrap();
     assert!(started.status.success(), "{started:?}");
 
-    rudder_server::start_monitoring(&app_state);
+    dymini_panel_server::start_monitoring(&app_state);
     let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
     let (server_metrics, service_cpu) = loop {
         tokio::time::sleep(Duration::from_secs(2)).await;

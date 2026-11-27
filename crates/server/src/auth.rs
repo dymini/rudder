@@ -24,7 +24,7 @@ use crate::config::TrustedProxies;
 use crate::error::ApiError;
 use crate::state::AppState;
 
-pub const SESSION_COOKIE: &str = "rudder_session";
+pub const SESSION_COOKIE: &str = "dymini_panel_session";
 const SESSION_DAYS: i64 = 7;
 
 #[derive(Clone, Debug)]
@@ -139,7 +139,7 @@ pub fn sha256_hex(value: &str) -> String {
 }
 
 pub fn random_token(prefix: &str) -> String {
-    let raw = URL_SAFE_NO_PAD.encode(rudder_core::random_bytes::<32>());
+    let raw = URL_SAFE_NO_PAD.encode(dymini_panel_core::random_bytes::<32>());
     if prefix.is_empty() {
         raw
     } else {

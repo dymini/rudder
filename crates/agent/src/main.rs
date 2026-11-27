@@ -1,16 +1,16 @@
 use std::path::PathBuf;
 
-use rudder_agent::{AgentConfig, LogWriterFactory};
+use dymini_panel_agent::{AgentConfig, LogWriterFactory};
 
-const DEFAULT_DATA_DIR: &str = "/var/lib/rudder-agent";
-const DEFAULT_NODE_DIR: &str = "/var/lib/rudder";
+const DEFAULT_DATA_DIR: &str = "/var/lib/dymini-panel-agent";
+const DEFAULT_NODE_DIR: &str = "/var/lib/dymini-panel";
 
 fn main() -> anyhow::Result<()> {
     let mut args = std::env::args().skip(1);
     let command = args.next().unwrap_or_default();
     match command.as_str() {
         "--version" | "-V" | "version" => {
-            println!("rudder-agent {}", rudder_core::VERSION);
+            println!("dymini-panel-agent {}", dymini_panel_core::VERSION);
             Ok(())
         }
         "" | "--help" | "-h" | "help" => {
@@ -36,7 +36,7 @@ fn main() -> anyhow::Result<()> {
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?;
-            let identity = runtime.block_on(rudder_agent::enroll(
+            let identity = runtime.block_on(dymini_panel_agent::enroll(
                 &server,
                 &token,
                 ca_sha256.as_deref(),
@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
                     other => anyhow::bail!("unknown argument {other}"),
                 }
             }
-            let status = rudder_agent::status::read(&data_dir)?;
+            let status = dymini_panel_agent::status::read(&data_dir)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&status)?);
             } else {
@@ -76,11 +76,11 @@ fn main() -> anyhow::Result<()> {
                 data_dir: PathBuf::from(DEFAULT_DATA_DIR),
                 node_dir: PathBuf::from(DEFAULT_NODE_DIR),
                 docker_socket: None,
-                cache_admin_url: std::env::var("RUDDER_CACHE_ADMIN_URL").ok(),
-                host_proc: std::env::var_os("RUDDER_HOST_PROC").map(PathBuf::from),
-                binary: std::env::var_os("RUDDER_AGENT_BINARY").map(PathBuf::from),
+                cache_admin_url: std::env::var("DYMINI_PANEL_CACHE_ADMIN_URL").ok(),
+                host_proc: std::env::var_os("DYMINI_PANEL_HOST_PROC").map(PathBuf::from),
+                binary: std::env::var_os("DYMINI_PANEL_AGENT_BINARY").map(PathBuf::from),
                 update_grace: std::time::Duration::from_secs(
-                    std::env::var("RUDDER_AGENT_UPDATE_GRACE_SECS")
+                    std::env::var("DYMINI_PANEL_AGENT_UPDATE_GRACE_SECS")
                         .ok()
                         .and_then(|value| value.parse().ok())
                         .unwrap_or(120),
@@ -105,7 +105,8 @@ fn main() -> anyhow::Result<()> {
                     other => anyhow::bail!("unknown argument {other}"),
                 }
             }
-            config.builder |= rudder_agent::status::AgentSettings::load(&config.data_dir)?.builder;
+            config.builder |=
+                dymini_panel_agent::status::AgentSettings::load(&config.data_dir)?.builder;
             tracing_subscriber::fmt()
                 .with_env_filter(
                     tracing_subscriber::EnvFilter::try_from_default_env()
@@ -120,7 +121,7 @@ fn main() -> anyhow::Result<()> {
                 .worker_threads(2)
                 .enable_all()
                 .build()?;
-            runtime.block_on(rudder_agent::run(config))
+            runtime.block_on(dymini_panel_agent::run(config))
         }
         other => {
             print_help();
@@ -136,15 +137,15 @@ fn value(args: &mut impl Iterator<Item = String>, flag: &str) -> anyhow::Result<
 
 fn print_help() {
     println!(
-        "rudder-agent {version}
+        "dymini-panel-agent {version}
 
 Usage:
-  rudder-agent enroll --server <panel URL> --token <join token> [--ca-sha256 <hex>]
+  dymini-panel-agent enroll --server <panel URL> --token <join token> [--ca-sha256 <hex>]
                       [--data-dir {data}]
-  rudder-agent run [--data-dir {data}] [--node-dir {node}] [--docker-socket <path>]
+  dymini-panel-agent run [--data-dir {data}] [--node-dir {node}] [--docker-socket <path>]
                    [--cache-admin-url <url>] [--builder]
-  rudder-agent status [--data-dir {data}] [--json]
-  rudder-agent --version
+  dymini-panel-agent status [--data-dir {data}] [--json]
+  dymini-panel-agent --version
 
 `enroll` creates a private key, exchanges the one-time join token for a client
 certificate, and saves both in the data directory. The panel URL must use
@@ -154,10 +155,10 @@ panel's agent CA has that SHA-256 fingerprint; the panel's join command sets it.
 and keeps reconnecting until stopped.
 
 When the panel sends a new agent binary, `run` replaces its own executable
-(RUDDER_AGENT_BINARY overrides the path) and exits with code 75 so the service
+(DYMINI_PANEL_AGENT_BINARY overrides the path) and exits with code 75 so the service
 manager restarts it. If the new binary cannot reach the panel within
-RUDDER_AGENT_UPDATE_GRACE_SECS (default 120), the previous binary is restored.",
-        version = rudder_core::VERSION,
+DYMINI_PANEL_AGENT_UPDATE_GRACE_SECS (default 120), the previous binary is restored.",
+        version = dymini_panel_core::VERSION,
         data = DEFAULT_DATA_DIR,
         node = DEFAULT_NODE_DIR,
     );

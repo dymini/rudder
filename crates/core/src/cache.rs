@@ -14,7 +14,7 @@ pub const CACHE_RULES_FILE: &str = "cache/rules.json";
 /// Admin bearer token file inside the node data directory. The cache server creates it.
 pub const CACHE_TOKEN_FILE: &str = "cache/admin.token";
 /// Container name and port Traefik forwards cached domains to.
-pub const CACHE_CONTAINER: &str = "rudder-cache";
+pub const CACHE_CONTAINER: &str = "dymini-panel-cache";
 pub const CACHE_PORT: u16 = 8080;
 pub const DEFAULT_MEMORY_BYTES: u64 = 256 * 1024 * 1024;
 pub const DEFAULT_MAX_OBJECT_BYTES: u64 = 16 * 1024 * 1024;

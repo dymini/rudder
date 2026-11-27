@@ -2,8 +2,8 @@ use std::fs;
 use std::process::Command;
 
 use chrono::Utc;
-use rudder_agent::identity::AgentMeta;
-use rudder_agent::status::{AgentSettings, AgentStatus};
+use dymini_panel_agent::identity::AgentMeta;
+use dymini_panel_agent::status::{AgentSettings, AgentStatus};
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -11,7 +11,7 @@ use tempfile::TempDir;
 fn status_cli_json_and_text_exit_codes_follow_enrollment_and_connection() {
     let dir = TempDir::new().unwrap();
     let invoke = |json| {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_rudder-agent"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_dymini-panel-agent"));
         command.args(["status", "--data-dir"]).arg(dir.path());
         if json {
             command.arg("--json");
@@ -29,7 +29,7 @@ fn status_cli_json_and_text_exit_codes_follow_enrollment_and_connection() {
         server_id: "test-server".into(),
         panel_url: "https://panel.example".into(),
         grpc_url: "https://panel.example:7443".into(),
-        tls_name: "rudder-panel".into(),
+        tls_name: "dymini-panel".into(),
     };
     fs::write(
         dir.path().join("agent.json"),

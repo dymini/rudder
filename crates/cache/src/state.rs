@@ -6,7 +6,9 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
-use rudder_core::{CacheDocument, CacheHostStats, CachePurge, CacheStats, DEFAULT_MEMORY_BYTES};
+use dymini_panel_core::{
+    CacheDocument, CacheHostStats, CachePurge, CacheStats, DEFAULT_MEMORY_BYTES,
+};
 
 use crate::storage::MemoryStore;
 
@@ -219,7 +221,7 @@ impl Shared {
         let (objects, stored_bytes) = self.store.totals();
         let (disk_objects, disk_stored_bytes) = self.store.disk_totals();
         CacheStats {
-            version: rudder_core::VERSION.into(),
+            version: dymini_panel_core::VERSION.into(),
             rules_version: self.rules().version,
             objects,
             stored_bytes,
@@ -237,8 +239,8 @@ impl Shared {
         let stats = self.stats();
         let mut out = String::new();
         out.push_str(
-            "# HELP rudder_cache_requests_total Requests by host and cache outcome.\n\
-             # TYPE rudder_cache_requests_total counter\n",
+            "# HELP dymini_panel_cache_requests_total Requests by host and cache outcome.\n\
+             # TYPE dymini_panel_cache_requests_total counter\n",
         );
         let mut lines = String::new();
         for host in &stats.hosts {
@@ -250,24 +252,24 @@ impl Shared {
                 ("bypass", host.bypass),
             ] {
                 lines.push_str(&format!(
-                    "rudder_cache_requests_total{{host=\"{label}\",outcome=\"{outcome}\"}} {value}\n"
+                    "dymini_panel_cache_requests_total{{host=\"{label}\",outcome=\"{outcome}\"}} {value}\n"
                 ));
             }
         }
         out.push_str(&lines);
         let per_host = [
             (
-                "rudder_cache_served_bytes_total",
+                "dymini_panel_cache_served_bytes_total",
                 "counter",
                 "Response body bytes sent to clients.",
             ),
             (
-                "rudder_cache_host_objects",
+                "dymini_panel_cache_host_objects",
                 "gauge",
                 "Objects stored per host.",
             ),
             (
-                "rudder_cache_host_stored_bytes",
+                "dymini_panel_cache_host_stored_bytes",
                 "gauge",
                 "Bytes stored per host.",
             ),
@@ -288,49 +290,49 @@ impl Shared {
         }
         for (name, kind, help, value) in [
             (
-                "rudder_cache_objects",
+                "dymini_panel_cache_objects",
                 "gauge",
                 "Objects in the memory store.",
                 stats.objects,
             ),
             (
-                "rudder_cache_stored_bytes",
+                "dymini_panel_cache_stored_bytes",
                 "gauge",
                 "Bytes held by the memory store.",
                 stats.stored_bytes,
             ),
             (
-                "rudder_cache_memory_max_bytes",
+                "dymini_panel_cache_memory_max_bytes",
                 "gauge",
                 "Memory store budget.",
                 stats.memory_max_bytes,
             ),
             (
-                "rudder_cache_disk_objects",
+                "dymini_panel_cache_disk_objects",
                 "gauge",
                 "Objects in the disk store.",
                 stats.disk_objects,
             ),
             (
-                "rudder_cache_disk_stored_bytes",
+                "dymini_panel_cache_disk_stored_bytes",
                 "gauge",
                 "Bytes held by the disk store.",
                 stats.disk_stored_bytes,
             ),
             (
-                "rudder_cache_disk_max_bytes",
+                "dymini_panel_cache_disk_max_bytes",
                 "gauge",
                 "Disk store budget. Zero means the disk tier is off.",
                 stats.disk_max_bytes,
             ),
             (
-                "rudder_cache_evictions_total",
+                "dymini_panel_cache_evictions_total",
                 "counter",
                 "Objects evicted to stay within the budget.",
                 stats.evictions,
             ),
             (
-                "rudder_cache_reloads_total",
+                "dymini_panel_cache_reloads_total",
                 "counter",
                 "Rule reloads applied.",
                 stats.reloads,

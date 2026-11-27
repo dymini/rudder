@@ -2,7 +2,7 @@
 
 use std::sync::OnceLock;
 
-use rudder_core::Template;
+use dymini_panel_core::Template;
 use rust_embed::Embed;
 
 #[derive(Embed)]
@@ -58,7 +58,7 @@ mod tests {
                 template
                     .variables
                     .iter()
-                    .any(|variable| variable.kind == rudder_core::VariableKind::Domain),
+                    .any(|variable| variable.kind == dymini_panel_core::VariableKind::Domain),
                 "{path} has a domain variable"
             );
         }

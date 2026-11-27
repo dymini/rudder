@@ -70,9 +70,9 @@ export function UpdatesCard() {
       if (result.error) {
         toast.error(result.error);
       } else if (result.latest) {
-        toast.success(t("Rudder {version} is available", { version: result.latest.version }));
+        toast.success(t("Dymini Panel {version} is available", { version: result.latest.version }));
       } else {
-        toast.success(t("Rudder is up to date"));
+        toast.success(t("Dymini Panel is up to date"));
       }
     },
     onError: (error) => toast.error(errorMessage(error, t("Could not check for updates"))),

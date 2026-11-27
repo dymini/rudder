@@ -20,13 +20,13 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: rudder
-          POSTGRES_PASSWORD: rudder
-          POSTGRES_DB: rudder
+          POSTGRES_USER: dymini-panel
+          POSTGRES_PASSWORD: dymini-panel
+          POSTGRES_DB: dymini-panel
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U rudder -d rudder"
+          --health-cmd "pg_isready -U dymini-panel -d dymini-panel"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
@@ -52,11 +52,11 @@ jobs:
 
       - name: Test
         env:
-          DATABASE_URL: postgres://rudder:rudder@localhost:5432/rudder
+          DATABASE_URL: postgres://dymini-panel:dymini-panel@localhost:5432/dymini-panel
         run: cargo test --workspace
 
       - name: OpenAPI document is current
-        run: cargo run -q -p rudder-server -- openapi | diff -u web/openapi.json -
+        run: cargo run -q -p dymini-panel-server -- openapi | diff -u web/openapi.json -
 
       - name: Install scripts parse
         run: for f in deploy/*.sh deploy/release/*.sh; do sh -n "$f"; done

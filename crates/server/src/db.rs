@@ -60,7 +60,7 @@ pub async fn ensure_partitions(pool: &PgPool) -> Result<(), sqlx::Error> {
     for parent in ["log_entries", "metrics_samples", "metrics_rollups"] {
         for offset in [0_i32, 1] {
             sqlx::query(
-                "SELECT rudder_ensure_daily_partition($1, (CURRENT_DATE + $2 * INTERVAL '1 day')::date)",
+                "SELECT dymini_panel_ensure_daily_partition($1, (CURRENT_DATE + $2 * INTERVAL '1 day')::date)",
             )
             .bind(parent)
             .bind(offset)

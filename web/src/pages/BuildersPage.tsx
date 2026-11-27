@@ -168,7 +168,7 @@ function BuilderDetails({
           </p>
           <p className="text-sm text-muted sm:col-span-2">
             {t(
-              "The agent also needs builder mode. Re-run its installer with --builder --no-edge, then check rudder-agent status.",
+              "The agent also needs builder mode. Re-run its installer with --builder --no-edge, then check dymini-panel-agent status.",
             )}
           </p>
           <div>
@@ -521,7 +521,7 @@ export function BuildersPage() {
             </p>
             <p className="text-sm">
               {t(
-                "Run rudder-agent status on the machine to check. This list updates automatically.",
+                "Run dymini-panel-agent status on the machine to check. This list updates automatically.",
               )}
             </p>
             <Button onClick={() => setAdding(false)}>{t("Done")}</Button>

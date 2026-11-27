@@ -124,7 +124,7 @@ export function ServiceCachePanel({ serviceId }: { serviceId: string }) {
       <Card
         title={t("Cached domains")}
         description={t(
-          "Cached domains go through the server's Rudder cache before reaching the container. Policies decide what is stored and for how long; {link}.",
+          "Cached domains go through the server's Dymini Panel cache before reaching the container. Policies decide what is stored and for how long; {link}.",
           {
             link: (
               <Link className="text-accent" to="/cache">

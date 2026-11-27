@@ -7,7 +7,7 @@ use axum::extract::State;
 use axum::routing::{get, post, put};
 use axum::Json;
 use chrono::{DateTime, Utc};
-use rudder_core::GuardLimits;
+use dymini_panel_core::GuardLimits;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use utoipa::ToSchema;

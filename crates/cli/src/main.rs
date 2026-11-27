@@ -10,9 +10,9 @@ fn main() {
             std::process::exit(1);
         }
     };
-    let ctx = rudder_cli::Context::from_env();
+    let ctx = dymini_panel_cli::Context::from_env();
     let mut stdout = std::io::stdout();
-    if let Err(error) = runtime.block_on(rudder_cli::run(args, &ctx, &mut stdout)) {
+    if let Err(error) = runtime.block_on(dymini_panel_cli::run(args, &ctx, &mut stdout)) {
         eprintln!("error: {error:#}");
         std::process::exit(1);
     }

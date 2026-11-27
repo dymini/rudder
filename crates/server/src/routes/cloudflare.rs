@@ -8,7 +8,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post, put};
 use axum::Json;
-use rudder_core::{
+use dymini_panel_core::{
     normalize_team_domain, preflight, sshd_trust_script, tunnel_cname, validate_access_email,
     validate_cloudflare_id, validate_replicas, validate_ssh_ca_public_key, validate_unix_user,
     PreflightInput, MAX_TUNNEL_REPLICAS,
@@ -362,7 +362,7 @@ async fn create_tunnel(
         ));
     }
     let client = cf::client(&state, &settings)?;
-    let name = format!("rudder-{}", &Uuid::new_v4().simple().to_string()[..8]);
+    let name = format!("dymini-panel-{}", &Uuid::new_v4().simple().to_string()[..8]);
     let tunnel_id = client.create_tunnel(&settings.account_id, &name).await?;
     let token = client
         .tunnel_token(&settings.account_id, &tunnel_id)
@@ -463,7 +463,7 @@ async fn publish(
 
 #[derive(Serialize, ToSchema)]
 pub struct TeardownReport {
-    /// Hostnames whose DNS record Rudder removed. Point them back at this server.
+    /// Hostnames whose DNS record Dymini Panel removed. Point them back at this server.
     pub removed_dns: Vec<String>,
     /// Steps that did not finish; the rest was removed.
     pub warnings: Vec<String>,
@@ -640,7 +640,7 @@ async fn setup_access(
         .map_err(|error| bad("outside_zone", error.public_message()))?;
     let client = cf::client(&state, &settings)?;
     let allow = json!({
-        "name": "Rudder administrators",
+        "name": "Dymini Panel administrators",
         "decision": "allow",
         "include": emails_policy(&emails),
     });
@@ -649,7 +649,7 @@ async fn setup_access(
             &settings.account_id,
             settings.access_app_id.as_deref(),
             &json!({
-                "name": "Rudder panel",
+                "name": "Dymini Panel",
                 "domain": host,
                 "type": "self_hosted",
                 "session_duration": "24h",
@@ -673,7 +673,7 @@ async fn setup_access(
                     &settings.account_id,
                     existing,
                     &json!({
-                        "name": format!("Rudder agents {path}"),
+                        "name": format!("Dymini Panel agents {path}"),
                         "domain": format!("{host}{path}"),
                         "type": "self_hosted",
                         "session_duration": "24h",
@@ -782,7 +782,7 @@ async fn set_enforcement(
 #[derive(Deserialize, ToSchema)]
 pub struct SetupSsh {
     /// IPv4 address `cloudflared` reaches the server's SSH daemon on, for
-    /// example the Docker gateway of the `rudder-proxy` network.
+    /// example the Docker gateway of the `dymini-panel-proxy` network.
     pub address: String,
     /// Unix accounts Cloudflare may log people in as.
     pub users: Vec<String>,
@@ -868,7 +868,7 @@ async fn setup_ssh(
             &settings.account_id,
             settings.ssh_app_id.as_deref(),
             &json!({
-                "name": "Rudder SSH",
+                "name": "Dymini Panel SSH",
                 "type": "infrastructure",
                 "session_duration": "24h",
                 "target_criteria": [{
@@ -877,7 +877,7 @@ async fn setup_ssh(
                     "include": { "target_attributes": { "hostname": [hostname] } },
                 }],
                 "policies": [{
-                    "name": "Rudder administrators",
+                    "name": "Dymini Panel administrators",
                     "decision": "allow",
                     "include": emails_policy(&settings.access_emails),
                     "connection_rules": { "ssh": { "usernames": users } },
@@ -1074,7 +1074,7 @@ async fn readiness(
         crate::routes::access::portal_cloudflare_warning(&state, portal.as_deref()).await?
     {
         checks.push(PreflightCheckView {
-            id: "rudder_access_portal_cloudflare".into(),
+            id: "dymini_panel_access_portal_cloudflare".into(),
             ok: false,
             required: true,
             message,
@@ -1083,15 +1083,15 @@ async fn readiness(
     if let Some(host) = portal.filter(|host| !host.is_empty()) {
         let ok = hosts.contains(&host) && settings.published_hosts.contains(&host);
         checks.push(PreflightCheckView {
-            id: "rudder_access_portal".into(),
+            id: "dymini_panel_access_portal".into(),
             ok,
             required: true,
             message: if ok {
-                format!("Rudder Access portal {host} is published through the tunnel")
+                format!("Dymini Panel Access portal {host} is published through the tunnel")
             } else {
                 let available = zones::list(&state.pool).await?;
                 let reason = zones::resolve(&available,&host).map(|z|format!("Matched zone {}. Publish the tunnel again.",z.name)).unwrap_or_else(|e|e.public_message());
-                format!("Rudder Access portal {host} is not published through the tunnel. {reason} Choose a portal hostname in an enabled zone in Access settings; otherwise keep direct HTTPS ingress reachable. Do not close public ports while Access login is unreachable.")
+                format!("Dymini Panel Access portal {host} is not published through the tunnel. {reason} Choose a portal hostname in an enabled zone in Access settings; otherwise keep direct HTTPS ingress reachable. Do not close public ports while Access login is unreachable.")
             },
         });
     }

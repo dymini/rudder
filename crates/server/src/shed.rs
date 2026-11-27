@@ -156,7 +156,7 @@ mod tests {
         let cookie = app(full(known.clone()))
             .oneshot(request(
                 "/api/v1/x",
-                Some((header::COOKIE, "theme=dark; rudder_session=abc")),
+                Some((header::COOKIE, "theme=dark; dymini_panel_session=abc")),
             ))
             .await
             .unwrap();
@@ -177,7 +177,7 @@ mod tests {
         let known = Arc::new(Known::default());
         for header in [
             (header::AUTHORIZATION, "Bearer fake"),
-            (header::COOKIE, "rudder_session=fake"),
+            (header::COOKIE, "dymini_panel_session=fake"),
         ] {
             let response = app(full(known.clone()))
                 .oneshot(request("/api/v1/x", Some(header)))
@@ -254,7 +254,10 @@ mod tests {
         let known = Known::default();
         known.remember(&auth::sha256_hex(""));
         let mut headers = HeaderMap::new();
-        headers.insert(header::COOKIE, HeaderValue::from_static("rudder_session="));
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_static("dymini_panel_session="),
+        );
         assert!(!signed_in(&known, &headers));
         headers.insert(header::AUTHORIZATION, HeaderValue::from_static("Bearer "));
         assert!(!signed_in(&known, &headers));

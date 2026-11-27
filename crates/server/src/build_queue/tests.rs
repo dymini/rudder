@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::body::Body;
+use dymini_panel_proto::agent::{server_message, CommandResult, ServerMessage};
 use http_body_util::BodyExt;
-use rudder_proto::agent::{server_message, CommandResult, ServerMessage};
 use serde_json::json;
 use sqlx::PgPool;
 use tokio::sync::mpsc;
@@ -26,12 +26,12 @@ impl Fixture {
                 "DATABASE_URL".into(),
                 std::env::var("DATABASE_URL").unwrap(),
             ),
-            ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-            ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
+            ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+            ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
             (
-                "RUDDER_DATA_DIR".into(),
+                "DYMINI_PANEL_DATA_DIR".into(),
                 std::env::temp_dir()
-                    .join(format!("rudder-build-{}", Uuid::new_v4()))
+                    .join(format!("dymini-panel-build-{}", Uuid::new_v4()))
                     .display()
                     .to_string(),
             ),
@@ -356,10 +356,10 @@ async fn cancel_sends_agent_op_and_waiting_jobs_can_be_cancelled(pool: PgPool) {
         let Some(server_message::Body::Command(command)) = message.body else {
             panic!("expected command")
         };
-        let request: rudder_node::ops::Request =
+        let request: dymini_panel_node::ops::Request =
             serde_json::from_slice(&command.payload_json).unwrap();
         assert!(
-            matches!(request, rudder_node::ops::Request::BuildCancel { job_id } if job_id == queue.to_string())
+            matches!(request, dymini_panel_node::ops::Request::BuildCancel { job_id } if job_id == queue.to_string())
         );
         session.resolve(CommandResult {
             id: command.id,
@@ -472,7 +472,7 @@ async fn cache_catalog_refresh_replaces_stale_entries_and_accepts_an_empty_cache
     sqlx::query("INSERT INTO build_cache_entries (builder_id, service_id, cache_key, size_bytes) VALUES ($1, $2, 'stale', 1)").bind(builder).bind(first).execute(&f.state.pool).await.unwrap();
     let entries: Vec<_> = [first, second, Uuid::new_v4()]
         .into_iter()
-        .map(|service| rudder_node::ops::BuildCacheEntry {
+        .map(|service| dymini_panel_node::ops::BuildCacheEntry {
             service_id: service.to_string(),
             cache_key: "branch".into(),
             size_bytes: 42,
@@ -522,7 +522,7 @@ async fn cache_catalog_refresh_replaces_stale_entries_and_accepts_an_empty_cache
 struct FakeAgent {
     task: tokio::task::JoinHandle<()>,
     received: Arc<std::sync::Mutex<Vec<Vec<u8>>>>,
-    requests: Arc<std::sync::Mutex<Vec<rudder_node::ops::Request>>>,
+    requests: Arc<std::sync::Mutex<Vec<dymini_panel_node::ops::Request>>>,
 }
 
 async fn fake_agent(
@@ -531,7 +531,7 @@ async fn fake_agent(
     url: &str,
     release: Arc<tokio::sync::Notify>,
 ) -> FakeAgent {
-    use rudder_proto::agent::{agent_message, AgentMessage, Frame, Hello};
+    use dymini_panel_proto::agent::{agent_message, AgentMessage, Frame, Hello};
     use tokio_stream::wrappers::ReceiverStream;
     use tonic::transport::{Certificate, ClientTlsConfig, Identity};
     let token = Uuid::new_v4().to_string();
@@ -561,11 +561,11 @@ async fn fake_agent(
         .connect()
         .await
         .unwrap();
-    let mut client = rudder_proto::NodeAgentClient::new(channel);
+    let mut client = dymini_panel_proto::NodeAgentClient::new(channel);
     let (tx, rx) = mpsc::channel(32);
     tx.send(AgentMessage {
         body: Some(agent_message::Body::Hello(Hello {
-            agent_version: rudder_core::VERSION.into(),
+            agent_version: dymini_panel_core::VERSION.into(),
             arch: std::env::consts::ARCH.into(),
             builder_buildx: true,
             builder_nixpacks: true,
@@ -593,14 +593,14 @@ async fn fake_agent(
             let Some(server_message::Body::Command(command)) = message.body else {
                 continue;
             };
-            let request: rudder_node::ops::Request =
+            let request: dymini_panel_node::ops::Request =
                 serde_json::from_slice(&command.payload_json).unwrap();
             seen.lock().unwrap().push(request.clone());
             let mut payload = serde_json::Value::Null;
             let mut error = String::new();
             match &request {
-                rudder_node::ops::Request::LoadImage
-                | rudder_node::ops::Request::ExtractTree { .. } => {
+                dymini_panel_node::ops::Request::LoadImage
+                | dymini_panel_node::ops::Request::ExtractTree { .. } => {
                     let first = Frame {
                         stream_id: command.stream_id.clone(),
                         ..Default::default()
@@ -620,8 +620,8 @@ async fn fake_agent(
                     }
                     got.lock().unwrap().push(bytes);
                 }
-                rudder_node::ops::Request::BuildCacheUsage { .. } => {
-                    payload = json!([rudder_node::ops::BuildCacheEntry {
+                dymini_panel_node::ops::Request::BuildCacheUsage { .. } => {
+                    payload = json!([dymini_panel_node::ops::BuildCacheEntry {
                         service_id: service.clone(),
                         cache_key: "branch".into(),
                         size_bytes: 42,
@@ -629,15 +629,15 @@ async fn fake_agent(
                         created_at: 1700000000000
                     }]);
                 }
-                rudder_node::ops::Request::BuildCachePrune { .. } => {
-                    payload = json!(rudder_node::ops::BuildCachePruned {
+                dymini_panel_node::ops::Request::BuildCachePrune { .. } => {
+                    payload = json!(dymini_panel_node::ops::BuildCachePruned {
                         reclaimed_bytes: 42,
                         remaining_bytes: 0,
                         entries: Vec::new()
                     });
                 }
-                rudder_node::ops::Request::BuildCancel { .. } => payload = json!(true),
-                rudder_node::ops::Request::BuildStart { request } => {
+                dymini_panel_node::ops::Request::BuildCancel { .. } => payload = json!(true),
+                dymini_panel_node::ops::Request::BuildStart { request } => {
                     service = request.service_id.clone()
                 }
                 _ => {}
@@ -654,8 +654,8 @@ async fn fake_agent(
             .unwrap();
             if matches!(
                 request,
-                rudder_node::ops::Request::SaveImage { .. }
-                    | rudder_node::ops::Request::BuildStart { .. }
+                dymini_panel_node::ops::Request::SaveImage { .. }
+                    | dymini_panel_node::ops::Request::BuildStart { .. }
             ) {
                 let mut client = client.clone();
                 let stream_id = command.stream_id;
@@ -663,14 +663,16 @@ async fn fake_agent(
                 tokio::spawn(async move {
                     let (frames, input) = mpsc::channel(8);
                     let first = match &request {
-                        rudder_node::ops::Request::BuildStart { .. } => {
-                            serde_json::to_vec(&rudder_node::ops::BuildEvent::Log {
+                        dymini_panel_node::ops::Request::BuildStart { .. } => {
+                            serde_json::to_vec(&dymini_panel_node::ops::BuildEvent::Log {
                                 stderr: false,
                                 text: "live log secret-build-value\n".into(),
                             })
                             .unwrap()
                         }
-                        rudder_node::ops::Request::SaveImage { image } if image == "empty" => {
+                        dymini_panel_node::ops::Request::SaveImage { image }
+                            if image == "empty" =>
+                        {
                             Vec::new()
                         }
                         _ => b"fake image archive".to_vec(),
@@ -684,10 +686,10 @@ async fn fake_agent(
                         .await
                         .unwrap();
                     let response = client.channel(ReceiverStream::new(input)).await.unwrap();
-                    if matches!(request, rudder_node::ops::Request::BuildStart { .. }) {
+                    if matches!(request, dymini_panel_node::ops::Request::BuildStart { .. }) {
                         release.notified().await;
-                        let event = rudder_node::ops::BuildEvent::Finished {
-                            status: rudder_node::ops::BuildStatus::Succeeded,
+                        let event = dymini_panel_node::ops::BuildEvent::Finished {
+                            status: dymini_panel_node::ops::BuildStatus::Succeeded,
                             error: None,
                             cache: Vec::new(),
                         };
@@ -700,7 +702,7 @@ async fn fake_agent(
                             .await
                             .unwrap();
                     }
-                    let error = if matches!(request, rudder_node::ops::Request::SaveImage { ref image } if image == "broken")
+                    let error = if matches!(request, dymini_panel_node::ops::Request::SaveImage { ref image } if image == "broken")
                     {
                         "image export failed"
                     } else {
@@ -859,8 +861,8 @@ async fn fake_agents_relay_images_and_stream_builder_logs_before_finish(pool: Pg
         to.received.lock().unwrap().last().unwrap(),
         b"fake image archive"
     );
-    assert!(from.requests.lock().unwrap().iter().any(|request| matches!(request, rudder_node::ops::Request::RemoveImage { image } if image == "app:built")));
-    assert!(from.requests.lock().unwrap().iter().any(|request| matches!(request, rudder_node::ops::Request::BuildStart { request } if request.cache_fallback_keys.len() == 1 && request.cache_key != request.cache_fallback_keys[0])));
+    assert!(from.requests.lock().unwrap().iter().any(|request| matches!(request, dymini_panel_node::ops::Request::RemoveImage { image } if image == "app:built")));
+    assert!(from.requests.lock().unwrap().iter().any(|request| matches!(request, dymini_panel_node::ops::Request::BuildStart { request } if request.cache_fallback_keys.len() == 1 && request.cache_key != request.cache_fallback_keys[0])));
     let cached: i64 = sqlx::query_scalar(
         "SELECT size_bytes FROM build_cache_entries WHERE builder_id = $1 AND service_id = $2",
     )
@@ -955,8 +957,8 @@ async fn fake_agents_relay_images_and_stream_builder_logs_before_finish(pool: Pg
     }
     {
         let requests = from.requests.lock().unwrap();
-        assert!(requests.iter().any(|r| matches!(r, rudder_node::ops::Request::BuildCachePrune { request } if request.limit_bytes == Some(20 * 1024 * 1024 * 1024))));
-        assert!(requests.iter().any(|r| matches!(r, rudder_node::ops::Request::BuildCachePrune { request } if request.service_id.as_deref() == Some(&service.to_string()) && request.cache_key.as_deref() == Some("branch"))));
+        assert!(requests.iter().any(|r| matches!(r, dymini_panel_node::ops::Request::BuildCachePrune { request } if request.limit_bytes == Some(20 * 1024 * 1024 * 1024))));
+        assert!(requests.iter().any(|r| matches!(r, dymini_panel_node::ops::Request::BuildCachePrune { request } if request.service_id.as_deref() == Some(&service.to_string()) && request.cache_key.as_deref() == Some("branch"))));
     }
     let cache_count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM build_cache_entries WHERE builder_id = $1")

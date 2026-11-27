@@ -9,7 +9,7 @@ use axum::extract::State;
 use axum::routing::get;
 use axum::Json;
 use chrono::{DateTime, Utc};
-use rudder_core::{certificate_matches_host, describe_certificate};
+use dymini_panel_core::{certificate_matches_host, describe_certificate};
 use serde::Serialize;
 use utoipa::ToSchema;
 

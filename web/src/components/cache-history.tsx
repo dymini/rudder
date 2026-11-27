@@ -88,7 +88,7 @@ export function CacheManagement() {
       <Card title={t("Memory limit")}>
         <p className="mb-3 text-sm text-muted">
           {t(
-            "The cache keeps responses in memory. Its budget is the sum of the policies in use, then limited to this share of the machine and to the ceiling. The default ceiling is 384 MiB. New installs also stop the cache container at 512 MiB (RUDDER_CACHE_MEMORY); raise that too if you set a higher ceiling.",
+            "The cache keeps responses in memory. Its budget is the sum of the policies in use, then limited to this share of the machine and to the ceiling. The default ceiling is 384 MiB. New installs also stop the cache container at 512 MiB (DYMINI_PANEL_CACHE_MEMORY); raise that too if you set a higher ceiling.",
           )}
         </p>
         {settings.data ? (

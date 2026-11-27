@@ -97,7 +97,7 @@ export function BackupJobForm({ target, onSaved }: { target: BackupTarget; onSav
     target_value: "",
     schedule_cron: "@daily",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-    path_prefix: "rudder",
+    path_prefix: "dymini-panel",
     filename_template: "{name}-{timestamp}",
     keep_last: "7",
     keep_days: "",
@@ -924,7 +924,7 @@ export function PanelRestoreHint() {
       <pre className="overflow-auto rounded-alert border border-line bg-paper p-3 font-mono text-xs">
         curl -fsSL https://github.com/vantanminh/rudder/releases/latest/download/install.sh -o
         install.sh
-        {"\n"}sudo sh install.sh --restore rudder-panel-….tar.zst.enc
+        {"\n"}sudo sh install.sh --restore dymini-panel-….tar.zst.enc
       </pre>
       <p className="text-muted">
         {t(

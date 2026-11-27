@@ -220,7 +220,7 @@ async fn drop_partitions(
     let prefix = format!("{parent}_");
     let names = partitions(pool, parent).await?;
     let today = Utc::now().date_naive();
-    for name in rudder_core::partitions_to_drop(&prefix, &names, today, keep_days) {
+    for name in dymini_panel_core::partitions_to_drop(&prefix, &names, today, keep_days) {
         let quoted = format!("\"{}\"", name.replace('"', "\"\""));
         sqlx::query(&format!("DROP TABLE IF EXISTS {quoted}"))
             .execute(pool)
@@ -235,7 +235,7 @@ pub async fn retention_once(pool: &PgPool) -> Result<MetricsRetentionReport, sql
     for parent in ["metrics_samples", "metrics_rollups"] {
         for offset in 0_i32..=2 {
             sqlx::query!(
-                "SELECT rudder_ensure_daily_partition($1, (CURRENT_DATE + $2::int))",
+                "SELECT dymini_panel_ensure_daily_partition($1, (CURRENT_DATE + $2::int))",
                 parent,
                 offset
             )

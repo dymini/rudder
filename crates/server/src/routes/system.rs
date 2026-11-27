@@ -63,7 +63,7 @@ async fn info(State(state): State<AppState>, auth: AuthUser) -> Result<Json<Syst
         .filter(|output| output.status.success())
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned());
     Ok(Json(SystemInfo {
-        version: rudder_core::VERSION.into(),
+        version: dymini_panel_core::VERSION.into(),
         schema,
         known_schema: crate::db::known_migration(),
         pg_dump,
@@ -93,7 +93,7 @@ async fn settings_export(
         .header(
             header::CONTENT_DISPOSITION,
             format!(
-                "attachment; filename=\"rudder-settings-{}.json\"",
+                "attachment; filename=\"dymini-panel-settings-{}.json\"",
                 Utc::now().format("%Y%m%d-%H%M%S")
             ),
         )

@@ -1,12 +1,12 @@
-//! `rudder backup decrypt`: undo client-side backup encryption offline.
+//! `dymini-panel backup decrypt`: undo client-side backup encryption offline.
 
 use std::fs::File;
 use std::io::{self, BufRead, Read, Write};
 
 use anyhow::{bail, Context};
-use rudder_core::Decryptor;
+use dymini_panel_core::Decryptor;
 
-pub const PASSPHRASE_ENV: &str = "RUDDER_BACKUP_PASSPHRASE";
+pub const PASSPHRASE_ENV: &str = "DYMINI_PANEL_BACKUP_PASSPHRASE";
 
 pub struct Args {
     pub input: Option<String>,
@@ -29,7 +29,7 @@ pub fn parse(mut args: impl Iterator<Item = String>) -> anyhow::Result<Args> {
 }
 
 /// Streams `input` (or stdin) to `output` (or stdout). The passphrase comes from
-/// `RUDDER_BACKUP_PASSPHRASE`, or the first stdin line when a file is given.
+/// `DYMINI_PANEL_BACKUP_PASSPHRASE`, or the first stdin line when a file is given.
 pub fn run(args: Args) -> anyhow::Result<()> {
     let passphrase = match std::env::var(PASSPHRASE_ENV) {
         Ok(value) if !value.is_empty() => value,
@@ -78,7 +78,7 @@ pub fn decrypt(
 
 #[cfg(test)]
 mod tests {
-    use rudder_core::Encryptor;
+    use dymini_panel_core::Encryptor;
 
     use super::decrypt;
 

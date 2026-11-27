@@ -1,11 +1,11 @@
-# TestFlight pipeline for the Rudder iOS app. Runs on the GitHub macos runner.
+# TestFlight pipeline for the Dymini Panel iOS app. Runs on the GitHub macos runner.
 # Apple auth is a single App Store Connect API key supplied through env:
 #   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8_BASE64 (base64 of the .p8 file)
 
 default_platform(:ios)
 
 APPLE_TEAM_ID = "M5J76DW97F"
-BUNDLE_ID = "com.vantanminh.rudder"
+BUNDLE_ID = "com.vantanminh.dyminipanel"
 
 platform :ios do
   lane :beta do
@@ -70,7 +70,7 @@ platform :ios do
 
     update_code_signing_settings(
       use_automatic_signing: false,
-      path: "ios/Rudder.xcodeproj",
+      path: "ios/Dymini Panel.xcodeproj",
       team_id: APPLE_TEAM_ID,
       bundle_identifier: BUNDLE_ID,
       profile_uuid: profile_uuid,
@@ -79,16 +79,16 @@ platform :ios do
 
     increment_build_number(
       build_number: latest_testflight_build_number(api_key: api_key, app_identifier: BUNDLE_ID) + 1,
-      xcodeproj: "ios/Rudder.xcodeproj"
+      xcodeproj: "ios/Dymini Panel.xcodeproj"
     )
 
     gym(
-      workspace: "ios/Rudder.xcworkspace",
-      scheme: "Rudder",
+      workspace: "ios/Dymini Panel.xcworkspace",
+      scheme: "Dymini Panel",
       configuration: "Release",
       export_method: "app-store",
       output_directory: "ios/build",
-      output_name: "Rudder.ipa",
+      output_name: "Dymini Panel.ipa",
       export_options: {
         teamID: APPLE_TEAM_ID,
         signingStyle: "manual",

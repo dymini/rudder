@@ -14,8 +14,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use dymini_panel_core::{ByteStream, Error};
 use futures_util::StreamExt;
-use rudder_core::{ByteStream, Error};
 use sha2::Digest;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
@@ -52,7 +52,7 @@ fn sibling(binary: &Path, suffix: &str) -> PathBuf {
     let name = binary
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "rudder-agent".into());
+        .unwrap_or_else(|| "dymini-panel-agent".into());
     binary.with_file_name(format!("{name}.{suffix}"))
 }
 
@@ -67,7 +67,7 @@ pub async fn install(
     sha256: &str,
     mut input: ByteStream,
 ) -> Result<(), Error> {
-    rudder_core::parse_version(version)?;
+    dymini_panel_core::parse_version(version)?;
     if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(Error::Validation("invalid agent checksum".into()));
     }
@@ -135,7 +135,7 @@ pub async fn install(
     .map_err(|_| cleanup(Error::Node("the new agent did not answer --version".into())))?
     .map_err(|error| cleanup(Error::Node(format!("the new agent does not run: {error}"))))?;
     let reported = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    let expected = format!("rudder-agent {version}");
+    let expected = format!("dymini-panel-agent {version}");
     if !output.status.success() || reported != expected {
         return Err(cleanup(Error::Node(format!(
             "the new agent reports '{reported}', expected '{expected}'"
@@ -195,7 +195,7 @@ pub async fn watchdog(update: SelfUpdate, mut connected: watch::Receiver<bool>) 
     if matches!(welcomed, Ok(Ok(_))) {
         let _ = std::fs::remove_file(&marker);
         tracing::info!(
-            version = rudder_core::VERSION,
+            version = dymini_panel_core::VERSION,
             "agent update confirmed by the panel"
         );
         return WatchdogOutcome::Confirmed;
@@ -229,7 +229,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn script(version: &str) -> Vec<u8> {
-        format!("#!/bin/sh\necho rudder-agent {version}\n").into_bytes()
+        format!("#!/bin/sh\necho dymini-panel-agent {version}\n").into_bytes()
     }
 
     fn stream(bytes: Vec<u8>) -> ByteStream {
@@ -240,7 +240,7 @@ mod tests {
 
     fn setup(grace: Duration) -> (tempfile::TempDir, SelfUpdate, Arc<AtomicUsize>) {
         let dir = tempfile::tempdir().unwrap();
-        let binary = dir.path().join("rudder-agent");
+        let binary = dir.path().join("dymini-panel-agent");
         std::fs::write(&binary, script("0.1.0")).unwrap();
         #[cfg(unix)]
         std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -300,7 +300,7 @@ mod tests {
     async fn install_checks_hash_and_version_then_swaps() {
         let (_dir, update, _) = setup(Duration::from_secs(1));
         let new = script("0.2.0");
-        let hash = rudder_core::sha256_hex(&new);
+        let hash = dymini_panel_core::sha256_hex(&new);
 
         let wrong = install(&update, "0.2.0", &"0".repeat(64), stream(new.clone())).await;
         assert!(wrong.unwrap_err().to_string().contains("checksum"));
@@ -308,7 +308,7 @@ mod tests {
         assert!(mismatch
             .unwrap_err()
             .to_string()
-            .contains("expected 'rudder-agent 0.3.0'"));
+            .contains("expected 'dymini-panel-agent 0.3.0'"));
         assert!(!sibling(&update.binary, "new").exists());
         assert_eq!(std::fs::read(&update.binary).unwrap(), script("0.1.0"));
 
@@ -336,7 +336,7 @@ mod tests {
         install(
             &update,
             "0.2.0",
-            &rudder_core::sha256_hex(&new),
+            &dymini_panel_core::sha256_hex(&new),
             stream(new.clone()),
         )
         .await

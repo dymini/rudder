@@ -7,9 +7,11 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use dymini_panel_core::{
+    ContainerInfo, LogStreamKind, NodeDriver, CACHE_CONTAINER, TRAEFIK_CONTAINER,
+};
+use dymini_panel_proto::agent::{LogRecord, StatsSample};
 use futures_util::StreamExt;
-use rudder_core::{ContainerInfo, LogStreamKind, NodeDriver, CACHE_CONTAINER, TRAEFIK_CONTAINER};
-use rudder_proto::agent::{LogRecord, StatsSample};
 use tokio::task::JoinHandle;
 
 use crate::telemetry::Buffer;
@@ -53,6 +55,8 @@ pub async fn stats(driver: Arc<dyn NodeDriver>, buffer: Arc<Buffer>, interval: D
 pub fn wanted(container: &ContainerInfo) -> bool {
     container.name == TRAEFIK_CONTAINER
         || container.name == CACHE_CONTAINER
+        || container.labels.get("dymini-panel.managed").map(String::as_str) == Some("true")
+        // Pre-rebrand containers carry the Rudder-era label; keep collecting them until redeployed.
         || container.labels.get("rudder.managed").map(String::as_str) == Some("true")
 }
 
@@ -145,7 +149,7 @@ async fn follow(
         let at = line
             .timestamp
             .as_deref()
-            .and_then(rudder_core::parse_docker_timestamp)
+            .and_then(dymini_panel_core::parse_docker_timestamp)
             .map_or_else(now_ms, |at| at.timestamp_millis());
         // stdout and stderr interleave out of timestamp order, so only the
         // starting point filters lines within one follow.
@@ -249,11 +253,17 @@ mod tests {
 
     #[test]
     fn follows_managed_containers_and_the_edge() {
-        assert!(wanted(&container("rudder-traefik", &[])));
-        assert!(wanted(&container("rudder-cache", &[])));
-        assert!(wanted(&container("app", &[("rudder.managed", "true")])));
+        assert!(wanted(&container("dymini-panel-traefik", &[])));
+        assert!(wanted(&container("dymini-panel-cache", &[])));
+        assert!(wanted(&container(
+            "app",
+            &[("dymini-panel.managed", "true")]
+        )));
         assert!(!wanted(&container("postgres", &[])));
-        assert!(!wanted(&container("app", &[("rudder.managed", "false")])));
+        assert!(!wanted(&container(
+            "app",
+            &[("dymini-panel.managed", "false")]
+        )));
     }
 
     #[test]

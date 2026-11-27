@@ -5,7 +5,9 @@ use std::time::Duration;
 use async_trait::async_trait;
 use axum::{extract::State, http::StatusCode, Json};
 use chrono::Utc;
-use rudder_core::{cloudflared_spec, replica_container_name, NodeDriver, CLOUDFLARED_METRICS_PORT};
+use dymini_panel_core::{
+    cloudflared_spec, replica_container_name, NodeDriver, CLOUDFLARED_METRICS_PORT,
+};
 use serde::Deserialize;
 use serde_json::json;
 use utoipa::ToSchema;
@@ -176,7 +178,7 @@ async fn recover(ops: &impl Connectors, name: &str) -> Result<(), String> {
 }
 
 pub(crate) async fn recover_replicas(state: &AppState, token: &str) -> Result<(), ApiError> {
-    for index in 1..=rudder_core::MAX_TUNNEL_REPLICAS {
+    for index in 1..=dymini_panel_core::MAX_TUNNEL_REPLICAS {
         recover(
             &Docker {
                 state,
@@ -296,7 +298,7 @@ pub async fn update(
     auth.require_write()?;
     let guard = tunnel::lock(&state).await?;
     if state.config.cloudflared_image_overridden {
-        return Err(conflict("image_overridden", "RUDDER_CLOUDFLARED_IMAGE overrides managed versions. Remove the override before using rolling updates."));
+        return Err(conflict("image_overridden", "DYMINI_PANEL_CLOUDFLARED_IMAGE overrides managed versions. Remove the override before using rolling updates."));
     }
     let settings = cf::load(&state.pool).await?;
     cf::require_tunnel(&settings)?;

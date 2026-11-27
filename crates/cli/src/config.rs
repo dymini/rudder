@@ -1,4 +1,4 @@
-//! Saved panel URL and API token (`~/.config/rudder/config.json`, mode 0600).
+//! Saved panel URL and API token (`~/.config/dymini-panel/config.json`, mode 0600).
 
 use std::path::{Path, PathBuf};
 
@@ -11,9 +11,9 @@ pub struct Saved {
     pub token: String,
 }
 
-/// `$RUDDER_CONFIG`, else `$XDG_CONFIG_HOME/rudder/config.json`, else `~/.config/rudder/config.json`.
+/// `$DYMINI_PANEL_CONFIG`, else `$XDG_CONFIG_HOME/dymini-panel/config.json`, else `~/.config/dymini-panel/config.json`.
 pub fn default_path() -> PathBuf {
-    if let Some(path) = std::env::var_os("RUDDER_CONFIG").filter(|v| !v.is_empty()) {
+    if let Some(path) = std::env::var_os("DYMINI_PANEL_CONFIG").filter(|v| !v.is_empty()) {
         return PathBuf::from(path);
     }
     let base = std::env::var_os("XDG_CONFIG_HOME")
@@ -22,12 +22,12 @@ pub fn default_path() -> PathBuf {
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
         .or_else(|| std::env::var_os("USERPROFILE").map(|home| PathBuf::from(home).join(".config")))
         .unwrap_or_else(|| PathBuf::from("."));
-    base.join("rudder").join("config.json")
+    base.join("dymini-panel").join("config.json")
 }
 
-/// Directory for local Rudder Image archives (`$RUDDER_IMAGE_DIR` or alongside `config.json`).
+/// Directory for local Dymini Panel Image archives (`$DYMINI_PANEL_IMAGE_DIR` or alongside `config.json`).
 pub fn images_dir(config_path: &Path) -> PathBuf {
-    if let Some(path) = std::env::var_os("RUDDER_IMAGE_DIR").filter(|v| !v.is_empty()) {
+    if let Some(path) = std::env::var_os("DYMINI_PANEL_IMAGE_DIR").filter(|v| !v.is_empty()) {
         return PathBuf::from(path);
     }
     config_path
@@ -39,9 +39,27 @@ pub fn images_dir(config_path: &Path) -> PathBuf {
 pub fn load(path: &Path) -> anyhow::Result<Option<Saved>> {
     match std::fs::read(path) {
         Ok(bytes) => Ok(Some(serde_json::from_slice(&bytes).with_context(|| {
-            format!("{} is not a Rudder config", path.display())
+            format!("{} is not a Dymini Panel config", path.display())
         })?)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            // Pre-rebrand CLIs wrote `rudder/config.json`; keep reading it so
+            // upgrading in place does not sign every developer machine out.
+            let legacy = path
+                .parent()
+                .and_then(|dir| dir.parent())
+                .map(|base| base.join("rudder").join("config.json"));
+            match legacy.filter(|candidate| candidate.is_file()) {
+                Some(candidate) => match std::fs::read(&candidate) {
+                    Ok(bytes) => Ok(Some(serde_json::from_slice(&bytes).with_context(|| {
+                        format!("{} is not a Dymini Panel config", candidate.display())
+                    })?)),
+                    Err(error) => {
+                        Err(error).with_context(|| format!("read {}", candidate.display()))
+                    }
+                },
+                None => Ok(None),
+            }
+        }
         Err(error) => Err(error).with_context(|| format!("read {}", path.display())),
     }
 }
@@ -127,7 +145,7 @@ mod tests {
 
     #[test]
     fn saved_config_is_private() {
-        let dir = std::env::temp_dir().join(format!("rudder-cli-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("dymini-panel-cli-{}", std::process::id()));
         let path = dir.join("nested").join("config.json");
         let saved = Saved {
             url: "http://127.0.0.1:3000".into(),

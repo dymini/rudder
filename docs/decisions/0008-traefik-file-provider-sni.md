@@ -24,11 +24,11 @@ Image apps need a domain, HTTPS, and a way to move traffic to a new container wi
 
 ## Decision
 
-Routes are rendered into one Traefik v3 file-provider document per server (`traefik/dynamic/routes.yml`). Let's Encrypt routers set `tls.certResolver: letsencrypt`. Custom-certificate routers set `tls: {}` and every uploaded certificate is listed under `tls.certificates`, so Traefik matches SAN and wildcard names by SNI. Certificate files are written mode `0600` and referenced at `/etc/rudder/traefik/certs` inside the Traefik container. The install will mount the panel data directory there.
+Routes are rendered into one Traefik v3 file-provider document per server (`traefik/dynamic/routes.yml`). Let's Encrypt routers set `tls.certResolver: letsencrypt`. Custom-certificate routers set `tls: {}` and every uploaded certificate is listed under `tls.certificates`, so Traefik matches SAN and wildcard names by SNI. Certificate files are written mode `0600` and referenced at `/etc/dymini-panel/traefik/certs` inside the Traefik container. The install will mount the panel data directory there.
 
 A name matches `*.domain.com` only when the host has exactly one extra label. If a certificate has SANs, the common name is not used for matching. The private key must be PKCS#8 or PKCS#1 RSA, or P-256. A supplied chain must link by issuer name and verify. PEMs are encrypted at rest and are not returned by the API.
 
-Zero-downtime rollout pulls the image, starts `{service}-{generation}` on the `rudder-proxy` network, waits for the health check, rewrites the Traefik file, then stops the previous container. A failed health check or a failed file write removes the new container and leaves the previous one in place. Rollback redeploys the image from a successful deployment row.
+Zero-downtime rollout pulls the image, starts `{service}-{generation}` on the `dymini-panel-proxy` network, waits for the health check, rewrites the Traefik file, then stops the previous container. A failed health check or a failed file write removes the new container and leaves the previous one in place. Rollback redeploys the image from a successful deployment row.
 
 Registry passwords are encrypted. The pull uses the registry whose host matches the image (`ghcr.io/...` selects `ghcr.io`; `nginx:1` selects `docker.io`) unless the request names one. Tag polling every five minutes records the first digest and redeploys only when a later digest differs.
 

@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::http::StatusCode;
-use rudder_core::{
+use dymini_panel_core::{
     compose_image_env_vars, redact, render_env_file, transform_compose, validate_branch,
     validate_compose_service, validate_git_url, validate_name, validate_rel_path, ComposeAction,
     ComposeOptions, LogSink, NodeDriver, RegistryAuth, MAX_COMPOSE_BYTES,
@@ -30,7 +30,7 @@ use crate::nodes::{driver_for, server_kind};
 use crate::routes::catalog::{bad, conflict, core_error, not_found};
 use crate::state::AppState;
 
-pub const COMPOSE_FILE: &str = "rudder-compose.yml";
+pub const COMPOSE_FILE: &str = "dymini-panel-compose.yml";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct StackGit {
@@ -656,7 +656,7 @@ pub async fn env_keys(state: &AppState, id: Uuid) -> Result<Vec<String>, ApiErro
     .fetch_all(&state.pool)
     .await
     .map_err(ApiError::database)?;
-    for (k, _) in load_rudder_image_vars(state, id).await? {
+    for (k, _) in load_dymini_panel_image_vars(state, id).await? {
         if !keys.contains(&k) {
             keys.push(k);
         }
@@ -664,7 +664,7 @@ pub async fn env_keys(state: &AppState, id: Uuid) -> Result<Vec<String>, ApiErro
     Ok(keys)
 }
 
-pub(crate) async fn load_rudder_image_vars(
+pub(crate) async fn load_dymini_panel_image_vars(
     state: &AppState,
     id: Uuid,
 ) -> Result<Vec<(String, String)>, ApiError> {
@@ -679,7 +679,7 @@ pub(crate) async fn load_rudder_image_vars(
     let recent_images: Vec<(String, String)> = sqlx::query_as::<_, (String, String)>(
         r#"
         SELECT tag, image_ref
-        FROM rudder_images
+        FROM dymini_panel_images
         WHERE service_id = $1
         ORDER BY created_at DESC
         LIMIT 50
@@ -697,7 +697,7 @@ pub(crate) async fn load_rudder_image_vars(
 }
 
 fn secret_values(env: &[(String, String)]) -> Vec<String> {
-    rudder_core::env_secrets(env)
+    dymini_panel_core::env_secrets(env)
 }
 
 fn redact_env(text: &str, env: &[(String, String)]) -> String {
@@ -991,7 +991,7 @@ async fn execute(
             Ended::TimedOut(secs) => (
                 "failed",
                 Some(format!(
-                    "stopped after {} minutes; raise RUDDER_STACK_TIMEOUT_SECS for slower builds",
+                    "stopped after {} minutes; raise DYMINI_PANEL_STACK_TIMEOUT_SECS for slower builds",
                     secs.div_ceil(60)
                 )),
                 if action.starts() {
@@ -1185,7 +1185,7 @@ fn registry_hint(message: &str, spec: &StackSpec) -> Option<String> {
         .services
         .iter()
         .filter_map(|service| service.image.as_deref())
-        .map(rudder_core::image_registry)
+        .map(dymini_panel_core::image_registry)
         .collect();
     hosts.sort_unstable();
     hosts.dedup();
@@ -1204,7 +1204,7 @@ async fn run(state: &AppState, id: Uuid, action: StackAction, log: &LiveLog) -> 
         .map_err(|error| error.public_message())?;
     let mut secrets: Vec<String> = secret_values(&env);
     log.set_secrets(secrets.clone());
-    if let Ok(image_vars) = load_rudder_image_vars(state, id).await {
+    if let Ok(image_vars) = load_dymini_panel_image_vars(state, id).await {
         for (key, value) in image_vars {
             if !env.iter().any(|(existing, _)| existing == &key) {
                 env.push((key, value));
@@ -1311,7 +1311,7 @@ async fn sync_compose(
 
 /// Read `compose_file` from the checkout at `dest` and return its text and its folder,
 /// relative to the checkout with symlinks resolved. Symlinks committed in the repository may
-/// not lead outside the checkout, and the files Rudder writes beside the compose file may not
+/// not lead outside the checkout, and the files Dymini Panel writes beside the compose file may not
 /// be symlinks, so neither the read nor the later writes leave the checkout.
 fn read_checkout_compose(dest: &Path, compose_file: &str) -> Result<(String, String), String> {
     let missing = || format!("{compose_file} was not found in the repository");
@@ -1361,15 +1361,16 @@ async fn ship_checkout(
     logs: &LiveLog,
 ) -> Result<(), String> {
     let src = state.config.data_dir.join(relative);
-    let files = rudder_node::tree::git_tracked(&src).map_err(|error| error.to_string())?;
+    let files = dymini_panel_node::tree::git_tracked(&src).map_err(|error| error.to_string())?;
     logs.push(&format!(
         "copying {} repository files to the server\n",
         files.len()
     ));
-    let bytes = rudder_node::tree::pack_files(&src, &files).map_err(|error| error.to_string())?;
-    let stream: rudder_core::ByteStream = Box::pin(futures_util::stream::iter(std::iter::once(
-        Ok(bytes::Bytes::from(bytes)),
-    )));
+    let bytes =
+        dymini_panel_node::tree::pack_files(&src, &files).map_err(|error| error.to_string())?;
+    let stream: dymini_panel_core::ByteStream = Box::pin(futures_util::stream::iter(
+        std::iter::once(Ok(bytes::Bytes::from(bytes))),
+    ));
     driver
         .extract_tree(relative, stream)
         .await
@@ -1717,7 +1718,7 @@ mod tests {
     #[test]
     fn checkout_compose_stays_inside_the_checkout() {
         use std::os::unix::fs::symlink;
-        let base = std::env::temp_dir().join(format!("rudder-compose-{}", Uuid::new_v4()));
+        let base = std::env::temp_dir().join(format!("dymini-panel-compose-{}", Uuid::new_v4()));
         let repo = base.join("src");
         let outside = base.join("outside");
         std::fs::create_dir_all(repo.join("deploy")).unwrap();

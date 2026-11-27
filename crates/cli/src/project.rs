@@ -1,4 +1,4 @@
-//! Project configuration file (`rudder.toml`) for local CI checks, Docker builds,
+//! Project configuration file (`dymini-panel.toml`) for local CI checks, Docker builds,
 //! and dual retention settings (Cloudflare R2 vs local developer storage).
 
 use std::collections::BTreeMap;
@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context as _};
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_FILE: &str = "rudder.toml";
+pub const DEFAULT_FILE: &str = "dymini-panel.toml";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectConfig {
@@ -43,7 +43,9 @@ impl Default for ProjectConfig {
 impl ProjectConfig {
     pub fn render_toml(&self) -> String {
         let mut out = String::new();
-        out.push_str("# Rudder project configuration (https://github.com/vantanminh/rudder)\n");
+        out.push_str(
+            "# Dymini Panel project configuration (https://github.com/vantanminh/rudder)\n",
+        );
         out.push_str(&format!("service = {}\n", quote_str(&self.service)));
         out.push_str(&format!("dockerfile = {}\n", quote_str(&self.dockerfile)));
         out.push_str(&format!("context = {}\n", quote_str(&self.context)));
@@ -97,7 +99,7 @@ impl ProjectConfig {
                 continue;
             }
             let Some((key, val)) = line.split_once('=') else {
-                bail!("rudder.toml line {line_no}: expected key = value");
+                bail!("dymini-panel.toml line {line_no}: expected key = value");
             };
             let key = key.trim();
             let val = val.trim();
@@ -122,13 +124,13 @@ impl ProjectConfig {
                 }
                 "r2_keep_count" => {
                     let n: u32 = val.parse().with_context(|| {
-                        format!("rudder.toml line {line_no}: invalid r2_keep_count")
+                        format!("dymini-panel.toml line {line_no}: invalid r2_keep_count")
                     })?;
                     cfg.r2_keep_count = (n >= 1).then_some(n);
                 }
                 "local_keep_count" => {
                     let n: u32 = val.parse().with_context(|| {
-                        format!("rudder.toml line {line_no}: invalid local_keep_count")
+                        format!("dymini-panel.toml line {line_no}: invalid local_keep_count")
                     })?;
                     cfg.local_keep_count = (n >= 1).then_some(n);
                 }
@@ -137,7 +139,7 @@ impl ProjectConfig {
                         "true" => true,
                         "false" => false,
                         _ => {
-                            bail!("rudder.toml line {line_no}: deploy_build must be true or false")
+                            bail!("dymini-panel.toml line {line_no}: deploy_build must be true or false")
                         }
                     };
                 }
@@ -158,7 +160,20 @@ pub fn load_optional(path: Option<&Path>) -> anyhow::Result<Option<(PathBuf, Pro
                 .with_context(|| format!("parse {}", target.display()))?;
             Ok(Some((target, parsed)))
         }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound && path.is_none() => Ok(None),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound && path.is_none() => {
+            // Pre-rebrand projects use `rudder.toml`; keep reading it so existing
+            // repositories keep building until the file is renamed.
+            let legacy = target.with_file_name("rudder.toml");
+            match std::fs::read_to_string(&legacy) {
+                Ok(text) => {
+                    let parsed = ProjectConfig::parse_toml(&text)
+                        .with_context(|| format!("parse {}", legacy.display()))?;
+                    Ok(Some((legacy, parsed)))
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                Err(err) => Err(err).with_context(|| format!("read {}", legacy.display())),
+            }
+        }
         Err(err) => Err(err).with_context(|| format!("read {}", target.display())),
     }
 }
@@ -199,14 +214,14 @@ fn parse_str(val: &str, line_no: usize) -> anyhow::Result<String> {
     } else if trimmed.len() >= 2 && trimmed.starts_with('\'') && trimmed.ends_with('\'') {
         Ok(trimmed[1..trimmed.len() - 1].to_owned())
     } else {
-        bail!("rudder.toml line {line_no}: expected quoted string, got {trimmed}");
+        bail!("dymini-panel.toml line {line_no}: expected quoted string, got {trimmed}");
     }
 }
 
 fn parse_str_array(val: &str, line_no: usize) -> anyhow::Result<Vec<String>> {
     let trimmed = val.trim();
     if !trimmed.starts_with('[') || !trimmed.ends_with(']') {
-        bail!("rudder.toml line {line_no}: expected array [...]");
+        bail!("dymini-panel.toml line {line_no}: expected array [...]");
     }
     let inner = trimmed[1..trimmed.len() - 1].trim();
     if inner.is_empty() {
@@ -261,7 +276,7 @@ fn parse_table_key(raw: &str, line_no: usize) -> anyhow::Result<String> {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
     {
-        bail!("rudder.toml line {line_no}: invalid build_args key '{trimmed}'");
+        bail!("dymini-panel.toml line {line_no}: invalid build_args key '{trimmed}'");
     }
     Ok(trimmed.to_owned())
 }
@@ -269,7 +284,7 @@ fn parse_table_key(raw: &str, line_no: usize) -> anyhow::Result<String> {
 fn parse_inline_map(val: &str, line_no: usize) -> anyhow::Result<BTreeMap<String, String>> {
     let trimmed = val.trim();
     if !trimmed.starts_with('{') || !trimmed.ends_with('}') {
-        bail!("rudder.toml line {line_no}: expected inline table {{ KEY = \"VALUE\" }}");
+        bail!("dymini-panel.toml line {line_no}: expected inline table {{ KEY = \"VALUE\" }}");
     }
     let inner = trimmed[1..trimmed.len() - 1].trim();
     let mut map = BTreeMap::new();
@@ -312,7 +327,7 @@ fn parse_inline_map(val: &str, line_no: usize) -> anyhow::Result<BTreeMap<String
     }
     for entry in entries {
         let Some((k, v)) = entry.split_once('=') else {
-            bail!("rudder.toml line {line_no}: expected KEY = \"VALUE\" inside build_args");
+            bail!("dymini-panel.toml line {line_no}: expected KEY = \"VALUE\" inside build_args");
         };
         map.insert(parse_table_key(k, line_no)?, parse_str(v, line_no)?);
     }
@@ -324,7 +339,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn round_trip_rudder_toml() {
+    fn round_trip_dymini_panel_toml() {
         let mut build_args = BTreeMap::new();
         build_args.insert("RUST_VERSION".into(), "1.97".into());
         let cfg = ProjectConfig {
@@ -345,9 +360,9 @@ mod tests {
 
     #[test]
     fn parses_crlf_and_build_args_section() {
-        let raw = "service = \"knotree/staging/knotree-api\"\r\ndockerfile = \"rust/Dockerfile\"\r\ncontext = \".\"\r\nplatform = \"linux/amd64\"\r\nbuild_args = { A = \"1\", B = \"two\" }\r\n[build_args]\r\nC = \"three\"\r\n";
+        let raw = "service = \"dymini-panel/staging/dymini-panel-api\"\r\ndockerfile = \"rust/Dockerfile\"\r\ncontext = \".\"\r\nplatform = \"linux/amd64\"\r\nbuild_args = { A = \"1\", B = \"two\" }\r\n[build_args]\r\nC = \"three\"\r\n";
         let parsed = ProjectConfig::parse_toml(raw).unwrap();
-        assert_eq!(parsed.service, "knotree/staging/knotree-api");
+        assert_eq!(parsed.service, "dymini-panel/staging/dymini-panel-api");
         assert_eq!(parsed.platform.as_deref(), Some("linux/amd64"));
         assert_eq!(parsed.build_args.get("A").map(String::as_str), Some("1"));
         assert_eq!(parsed.build_args.get("B").map(String::as_str), Some("two"));

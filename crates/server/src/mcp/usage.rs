@@ -112,7 +112,7 @@ async fn begin_for(
     let known = super::tools().into_iter().find(|t| t.name == name);
     let (tool, scope) = match known {
         Some(t) => (t.name, t.scope),
-        None if name == "rudder_whoami" => ("rudder_whoami".into(), "self".into()),
+        None if name == "dymini_panel_whoami" => ("dymini_panel_whoami".into(), "self".into()),
         None => ("unknown".into(), "unknown".into()),
     };
     sqlx::query_scalar("INSERT INTO mcp_calls(grant_id,client_id,tool,scope,status,http_status,duration_ms,error_message,finished_at) VALUES ($1,$2,$3,$4,'error',500,0,'Tool dispatch did not finish.',NULL) RETURNING id")

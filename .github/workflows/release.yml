@@ -4,7 +4,7 @@ name: Release
 # images, and a GitHub release whose SHA256SUMS is signed with minisign.
 #
 # Repository settings this workflow needs:
-#   - variable RUDDER_UPDATE_PUBKEY: the minisign public key (base64 line), compiled
+#   - variable DYMINI_PANEL_UPDATE_PUBKEY: the minisign public key (base64 line), compiled
 #     into the panel so it can verify releases.
 #   - secret MINISIGN_SECRET_KEY: the matching secret key file contents, created
 #     with `minisign -G -W` (no password; the secret store protects it).
@@ -40,11 +40,11 @@ jobs:
       - name: Signing configuration is present
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-          RUDDER_UPDATE_PUBKEY: ${{ vars.RUDDER_UPDATE_PUBKEY }}
+          DYMINI_PANEL_UPDATE_PUBKEY: ${{ vars.DYMINI_PANEL_UPDATE_PUBKEY }}
         run: |
           missing=""
           [ -n "$MINISIGN_SECRET_KEY" ] || missing="$missing secret:MINISIGN_SECRET_KEY"
-          [ -n "$RUDDER_UPDATE_PUBKEY" ] || missing="$missing variable:RUDDER_UPDATE_PUBKEY"
+          [ -n "$DYMINI_PANEL_UPDATE_PUBKEY" ] || missing="$missing variable:DYMINI_PANEL_UPDATE_PUBKEY"
           if [ -n "$missing" ]; then
             echo "::error::set these repository settings before tagging a release:$missing"
             exit 1
@@ -96,20 +96,20 @@ jobs:
 
       - name: Build
         env:
-          RUDDER_UPDATE_PUBKEY: ${{ vars.RUDDER_UPDATE_PUBKEY }}
+          DYMINI_PANEL_UPDATE_PUBKEY: ${{ vars.DYMINI_PANEL_UPDATE_PUBKEY }}
         run: |
-          export RUDDER_BUILD_VERSION="${GITHUB_REF_NAME#v}"
+          export DYMINI_PANEL_BUILD_VERSION="${GITHUB_REF_NAME#v}"
           cargo zigbuild --release --target ${{ matrix.target }} \
-            -p rudder-server -p rudder-cache -p rudder-agent -p rudder-cli
+            -p dymini-panel-server -p dymini-panel-cache -p dymini-panel-agent -p dymini-panel-cli
 
       - name: Stage
         run: |
           out=out/${{ matrix.arch }}
           mkdir -p "$out"
-          for bin in rudder-server rudder-cache rudder-agent rudder; do
+          for bin in dymini-panel-server dymini-panel-cache dymini-panel-agent dymini-panel; do
             cp "target/${{ matrix.target }}/release/$bin" "$out/$bin-${{ matrix.target }}"
           done
-          "$out/rudder-agent-${{ matrix.target }}" --version || true
+          "$out/dymini-panel-agent-${{ matrix.target }}" --version || true
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -143,10 +143,10 @@ jobs:
           for pair in amd64:x86_64-unknown-linux-musl arm64:aarch64-unknown-linux-musl; do
             arch=${pair%%:*}
             target=${pair#*:}
-            install -m 0755 "bin/rudder-server-$target" "dist/rudder-server-$arch"
-            install -m 0755 "bin/rudder-cache-$target" "dist/rudder-cache-$arch"
-            install -m 0755 "bin/rudder-agent-$target" "dist/agents/rudder-agent-$target"
-            (cd dist/agents && sha256sum "rudder-agent-$target" > "rudder-agent-$target.sha256")
+            install -m 0755 "bin/dymini-panel-server-$target" "dist/dymini-panel-server-$arch"
+            install -m 0755 "bin/dymini-panel-cache-$target" "dist/dymini-panel-cache-$arch"
+            install -m 0755 "bin/dymini-panel-agent-$target" "dist/agents/dymini-panel-agent-$target"
+            (cd dist/agents && sha256sum "dymini-panel-agent-$target" > "dymini-panel-agent-$target.sha256")
           done
 
       - name: Image names
@@ -154,8 +154,8 @@ jobs:
         run: |
           owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
           version="${GITHUB_REF_NAME#v}"
-          echo "panel=ghcr.io/$owner/rudder" >> "$GITHUB_OUTPUT"
-          echo "cache=ghcr.io/$owner/rudder-cache" >> "$GITHUB_OUTPUT"
+          echo "panel=ghcr.io/$owner/dymini-panel" >> "$GITHUB_OUTPUT"
+          echo "cache=ghcr.io/$owner/dymini-panel-cache" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           case "$version" in *-*) echo "latest=false" >> "$GITHUB_OUTPUT" ;; *) echo "latest=true" >> "$GITHUB_OUTPUT" ;; esac
 
@@ -200,16 +200,16 @@ jobs:
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
-            asset: rudder-aarch64-apple-darwin
-            bin: rudder
+            asset: dymini-panel-aarch64-apple-darwin
+            bin: dymini-panel
           - os: macos-latest
             target: x86_64-apple-darwin
-            asset: rudder-x86_64-apple-darwin
-            bin: rudder
+            asset: dymini-panel-x86_64-apple-darwin
+            bin: dymini-panel
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            asset: rudder-x86_64-pc-windows-msvc.exe
-            bin: rudder.exe
+            asset: dymini-panel-x86_64-pc-windows-msvc.exe
+            bin: dymini-panel.exe
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -224,10 +224,10 @@ jobs:
       - name: Build CLI
         shell: bash
         env:
-          RUDDER_UPDATE_PUBKEY: ${{ vars.RUDDER_UPDATE_PUBKEY }}
+          DYMINI_PANEL_UPDATE_PUBKEY: ${{ vars.DYMINI_PANEL_UPDATE_PUBKEY }}
         run: |
-          export RUDDER_BUILD_VERSION="${GITHUB_REF_NAME#v}"
-          cargo build --release --target ${{ matrix.target }} -p rudder-cli
+          export DYMINI_PANEL_BUILD_VERSION="${GITHUB_REF_NAME#v}"
+          cargo build --release --target ${{ matrix.target }} -p dymini-panel-cli
           mkdir -p out-cli
           cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "out-cli/${{ matrix.asset }}"
 
@@ -259,41 +259,41 @@ jobs:
         env:
           PANEL_DIGEST: ${{ needs.images.outputs.panel }}
           CACHE_DIGEST: ${{ needs.images.outputs.cache }}
-          RUDDER_UPDATE_PUBKEY: ${{ vars.RUDDER_UPDATE_PUBKEY }}
+          DYMINI_PANEL_UPDATE_PUBKEY: ${{ vars.DYMINI_PANEL_UPDATE_PUBKEY }}
         run: |
           owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
           version="${GITHUB_REF_NAME#v}"
           mkdir -p dist/agents
-          mv dist/rudder-agent-* dist/agents/
+          mv dist/dymini-panel-agent-* dist/agents/
           cp deploy/install.sh deploy/install-agent.sh deploy/install-cli.sh deploy/install-cli.ps1 dist/
           python3 - <<'PY'
           import os
           from pathlib import Path
-          key = os.environ["RUDDER_UPDATE_PUBKEY"]
+          key = os.environ["DYMINI_PANEL_UPDATE_PUBKEY"]
           for name in ("install.sh", "install-agent.sh"):
               path = Path("dist") / name
               text = path.read_text()
-              if "__RUDDER_UPDATE_PUBKEY__" not in text:
+              if "__DYMINI_PANEL_UPDATE_PUBKEY__" not in text:
                   raise SystemExit(f"{name} is missing the signing-key placeholder")
-              path.write_text(text.replace("__RUDDER_UPDATE_PUBKEY__", key))
+              path.write_text(text.replace("__DYMINI_PANEL_UPDATE_PUBKEY__", key))
           PY
           sh deploy/release/make-release.sh "$version" dist \
-            "ghcr.io/$owner/rudder:$version@$PANEL_DIGEST" \
-            "ghcr.io/$owner/rudder-cache:$version@$CACHE_DIGEST"
+            "ghcr.io/$owner/dymini-panel:$version@$PANEL_DIGEST" \
+            "ghcr.io/$owner/dymini-panel-cache:$version@$CACHE_DIGEST"
           rm -rf dist/agents
           cat dist/release.json
 
       - name: Sign SHA256SUMS
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-          RUDDER_UPDATE_PUBKEY: ${{ vars.RUDDER_UPDATE_PUBKEY }}
+          DYMINI_PANEL_UPDATE_PUBKEY: ${{ vars.DYMINI_PANEL_UPDATE_PUBKEY }}
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq minisign
           umask 077
-          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/rudder.key"
-          minisign -S -s "$RUNNER_TEMP/rudder.key" -m dist/SHA256SUMS -t "rudder ${GITHUB_REF_NAME#v}"
-          rm -f "$RUNNER_TEMP/rudder.key"
-          minisign -V -P "$RUDDER_UPDATE_PUBKEY" -m dist/SHA256SUMS
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/dymini-panel.key"
+          minisign -S -s "$RUNNER_TEMP/dymini-panel.key" -m dist/SHA256SUMS -t "dymini-panel ${GITHUB_REF_NAME#v}"
+          rm -f "$RUNNER_TEMP/dymini-panel.key"
+          minisign -V -P "$DYMINI_PANEL_UPDATE_PUBKEY" -m dist/SHA256SUMS
           (cd dist && sha256sum -c SHA256SUMS)
 
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
@@ -307,4 +307,4 @@ jobs:
           flags=""
           case "$GITHUB_REF_NAME" in *-*) flags="--prerelease" ;; esac
           sh deploy/release/changelog.sh "${GITHUB_REF_NAME#v}" > "$RUNNER_TEMP/notes.md"
-          gh release create "$GITHUB_REF_NAME" dist/* --title "Rudder $GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" $flags
+          gh release create "$GITHUB_REF_NAME" dist/* --title "Dymini Panel $GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" $flags

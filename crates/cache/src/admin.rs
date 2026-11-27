@@ -1,10 +1,10 @@
 //! Admin listener: health, stats, Prometheus metrics, purge, and reload behind a bearer token.
 
 use async_trait::async_trait;
+use dymini_panel_core::{CachePurge, CachePurgeResult};
 use http::{Method, Response, StatusCode};
 use pingora_core::apps::http_app::ServeHttp;
 use pingora_core::protocols::http::ServerSession;
-use rudder_core::{CachePurge, CachePurgeResult};
 
 use crate::state::Shared;
 

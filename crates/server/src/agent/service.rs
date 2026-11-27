@@ -5,13 +5,13 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use chrono::{DateTime, TimeZone, Utc};
-use futures_util::{Stream, StreamExt};
-use rudder_core::{ContainerInfo, ContainerStats, HostStats, LogStreamKind};
-use rudder_proto::agent::{
+use dymini_panel_core::{ContainerInfo, ContainerStats, HostStats, LogStreamKind};
+use dymini_panel_proto::agent::{
     agent_message, server_message, AgentMessage, Frame, Hello, LogRecord, ServerMessage,
     StatsSample, Telemetry, TelemetryAck, Welcome,
 };
-use rudder_proto::NodeAgent;
+use dymini_panel_proto::NodeAgent;
+use futures_util::{Stream, StreamExt};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
@@ -37,7 +37,7 @@ impl AgentService {
     }
 
     /// The server a request's client certificate was issued to.
-    async fn authenticate<T>(&self, request: &Request<T>) -> Result<Uuid, Status> {
+    pub(crate) async fn authenticate<T>(&self, request: &Request<T>) -> Result<Uuid, Status> {
         let certs = request
             .peer_certs()
             .ok_or_else(|| Status::unauthenticated("a client certificate is required"))?;
@@ -58,24 +58,18 @@ impl AgentService {
 
 type ServerStream = Pin<Box<dyn Stream<Item = Result<ServerMessage, Status>> + Send>>;
 type FrameStream = Pin<Box<dyn Stream<Item = Result<Frame, Status>> + Send>>;
+type AgentIncoming = Pin<Box<dyn Stream<Item = Result<AgentMessage, Status>> + Send>>;
 
-#[tonic::async_trait]
-impl NodeAgent for AgentService {
-    type SessionStream = ServerStream;
-    type ChannelStream = FrameStream;
-
-    async fn session(
+impl AgentService {
+    /// The shared session core behind both the current and the pre-rebrand
+    /// legacy gRPC services: `hello` is already read and `incoming` carries the
+    /// rest of the agent's messages.
+    pub(crate) async fn run_session(
         &self,
-        request: Request<Streaming<AgentMessage>>,
-    ) -> Result<Response<Self::SessionStream>, Status> {
-        let server_id = self.authenticate(&request).await?;
-        let mut incoming = request.into_inner();
-        let hello = match incoming.next().await {
-            Some(Ok(AgentMessage {
-                body: Some(agent_message::Body::Hello(hello)),
-            })) => hello,
-            _ => return Err(Status::invalid_argument("the first message must be Hello")),
-        };
+        server_id: Uuid,
+        hello: Hello,
+        mut incoming: AgentIncoming,
+    ) -> Result<Response<ServerStream>, Status> {
         mark_online(&self.state, server_id, &hello)
             .await
             .map_err(|_| Status::unavailable("database unavailable"))?;
@@ -85,7 +79,7 @@ impl NodeAgent for AgentService {
         let welcome = ServerMessage {
             body: Some(server_message::Body::Welcome(Welcome {
                 server_id: server_id.to_string(),
-                panel_version: rudder_core::VERSION.to_owned(),
+                panel_version: dymini_panel_core::VERSION.to_owned(),
             })),
         };
         session.push(welcome).await;
@@ -129,6 +123,45 @@ impl NodeAgent for AgentService {
         Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
     }
 
+    /// The shared channel core: `first` is already read and `incoming` carries
+    /// the rest of the agent's frames.
+    pub(crate) async fn run_channel(
+        &self,
+        server_id: Uuid,
+        first: Frame,
+        incoming: crate::driver::remote::FrameIncoming,
+    ) -> Result<Response<FrameStream>, Status> {
+        let session = self
+            .state
+            .agents
+            .session(server_id)
+            .ok_or_else(|| Status::failed_precondition("no session for this agent"))?;
+        let (tx, rx) = mpsc::channel(16);
+        session.attach_channel(first, incoming, tx)?;
+        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+    }
+}
+
+#[tonic::async_trait]
+impl NodeAgent for AgentService {
+    type SessionStream = ServerStream;
+    type ChannelStream = FrameStream;
+
+    async fn session(
+        &self,
+        request: Request<Streaming<AgentMessage>>,
+    ) -> Result<Response<Self::SessionStream>, Status> {
+        let server_id = self.authenticate(&request).await?;
+        let mut incoming = request.into_inner();
+        let hello = match incoming.next().await {
+            Some(Ok(AgentMessage {
+                body: Some(agent_message::Body::Hello(hello)),
+            })) => hello,
+            _ => return Err(Status::invalid_argument("the first message must be Hello")),
+        };
+        self.run_session(server_id, hello, Box::pin(incoming)).await
+    }
+
     async fn channel(
         &self,
         request: Request<Streaming<Frame>>,
@@ -139,14 +172,7 @@ impl NodeAgent for AgentService {
             .next()
             .await
             .ok_or_else(|| Status::invalid_argument("empty channel"))??;
-        let session = self
-            .state
-            .agents
-            .session(server_id)
-            .ok_or_else(|| Status::failed_precondition("no session for this agent"))?;
-        let (tx, rx) = mpsc::channel(16);
-        session.attach_channel(first, incoming, tx)?;
-        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
+        self.run_channel(server_id, first, Box::pin(incoming)).await
     }
 }
 
@@ -282,7 +308,7 @@ impl Ingest {
             if record.text.trim().is_empty() {
                 return Ok(None);
             }
-            let parsed = rudder_core::parse_line(&record.text);
+            let parsed = dymini_panel_core::parse_line(&record.text);
             return Ok(Some(NewLog {
                 logged_at,
                 server_id: Some(self.server_id),

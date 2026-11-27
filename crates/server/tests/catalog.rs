@@ -10,17 +10,20 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 
 fn app(pool: PgPool) -> axum::Router {
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/rudder".into());
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost/dymini-panel".into());
     let vars = HashMap::from([
         ("DATABASE_URL".into(), url),
-        ("RUDDER_MASTER_KEY".into(), "cc".repeat(32)),
-        ("RUDDER_SETUP_TOKEN".into(), "test-setup-token".into()),
-        ("RUDDER_COOKIE_SECURE".into(), "false".into()),
-        ("RUDDER_PUBLIC_URL".into(), "https://panel.example".into()),
+        ("DYMINI_PANEL_MASTER_KEY".into(), "cc".repeat(32)),
+        ("DYMINI_PANEL_SETUP_TOKEN".into(), "test-setup-token".into()),
+        ("DYMINI_PANEL_COOKIE_SECURE".into(), "false".into()),
+        (
+            "DYMINI_PANEL_PUBLIC_URL".into(),
+            "https://panel.example".into(),
+        ),
     ]);
-    let config = rudder_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
-    rudder_server::router(rudder_server::AppState::new(pool, config))
+    let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
+    dymini_panel_server::router(dymini_panel_server::AppState::new(pool, config))
 }
 
 struct Reply {
@@ -39,7 +42,7 @@ async fn call(
 ) -> Reply {
     let mut builder = Request::builder().method(method).uri(path);
     if let Some(cookie) = cookie {
-        builder = builder.header("cookie", format!("rudder_session={cookie}"));
+        builder = builder.header("cookie", format!("dymini_panel_session={cookie}"));
     }
     if let Some(csrf) = csrf {
         builder = builder.header("x-csrf-token", csrf);
@@ -59,7 +62,7 @@ async fn call(
         .get("set-cookie")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.split(';').next())
-        .and_then(|pair| pair.strip_prefix("rudder_session="))
+        .and_then(|pair| pair.strip_prefix("dymini_panel_session="))
         .map(str::to_owned);
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let body = if bytes.is_empty() {
@@ -166,7 +169,10 @@ async fn rejected_names_and_domains_explain_the_rule(pool: PgPool) {
         )
         .await;
         assert_eq!(response.status, StatusCode::BAD_REQUEST);
-        assert_eq!(response.body["error"]["message"], rudder_core::NAME_RULE);
+        assert_eq!(
+            response.body["error"]["message"],
+            dymini_panel_core::NAME_RULE
+        );
     }
     let service = a_service(&app, &cookie, &csrf).await;
     let duplicate = call(
@@ -321,7 +327,10 @@ async fn servers_projects_and_services_round_trip(pool: PgPool) {
     .await;
     assert_eq!(bad_name.status, StatusCode::BAD_REQUEST);
     assert_eq!(bad_name.body["error"]["code"], "invalid_name");
-    assert_eq!(bad_name.body["error"]["message"], rudder_core::NAME_RULE);
+    assert_eq!(
+        bad_name.body["error"]["message"],
+        dymini_panel_core::NAME_RULE
+    );
 
     let project = call(
         &app,
