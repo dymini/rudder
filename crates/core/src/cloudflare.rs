@@ -574,8 +574,8 @@ mod tests {
             .unwrap();
         let jwks = json!({ "keys": [{
             "kid": kid, "kty": "RSA", "alg": "RS256", "use": "sig",
-            "n": b64(&public.n().to_bytes_be()),
-            "e": b64(&public.e().to_bytes_be()),
+            "n": b64(&public.n().to_be_bytes_trimmed_vartime()),
+            "e": b64(&public.e().to_be_bytes_trimmed_vartime()),
         }] });
         (format!("{input}.{}", b64(&signature)), jwks.to_string())
     }
