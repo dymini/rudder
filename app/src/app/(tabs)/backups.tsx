@@ -26,7 +26,6 @@ export default function Backups() {
         (jobs.data ?? []).map((job) => (
           <Fragment key={job.id}>
             <Card>
-              <Row label="" value="" />
               <Row label="Tên" value={job.name} />
               <Row label="Đích" value={job.target_kind} dim />
               <Row
@@ -40,7 +39,6 @@ export default function Backups() {
                 }
               />
               {job.next_run_at ? <Row label="Chạy tiếp" value={timeAgo(job.next_run_at)} dim /> : null}
-              <Row label="" value="" />
               <Button
                 title="Chạy ngay"
                 small
