@@ -1,0 +1,93 @@
+# TestFlight pipeline for the Rudder iOS app. Runs on the GitHub macos runner.
+# Apple auth is a single App Store Connect API key supplied through env:
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8_BASE64 (base64 of the .p8 file)
+
+default_platform(:ios)
+
+APPLE_TEAM_ID = "M5J76DW97F"
+BUNDLE_ID = "com.vantanminh.rudder"
+
+platform :ios do
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: Base64.decode64(ENV.fetch("ASC_KEY_P8_BASE64")),
+      is_key_content_base64: false,
+      in_house: false
+    )
+
+    create_keychain(
+      name: "ci",
+      password: "ci",
+      default_keychain: true,
+      unlock: true,
+      timeout: 3600
+    )
+
+    # Register the App Store Connect app on first run; a no-op once it exists.
+    produce(
+      api_key: api_key,
+      app_identifier: BUNDLE_ID,
+      app_name: "Rudder",
+      language: "English",
+      app_version: "1.0.0",
+      sku: "rudder-panel",
+      team_id: APPLE_TEAM_ID
+    )
+
+    cert(
+      api_key: api_key,
+      keychain_path: File.expand_path("~/Library/Keychains/ci-db"),
+      keychain_password: "ci"
+    )
+
+    sigh(
+      api_key: api_key,
+      app_identifier: BUNDLE_ID,
+      force: false
+    )
+
+    profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
+    profile_uuid = lane_context[SharedValues::SIGH_UUID]
+
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "ios/Rudder.xcodeproj",
+      team_id: APPLE_TEAM_ID
+      bundle_identifier: BUNDLE_ID,
+      profile_uuid: profile_uuid,
+      code_sign_identity: "Apple Distribution"
+    )
+
+    increment_build_number(
+      build_number: latest_testflight_build_number(api_key: api_key) + 1,
+      xcodeproj: "ios/Rudder.xcodeproj"
+    )
+
+    gym(
+      workspace: "ios/Rudder.xcworkspace",
+      scheme: "Rudder",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "ios/build",
+      output_name: "Rudder.ipa",
+      export_options: {
+        teamID: APPLE_TEAM_ID,
+        signingStyle: "manual",
+        provisioningProfiles: {
+          BUNDLE_ID => profile_uuid
+        }
+      },
+      xcargs: "CODE_SIGN_IDENTITY='Apple Distribution' DEVELOPMENT_TEAM=#{APPLE_TEAM_ID}"
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true,
+      notify_external_testers: false
+    )
+
+    delete_keychain(name: "ci")
+  end
+end

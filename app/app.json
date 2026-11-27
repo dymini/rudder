@@ -30,6 +30,17 @@
       "expo-secure-store",
       "expo-web-browser"
     ],
-    "scheme": "rudder"
+    "scheme": "rudder",
+    "owner": "vantanminhs-team",
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "17a53ce2-a76a-456f-9b97-3b421f1df6cb"
+      }
+    }
   }
 }
