@@ -202,6 +202,7 @@ else
 	panel_ports="-p 3000:3000 -p 7443:7443"
 fi
 install -d -m 0755 "$DATA" "$DATA/traefik" "$DATA/traefik/dynamic" "$DATA/traefik/certs" "$DATA/cache"
+chown -R 65532:65532 "$DATA/cache" 2>/dev/null || true
 [ -f "$DATA/traefik/acme.json" ] || install -m 0600 /dev/null "$DATA/traefik/acme.json"
 [ -f "$DATA/cache/rules.json" ] || printf '{"version":0,"sites":[],"policies":[]}\n' >"$DATA/cache/rules.json"
 if [ ! -f "$ETC/postgres.password" ]; then

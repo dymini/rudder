@@ -237,6 +237,7 @@ if [ "$edge" -eq 1 ]; then
 	info "starting rudder-traefik and rudder-cache"
 	docker network inspect rudder-proxy >/dev/null 2>&1 || docker network create rudder-proxy >/dev/null
 	install -d -m 0755 "$NODE_DATA/traefik" "$NODE_DATA/traefik/dynamic" "$NODE_DATA/traefik/certs" "$NODE_DATA/cache"
+	chown -R 65532:65532 "$NODE_DATA/cache" 2>/dev/null || true
 	if [ ! -f "$NODE_DATA/traefik/acme.json" ]; then
 		install -m 0600 /dev/null "$NODE_DATA/traefik/acme.json"
 	fi

@@ -6,6 +6,8 @@ FROM scratch
 ARG TARGETARCH
 COPY dist/rudder-cache-${TARGETARCH} /rudder-cache
 
+USER 65532:65532
+
 EXPOSE 8080 9090
 ENTRYPOINT ["/rudder-cache"]
 CMD ["--rules", "/var/lib/rudder/cache/rules.json", "--listen", "0.0.0.0:8080", "--admin-listen", "0.0.0.0:9090"]
