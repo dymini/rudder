@@ -259,12 +259,24 @@ jobs:
         env:
           PANEL_DIGEST: ${{ needs.images.outputs.panel }}
           CACHE_DIGEST: ${{ needs.images.outputs.cache }}
+          RUDDER_UPDATE_PUBKEY: ${{ vars.RUDDER_UPDATE_PUBKEY }}
         run: |
           owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
           version="${GITHUB_REF_NAME#v}"
           mkdir -p dist/agents
           mv dist/rudder-agent-* dist/agents/
           cp deploy/install.sh deploy/install-agent.sh deploy/install-cli.sh deploy/install-cli.ps1 dist/
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          key = os.environ["RUDDER_UPDATE_PUBKEY"]
+          for name in ("install.sh", "install-agent.sh"):
+              path = Path("dist") / name
+              text = path.read_text()
+              if "__RUDDER_UPDATE_PUBKEY__" not in text:
+                  raise SystemExit(f"{name} is missing the signing-key placeholder")
+              path.write_text(text.replace("__RUDDER_UPDATE_PUBKEY__", key))
+          PY
           sh deploy/release/make-release.sh "$version" dist \
             "ghcr.io/$owner/rudder:$version@$PANEL_DIGEST" \
             "ghcr.io/$owner/rudder-cache:$version@$CACHE_DIGEST"

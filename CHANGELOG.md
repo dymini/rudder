@@ -9,6 +9,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Security
+- **Installers now verify signed release metadata before trusting downloads.** Agent installers validate `SHA256SUMS.minisig` before checksums, and panel installation pulls the image digests pinned in the signed `release.json` instead of mutable tags.
 - **The cache container no longer runs as root.** It uses a dedicated numeric user, and installers grant that user access only to the cache data directory; the panel still requires broader access because it manages the Docker socket and host-mounted state.
 - **Core runtime, URL and platform libraries were patched.** Rudder now uses fixed tokio, url and rustix releases for task exhaustion, userinfo serialization and memory-corruption advisories.
 - **Cryptographic signing and session-cookie libraries were patched.** GitHub App signatures, Cloudflare Access verification and encrypted cookies now use fixed RSA, bigint, constant-time utility, SHA-2/HMAC and cookie releases.
