@@ -24,6 +24,11 @@ jobs:
   build:
     name: Build iOS app
     runs-on: macos-latest
+    env:
+      IOS_CERT: ${{ secrets.IOS_BUILD_CERTIFICATE_BASE64 }}
+      IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+      IOS_PROFILE: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+      IOS_TEAM: ${{ secrets.IOS_TEAM_ID }}
     defaults:
       run:
         working-directory: app
@@ -77,23 +82,19 @@ jobs:
           retention-days: 14
 
       - name: Import signing certificate
-        if: ${{ secrets.IOS_BUILD_CERTIFICATE_BASE64 != '' }}
+        if: ${{ env.IOS_CERT != '' && env.IOS_PROFILE != '' && env.IOS_TEAM != '' }}
         run: |
-          echo "$IOS_BUILD_CERTIFICATE_BASE64" | base64 --decode > /tmp/dist.p12
+          echo "$IOS_CERT" | base64 --decode > /tmp/dist.p12
           security create-keychain -p ci ci.keychain
           security default-keychain -s ci.keychain
           security unlock-keychain -p ci ci.keychain
           security import /tmp/dist.p12 -k ci.keychain -P "$IOS_P12_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k ci ci.keychain
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
-        env:
-          IOS_BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_BUILD_CERTIFICATE_BASE64 }}
-          IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
-          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+          echo "$IOS_PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
 
       - name: Archive unsigned device build
-        if: ${{ secrets.IOS_BUILD_CERTIFICATE_BASE64 == '' }}
+        if: ${{ !(env.IOS_CERT != '' && env.IOS_PROFILE != '' && env.IOS_TEAM != '') }}
         run: |
           cd ios
           xcodebuild \
@@ -106,7 +107,7 @@ jobs:
             archive
 
       - name: Archive signed device build
-        if: ${{ secrets.IOS_BUILD_CERTIFICATE_BASE64 != '' }}
+        if: ${{ env.IOS_CERT != '' && env.IOS_PROFILE != '' && env.IOS_TEAM != '' }}
         run: |
           cd ios
           xcodebuild \
@@ -118,7 +119,7 @@ jobs:
             archive
 
       - name: Export signed IPA
-        if: ${{ secrets.IOS_BUILD_CERTIFICATE_BASE64 != '' }}
+        if: ${{ env.IOS_CERT != '' && env.IOS_PROFILE != '' && env.IOS_TEAM != '' }}
         run: |
           cd ios
           cat > export.plist <<PLIST
@@ -127,7 +128,7 @@ jobs:
           <plist version="1.0">
           <dict>
             <key>method</key><string>development</string>
-            <key>teamID</key><string>${{ secrets.IOS_TEAM_ID }}</string>
+            <key>teamID</key><string>$IOS_TEAM</string>
           </dict>
           </plist>
           PLIST
