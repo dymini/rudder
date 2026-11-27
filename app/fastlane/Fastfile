@@ -34,6 +34,15 @@ platform :ios do
     # imported from the IOS_DIST_P12_BASE64 / IOS_DIST_P12_PASSWORD secrets;
     # cert (which would create a new one) is only a fallback for first setup.
     if ENV["IOS_DIST_P12_BASE64"] && !ENV["IOS_DIST_P12_BASE64"].empty?
+      # Fresh CI keychains lack the Apple WWDR intermediate the distribution
+      # certificate chains to; without it the identity fails verification.
+      wwdr_path = File.expand_path("~/AppleWWDRCAG3.cer")
+      sh("curl", "-fsSL", "-o", wwdr_path, "https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer")
+      import_certificate(
+        certificate_path: wwdr_path,
+        keychain_path: File.expand_path("~/Library/Keychains/ci-db"),
+        keychain_password: "ci"
+      )
       p12_path = File.expand_path("~/dist.p12")
       File.binwrite(p12_path, Base64.decode64(ENV.fetch("IOS_DIST_P12_BASE64")))
       import_certificate(
