@@ -27,7 +27,6 @@ platform :ios do
 
     # Register the App Store Connect app on first run; a no-op once it exists.
     produce(
-      api_key: api_key,
       app_identifier: BUNDLE_ID,
       app_name: "Rudder",
       language: "English",
