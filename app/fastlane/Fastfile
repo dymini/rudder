@@ -54,7 +54,7 @@ platform :ios do
     update_code_signing_settings(
       use_automatic_signing: false,
       path: "ios/Rudder.xcodeproj",
-      team_id: APPLE_TEAM_ID
+      team_id: APPLE_TEAM_ID,
       bundle_identifier: BUNDLE_ID,
       profile_uuid: profile_uuid,
       code_sign_identity: "Apple Distribution"
