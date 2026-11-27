@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Security
+- **The example development master key can no longer be used by accident.** `.env.example` now contains a placeholder instead of a valid published key, and the panel refuses that old example key at startup; generate a real key with `openssl rand -hex 32`.
+
 ### Added
 - **Control the panel from an iPhone.** A new Expo iOS app in `app/` signs in through the panel's OAuth consent (the same grant AI agents use, revocable under Admin → AI agents) or an API token, and operates the panel over the `/mcp/api/v1` machine API: dashboard and server metrics, service deploy/start/stop/restart, container logs, environment variables, domains, compose stack actions, backup jobs and panel updates. The `.github/workflows/ios.yml` workflow builds it on a macOS runner and publishes simulator and device artifacts, signing and uploading to TestFlight automatically on every push through fastlane with the App Store Connect API key.
 - **Full panel control from the iOS app.** The app now covers everything the web dashboard does: create projects, environments and services (application, Docker image, database, compose stack), delete and roll back services, manage servers and builders (jobs, cache prune, pause), load guard and build queue, traffic statistics, global panel logs, audit log, global domains and TLS certificates, Docker registries, git providers, Rudder Image store, edge cache policies, one-click templates and plugins, panel users, Rudder Access identities/departments/ranks, security findings and scans, Cloudflare tunnel and zones, and S3 backup destinations.

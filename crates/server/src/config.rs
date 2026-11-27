@@ -139,6 +139,9 @@ pub struct Config {
 
 /// Release signing key compiled into official builds.
 const BUILT_IN_UPDATE_KEY: Option<&str> = option_env!("RUDDER_UPDATE_PUBKEY");
+/// Published example key rejected at startup. It was present in older `.env.example` copies.
+const EXAMPLE_MASTER_KEY_HEX: &str =
+    "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
 
 impl Config {
     /// Load configuration from process environment variables.
@@ -509,16 +512,24 @@ fn decode_master_key_bytes(bytes: &[u8]) -> Result<[u8; 32], ConfigError> {
 
 fn decode_master_key_text(raw: &str) -> Result<[u8; 32], ConfigError> {
     let trimmed = raw.trim();
-    if let Some(key) = decode_hex_key(trimmed) {
-        return Ok(key);
-    }
-    if let Some(key) = decode_base64_key(trimmed) {
-        return Ok(key);
+    if let Some(key) = decode_hex_key(trimmed).or_else(|| decode_base64_key(trimmed)) {
+        return finish_master_key(key);
     }
     Err(ConfigError::Invalid {
         name: "RUDDER_MASTER_KEY",
         reason: "expected 32 raw bytes, 64 hex characters, or standard base64".into(),
     })
+}
+
+fn finish_master_key(key: [u8; 32]) -> Result<[u8; 32], ConfigError> {
+    let example = decode_hex_key(EXAMPLE_MASTER_KEY_HEX).expect("example key is valid hex");
+    if key == example {
+        return Err(ConfigError::Invalid {
+            name: "RUDDER_MASTER_KEY",
+            reason: "the published .env.example key is not secret; generate a random key".into(),
+        });
+    }
+    Ok(key)
 }
 
 fn decode_hex_key(raw: &str) -> Option<[u8; 32]> {
@@ -657,5 +668,26 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn rejects_the_published_example_master_key() {
+        let mut vars = base_vars();
+        vars.insert("RUDDER_MASTER_KEY".into(), EXAMPLE_MASTER_KEY_HEX.into());
+        let error = Config::from_map(&vars, |_| unreachable!()).unwrap_err();
+        assert!(matches!(
+            error,
+            ConfigError::Invalid {
+                name: "RUDDER_MASTER_KEY",
+                ..
+            }
+        ));
+
+        let example = decode_hex_key(EXAMPLE_MASTER_KEY_HEX).unwrap();
+        vars.insert(
+            "RUDDER_MASTER_KEY".into(),
+            base64::engine::general_purpose::STANDARD.encode(example),
+        );
+        assert!(Config::from_map(&vars, |_| unreachable!()).is_err());
     }
 }
