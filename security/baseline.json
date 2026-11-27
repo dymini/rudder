@@ -1,0 +1,158 @@
+{
+  "schema": 1,
+  "created_at": "2026-11-27T12:25:00Z",
+  "commit": "3ff885b689c1b02c655804395d801a58140d2577",
+  "purpose": "First comprehensive security-scan baseline. Use path mapping in docs/security-scanning.md to scan only changed attack surface; do not treat scanner output as proof.",
+  "scope": {
+    "included": [
+      "Cargo.lock",
+      "web/pnpm-lock.yaml",
+      "app/bun.lock",
+      "crates",
+      "web/src",
+      "app/src",
+      "deploy",
+      "templates",
+      "plugins",
+      ".github/workflows",
+      "installer scripts",
+      "MCP/OAuth/auth/access/agent/build/backup/update/cache trust paths"
+    ],
+    "excluded_from_scans": [
+      ".git",
+      "target",
+      "node_modules",
+      "web/dist",
+      "app/ios",
+      "app/android",
+      ".sqlx"
+    ],
+    "raw_reports": "/tmp/rudder-security-scan (temporary; not committed)"
+  },
+  "tools": {
+    "osv_scanner": "osv-scanner version: 2.7.1",
+    "gitleaks": "8.30.1",
+    "trivy": "Version: 0.76.2",
+    "semgrep": "1.187.0",
+    "zizmor": "zizmor 1.33.1",
+    "actionlint": "1.7.12",
+    "hadolint": "Haskell Dockerfile Linter 2.15.1",
+    "cargo_audit": "unavailable: host lacks a C linker; Rust dependency coverage used OSV/Trivy instead"
+  },
+  "validated_as_not_issues": [
+    {
+      "area": "secrets",
+      "note": "Gitleaks private-key/API-key hits are intentional test keys, mock credentials, or .env.example placeholders; no real credential leak was confirmed."
+    },
+    {
+      "area": "xss",
+      "note": "No dangerous HTML sink was found in web/src or app/src during targeted search; log rendering still requires review whenever rendering changes."
+    },
+    {
+      "area": "rust memory safety",
+      "note": "No unsafe Rust blocks/functions, transmute, or direct libc use found in crates during targeted search."
+    },
+    {
+      "area": "shell command construction",
+      "note": "Production build plans use argv vectors; Mongo backup shell wrapper is constant-script and passes user values positionally."
+    },
+    {
+      "area": "SQL injection",
+      "note": "Reviewed grep hits were static/test SQL; no dynamic production SQL injection was confirmed."
+    },
+    {
+      "area": "checkout archive traversal",
+      "note": "crates/node/src/tree.rs already validates relative paths, rejects .git/unsupported entries, avoids following symlinks, and has hostile archive tests."
+    },
+    {
+      "area": "MCP/OAuth",
+      "note": "PKCE S256, exact redirects, hashed client secrets, token rotation/reuse revocation, browser-admin consent, and bounded delegated keys are implemented; MCP invocation internals should be re-reviewed when changed."
+    }
+  ],
+  "filed_issues": [
+    {
+      "number": 63,
+      "title": "Update rustls/webpki TLS dependency chain",
+      "area": "dependencies/tls"
+    },
+    {
+      "number": 64,
+      "title": "Upgrade lettre for SMTP injection and memory-exhaustion advisories",
+      "area": "dependencies/smtp"
+    },
+    {
+      "number": 65,
+      "title": "Upgrade zstd crates for memory-safety and stream-corruption advisories",
+      "area": "dependencies/compression"
+    },
+    {
+      "number": 66,
+      "title": "Address cryptographic timing side-channel dependency advisories",
+      "area": "dependencies/crypto"
+    },
+    {
+      "number": 67,
+      "title": "Upgrade miscellaneous vulnerable Rust runtime dependencies",
+      "area": "dependencies/runtime"
+    },
+    {
+      "number": 68,
+      "title": "Replace or track unmaintained Rust dependencies",
+      "area": "dependencies/maintenance"
+    },
+    {
+      "number": 69,
+      "title": "Upgrade minimatch in the Expo mobile dependency tree",
+      "area": "dependencies/mobile"
+    },
+    {
+      "number": 70,
+      "title": "Do not ship a copy-pasteable static master key in .env.example",
+      "area": "configuration/secrets"
+    },
+    {
+      "number": 71,
+      "title": "Verify release signatures in installer-downloaded binaries",
+      "area": "supply-chain/installers"
+    },
+    {
+      "number": 72,
+      "title": "Mobile app permits cleartext non-loopback panel URLs",
+      "area": "mobile/transport"
+    },
+    {
+      "number": 73,
+      "title": "Run panel and cache containers as non-root where possible",
+      "area": "containers/hardening"
+    },
+    {
+      "number": 74,
+      "title": "Pin GitHub Actions to immutable revisions",
+      "area": "ci-cd/supply-chain"
+    },
+    {
+      "number": 75,
+      "title": "Tighten GitHub Actions permissions and credential handling",
+      "area": "ci-cd/permissions"
+    },
+    {
+      "number": 76,
+      "title": "Remove template expansion from CI changelog shell step",
+      "area": "ci-cd/template-injection"
+    }
+  ],
+  "open_scanner_leads_not_filed": [
+    {
+      "lead": "zip 8.6.0 advisories",
+      "reason": "zip is a build dependency of utoipa-swagger-ui rather than a runtime extraction path; track under dependency maintenance/upgrades rather than claiming a product exploit."
+    },
+    {
+      "lead": "pulldown-cmark advisories",
+      "reason": "present through protobuf build generation, not exposed to attacker-controlled runtime markdown."
+    },
+    {
+      "lead": "libsqlite3-sys advisory",
+      "reason": "not in the normal production dependency graph for the default PostgreSQL build."
+    }
+  ]
+}
