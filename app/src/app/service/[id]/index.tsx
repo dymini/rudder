@@ -7,7 +7,7 @@ import { useAuth } from "../../../lib/auth";
 import { colors, spacing, statusTone } from "../../../lib/theme";
 import { formatTime, timeAgo, type DeploymentView, type ServiceUsage, type ServiceView, type MetricsOverview } from "../../../lib/types";
 
-type Action = "deploy" | "start" | "stop" | "restart";
+type Action = "deploy" | "start" | "stop" | "restart" | "rollback";
 
 export default function ServiceDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -38,14 +38,31 @@ export default function ServiceDetail() {
     onError: (error) => setActionError(error),
   });
 
+  const remove = useMutation({
+    mutationFn: () => api(`/api/v1/services/${id}`, { method: "DELETE" }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["services"] });
+      router.replace("/(tabs)/services");
+    },
+    onError: (error) => setActionError(error),
+  });
+
+  function confirmDelete() {
+    Alert.alert("Xóa dịch vụ", `Xóa "${data?.name}" vĩnh viễn? Container và volumes sẽ bị xóa.`, [
+      { text: "Hủy", style: "cancel" },
+      { text: "Xóa", style: "destructive", onPress: () => remove.mutate() },
+    ]);
+  }
+
   function confirm(action: Action) {
     const labels: Record<Action, string> = {
       deploy: "Triển khai lại",
       start: "Khởi động",
       stop: "Dừng",
       restart: "Khởi động lại",
+      rollback: "Rollback",
     };
-    if (action === "deploy" || action === "restart" || action === "stop") {
+    if (action === "deploy" || action === "restart" || action === "stop" || action === "rollback") {
       Alert.alert(labels[action], `Xác nhận ${labels[action].toLowerCase()} dịch vụ này?`, [
         { text: "Hủy", style: "cancel" },
         { text: labels[action], onPress: () => mutation.mutate(action) },
@@ -98,6 +115,10 @@ export default function ServiceDetail() {
         <View style={styles.actions}>
           <Button title="Khởi động" small tone="ghost" loading={mutation.isPending && mutation.variables === "start"} onPress={() => confirm("start")} />
           <Button title="Dừng" small tone="danger" loading={mutation.isPending && mutation.variables === "stop"} onPress={() => confirm("stop")} />
+        </View>
+        <View style={styles.actions}>
+          <Button title="Rollback" small tone="ghost" loading={mutation.isPending && mutation.variables === "rollback"} onPress={() => confirm("rollback")} />
+          <Button title="Xóa dịch vụ" small tone="danger" loading={remove.isPending} onPress={confirmDelete} />
         </View>
       </Card>
 

@@ -82,6 +82,7 @@ export default function System() {
       <ListItem title="Git providers" subtitle="GitHub/GitLab đã kết nối" onPress={() => router.push("/git-providers")} />
       <ListItem title="Rudder Image" subtitle="Kho image nội bộ" onPress={() => router.push("/image-store")} />
       <ListItem title="Cache edge" subtitle="Cache policies" onPress={() => router.push("/cache-policies")} />
+      <ListItem title="S3 destinations" subtitle="Nơi lưu backup" onPress={() => router.push("/s3-destinations")} />
       <ListItem title="Templates" subtitle="Template một chạm" onPress={() => router.push("/templates")} />
       <ListItem title="Plugins" subtitle="Plugin cộng đồng" onPress={() => router.push("/plugins")} />
       <ListItem title="Người dùng" subtitle="Tài khoản panel" onPress={() => router.push("/users")} />

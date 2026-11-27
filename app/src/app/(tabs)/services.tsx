@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Fragment, useMemo, useState } from "react";
 import { StyleSheet, TextInput } from "react-native";
-import { Badge, Empty, ErrorBox, ListItem, Loading, Screen, SectionTitle } from "../../components/ui";
+import { Badge, Button, Empty, ErrorBox, ListItem, Loading, Screen, SectionTitle } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
 import { colors, spacing, statusTone } from "../../lib/theme";
 import type { ServiceSummary } from "../../lib/types";
@@ -37,6 +37,7 @@ export default function Services() {
         placeholderTextColor={colors.textDim}
         autoCapitalize="none"
       />
+      <Button title="+ Tạo dịch vụ mới" tone="ghost" onPress={() => router.push("/service-create")} />
       <ErrorBox error={services.error} />
       {services.isLoading ? (
         <Loading />
