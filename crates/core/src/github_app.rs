@@ -4,10 +4,10 @@
 //! The private key stays with the caller. `github_app_jwt` only returns the JWT.
 
 use base64::Engine;
-use rsa::pkcs1::DecodePrivateKey;
+use rsa::pkcs1::DecodeRsaPrivateKey;
 use rsa::pkcs1v15::Pkcs1v15Sign;
 use rsa::pkcs8::DecodePrivateKey;
-use rsa::PrivateKey;
+use rsa::PrivateKey as RsaPrivateKey;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -147,8 +147,8 @@ pub fn github_app_jwt(app_id: &str, private_key_pem: &str, now_unix: i64) -> Res
     let payload = format!(r#"{{"iat":{iat},"exp":{exp},"iss":"{app_id}"}}"#);
     let payload_b64 = b64url(payload.as_bytes());
     let signing_input = format!("{header}.{payload_b64}");
-    let key = PrivateKey::from_pkcs8_pem(private_key_pem)
-        .or_else(|_| PrivateKey::from_pkcs1_pem(private_key_pem))
+    let key = RsaPrivateKey::from_pkcs8_pem(private_key_pem)
+        .or_else(|_| RsaPrivateKey::from_pkcs1_pem(private_key_pem))
         .map_err(|_| Error::Validation("github app private key could not be parsed".into()))?;
     let digest = Sha256::digest(signing_input.as_bytes());
     let signature = key
@@ -270,7 +270,7 @@ pub(crate) mod tests {
         let signature_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
             .decode(signature)
             .unwrap();
-        let private = PrivateKey::from_pkcs8_pem(pem).unwrap();
+        let private = RsaPrivateKey::from_pkcs8_pem(pem).unwrap();
         private
             .to_public_key()
             .verify(
