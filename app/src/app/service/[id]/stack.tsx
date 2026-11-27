@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Badge, Button, Card, CardTitle, ErrorBox, Loading, Row, Screen, SectionTitle } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
-import { colors, spacing, statusTone } from "../../../lib/theme";
+import { monoFont, colors, spacing, statusTone } from "../../../lib/theme";
 import type { StackView } from "../../../lib/types";
 
 const ACTIONS = [
@@ -146,5 +146,5 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     maxHeight: 400,
   },
-  yaml: { color: "#b8c4d8", fontFamily: "monospace" as never, fontSize: 11 },
+  yaml: { color: "#b8c4d8", fontFamily: monoFont, fontSize: 11 },
 });

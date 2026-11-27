@@ -15,6 +15,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [0.15.0] - 2026-11-24
 
 ### Fixed
+- **Fixed iOS app crashing when opening screens from the System tab.** The log and compose viewers used the `monospace` font family, which does not exist on iOS; the app now uses Menlo on iOS. A new error boundary also shows a readable error screen instead of closing the app if any screen ever fails to render.
 - **Add build hosts and remote servers to a panel reachable only over HTTPS.** When the agent gRPC port is unreachable — for example behind a Cloudflare Tunnel with every inbound port closed — enrollment, the installer download and the agent session itself run through the panel's HTTPS address under `/mcp` (the session is piped over a WebSocket at `/mcp/api/v1/agent/tunnel`, still end-to-end mTLS). No flag is needed; Cloudflare Access's agent bypass must stay on when Zero Trust is enforced.
 
 ## [0.14.0] - 2026-11-24

@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 export const colors = {
   bg: "#0b0f17",
   card: "#151b26",
@@ -30,3 +31,5 @@ export const spacing = {
   lg: 16,
   xl: 24,
 };
+
+export const monoFont = Platform.OS === "ios" ? "Menlo" : "monospace";

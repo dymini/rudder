@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ErrorBox, Loading, Screen } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
-import { colors, spacing } from "../../../lib/theme";
+import { monoFont, colors, spacing } from "../../../lib/theme";
 import type { LogsView } from "../../../lib/types";
 
 const TAILS = [200, 500, 1000];
@@ -60,5 +60,5 @@ const styles = StyleSheet.create({
   chipText: { color: colors.textDim, fontSize: 12, fontWeight: "600" },
   chipTextActive: { color: colors.accent },
   logScroll: { flex: 1, backgroundColor: "#060a10", margin: spacing.md, marginTop: 0, borderRadius: 10 },
-  logText: { color: "#b8c4d8", fontFamily: "monospace" as never, fontSize: 11, lineHeight: 15 },
+  logText: { color: "#b8c4d8", fontFamily: monoFont, fontSize: 11, lineHeight: 15 },
 });
