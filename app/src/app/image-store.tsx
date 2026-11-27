@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
@@ -10,7 +10,6 @@ type ImageStoreOverview = Schemas["ImageStoreOverview"];
 
 export default function ImageStore() {
   const { api } = useAuth();
-  const queryClient = useQueryClient();
   const [error, setError] = useState<unknown>(null);
 
   const overview = useQuery({ queryKey: ["image-store"], queryFn: () => api<ImageStoreOverview>("/api/v1/image-store/overview") });

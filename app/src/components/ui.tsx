@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  TextInput,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -292,8 +293,6 @@ export function Input({
     />
   );
 }
-
-import { TextInput } from "react-native";
 
 const formStyles = StyleSheet.create({
   input: {

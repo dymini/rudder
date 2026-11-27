@@ -18,6 +18,7 @@ export default function Certificates() {
   const [keyPem, setKeyPem] = useState("");
   const [chainPem, setChainPem] = useState("");
 
+  const now = useState(() => Date.now())[0];
   const certs = useQuery({ queryKey: ["certificates"], queryFn: () => api<CertificateView[]>("/api/v1/certificates") });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["certificates"] });
@@ -55,9 +56,9 @@ export default function Certificates() {
     ]);
   }
 
-  function expiryTone(iso?: string | null): "ok" | "warn" | "danger" | "dim" {
+  function expiryTone(iso: string | null | undefined, now: number): "ok" | "warn" | "danger" | "dim" {
     if (!iso) return "dim";
-    const days = (new Date(iso).getTime() - Date.now()) / 86400000;
+    const days = (new Date(iso).getTime() - now) / 86400000;
     if (days < 0) return "danger";
     if (days < 14) return "warn";
     return "ok";
@@ -77,7 +78,7 @@ export default function Certificates() {
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <CardTitle>{cert.name}</CardTitle>
               {cert.not_after ? (
-                <Badge label={`hết hạn ${formatTime(cert.not_after)}`} tone={expiryTone(cert.not_after)} />
+                <Badge label={`hết hạn ${formatTime(cert.not_after)}`} tone={expiryTone(cert.not_after, now)} />
               ) : null}
             </View>
             {cert.common_name ? <Row label="CN" value={cert.common_name} dim /> : null}

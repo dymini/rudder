@@ -4,7 +4,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import { Badge, Button, Card, CardTitle, Empty, ErrorBox, Loading, Row, Screen, SectionTitle } from "../components/ui";
 import { useAuth } from "../lib/auth";
-import { timeAgo, type EnvironmentView, type ProjectView, type Schemas, type ServerView } from "../lib/types";
+import { type EnvironmentView, type ProjectView, type Schemas, type ServerView } from "../lib/types";
 
 type PluginView = Schemas["PluginView"];
 

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { useState } from "react";
 import { Alert, View } from "react-native";
-import { Badge, Button, Card, CardTitle, Empty, ErrorBox, Input, Loading, Row, Screen, SectionTitle } from "../components/ui";
+import { Badge, Button, Card, CardTitle, Empty, ErrorBox, Input, Row, Screen, SectionTitle } from "../components/ui";
 import { useAuth } from "../lib/auth";
 import { timeAgo, type Schemas } from "../lib/types";
 
