@@ -1,0 +1,67 @@
+name: Bug report
+description: Something in Dymini Panel is not working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! **Do not report security vulnerabilities here** — use [private vulnerability reporting](https://github.com/dymini/panel/security/advisories/new) instead.
+  - type: input
+    id: version
+    attributes:
+      label: Panel version
+      description: Shown in the panel under System → Updates, or `dymini-panel --version`
+      placeholder: "0.x.y"
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Panel web UI
+        - Deploys / builds
+        - CLI (dymini-panel)
+        - Server agent (multi-server)
+        - Databases / backups
+        - Domains / TLS / Traefik
+        - Installation / updates
+        - Templates / stacks
+        - MCP / API
+        - Mobile app
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+      description: Include error messages verbatim. Redact tokens and secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to …
+        2. Click …
+        3. …
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Panel logs (System → Logs) or `docker logs dymini-panel`. Redact secrets.
+      render: shell
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS/distro of the panel host, Docker version, single server or agents, anything unusual
+      placeholder: "Ubuntu 24.04, Docker 27, panel + 1 agent"

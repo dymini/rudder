@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussions
+    url: https://github.com/dymini/panel/discussions
+    about: Questions, ideas, and show-and-tell — please ask here before opening an issue.
+  - name: Security vulnerability
+    url: https://github.com/dymini/panel/security/advisories/new
+    about: Report security issues privately — never in a public issue.

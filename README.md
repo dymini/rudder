@@ -1,5 +1,9 @@
 # Dymini Panel
 
+[![CI](https://github.com/dymini/panel/actions/workflows/ci.yml/badge.svg)](https://github.com/dymini/panel/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/dymini/panel?sort=semver)](https://github.com/dymini/panel/releases)
+
 Dymini Panel is a lightweight, self-hosted deployment platform, an alternative to Dokploy or Coolify for people who want one VPS to run everything. One server runs the control panel. Extra servers run a small agent that dials out to the panel and are managed from the same dashboard. There is no cluster scheduler: each server is independent.
 
 What you get:
@@ -153,3 +157,15 @@ Not verified yet:
 The PR history lists the details.
 
 The panel is available in English and Vietnamese; each person picks one on the Account page. Interface text is written in English inside `t("…")` calls and translated by `web/src/i18n/vi.ts`, keyed by the English text. After adding or changing interface text, add the Vietnamese entry and run `pnpm --dir web check:i18n`, which fails on a missing entry or a placeholder that differs between the two.
+
+## Contributing
+
+Contributions are welcome — bug reports, feature requests, docs improvements, and code. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup and what a pull request needs, and please follow the [code of conduct](CODE_OF_CONDUCT.md). Questions and ideas belong in [discussions](https://github.com/dymini/panel/discussions).
+
+## Security
+
+To report a vulnerability, use [GitHub private vulnerability reporting](https://github.com/dymini/panel/security/advisories/new) — never a public issue. See [SECURITY.md](SECURITY.md) for the policy, scope, and hardening notes.
+
+## License
+
+[Apache License 2.0](LICENSE), copyright Dymini contributors. The Apache license covers the code only — it does not grant rights to the Dymini name or logo.

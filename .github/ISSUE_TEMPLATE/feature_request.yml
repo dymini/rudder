@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest something new for Dymini Panel
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For larger ideas, consider starting a [discussion](https://github.com/dymini/panel/discussions) first so the design can be hashed out before an issue is filed.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve for you?
+      description: Describe the use case, not just the solution you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to see?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you have considered
+      description: Other tools or workarounds you use today.

@@ -22,6 +22,16 @@ web/dist
 *.pem
 /data
 
+# Keys and credentials
+*.key
+id_rsa*
+*.minisign
+minisign.key
+service-account*.json
+serviceAccount*.json
+firebase-adminsdk*.json
+secrets/
+
 # OS
 .DS_Store
 /dist/
