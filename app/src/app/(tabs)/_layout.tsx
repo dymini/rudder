@@ -1,44 +1,50 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { Platform } from "react-native";
-import { colors } from "../../lib/theme";
+import { colors, hairline, tapHaptic } from "../../lib/theme";
 
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerStyle: { backgroundColor: colors.bg },
+        headerStyle: {
+          backgroundColor: colors.bg,
+          borderBottomWidth: hairline,
+          borderBottomColor: colors.cardBorder,
+        },
         headerTintColor: colors.text,
         headerShadowVisible: false,
-        headerTitleStyle: { fontWeight: "700", fontSize: 20 },
+        headerTitleStyle: { fontWeight: "600", fontSize: 17 },
         tabBarStyle: {
-          position: "absolute",
-          left: 14,
-          right: 14,
-          bottom: Platform.OS === "ios" ? 18 : 12,
-          height: 68,
-          borderRadius: 26,
-          backgroundColor: colors.card,
-          borderTopWidth: 1,
+          backgroundColor: colors.bgElevated,
+          borderTopWidth: hairline,
           borderTopColor: colors.cardBorder,
-          shadowColor: "#000",
-          shadowOpacity: 0.35,
-          shadowRadius: 18,
-          shadowOffset: { width: 0, height: 10 },
-          elevation: 12,
+          height: Platform.OS === "ios" ? 82 : 62,
+          paddingTop: 6,
+          paddingBottom: Platform.OS === "ios" ? 24 : 8,
         },
-        tabBarItemStyle: { paddingVertical: 7 },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
-        tabBarActiveTintColor: colors.accentBright,
-        tabBarInactiveTintColor: colors.textDim,
+        tabBarLabelStyle: {
+          fontSize: 10.5,
+          fontWeight: "600",
+          letterSpacing: 0.1,
+        },
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.textFaint,
+      }}
+      screenListeners={{
+        tabPress: () => tapHaptic("select"),
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: "Tổng quan",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "speedometer" : "speedometer-outline"} color={color as string} size={size} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "grid" : "grid-outline"}
+              color={color as string}
+              size={21}
+            />
           ),
         }}
       />
@@ -46,8 +52,12 @@ export default function TabsLayout() {
         name="services"
         options={{
           title: "Dịch vụ",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "cube" : "cube-outline"} color={color as string} size={size} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "cube" : "cube-outline"}
+              color={color as string}
+              size={21}
+            />
           ),
         }}
       />
@@ -55,8 +65,12 @@ export default function TabsLayout() {
         name="backups"
         options={{
           title: "Sao lưu",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "archive" : "archive-outline"} color={color as string} size={size} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "archive" : "archive-outline"}
+              color={color as string}
+              size={21}
+            />
           ),
         }}
       />
@@ -64,8 +78,12 @@ export default function TabsLayout() {
         name="system"
         options={{
           title: "Hệ thống",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "settings" : "settings-outline"} color={color as string} size={size} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "options" : "options-outline"}
+              color={color as string}
+              size={21}
+            />
           ),
         }}
       />

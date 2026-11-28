@@ -11,9 +11,9 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Button, ErrorBox } from "../components/ui";
+import { Button, DyminiMark, ErrorBox } from "../components/ui";
 import { useAuth } from "../lib/auth";
-import { colors, spacing } from "../lib/theme";
+import { colors, hairline, monoFont, radius, spacing, tapHaptic } from "../lib/theme";
 
 export default function Connect() {
   const { signIn, signInWithToken } = useAuth();
@@ -43,30 +43,36 @@ export default function Connect() {
       style={{ flex: 1, backgroundColor: colors.bg }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.heroGlow} />
-        <View style={styles.brandOrbit}>
-          <View style={styles.brandBadge}>
-            <Ionicons name="compass" color={colors.accentBright} size={42} />
-          </View>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.brandBlock}>
+          <DyminiMark size={48} />
+          <Text style={styles.title}>Dymini Panel</Text>
+          <Text style={styles.subtitle}>
+            Giám sát máy chủ, triển khai dịch vụ và xử lý sự cố ngay trên thiết bị của bạn.
+          </Text>
         </View>
-        <Text style={styles.title}>Dymini Panel</Text>
-        <Text style={styles.subtitle}>Bảng điều khiển hạm đội của bạn — nhanh, an toàn và luôn trong tầm tay.</Text>
 
         <View style={styles.formCard}>
-          <Text style={styles.label}>Địa chỉ panel</Text>
-          <View style={styles.inputShell}>
-            <Ionicons name="link-outline" color={colors.textDim} size={18} />
-            <TextInput
-              style={styles.input}
-              value={panelUrl}
-              onChangeText={setPanelUrl}
-              placeholder="https://dymini-panel.example.com"
-              placeholderTextColor={colors.textFaint}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-            />
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Địa chỉ panel</Text>
+            <View style={styles.inputShell}>
+              <Ionicons name="globe-outline" color={colors.textFaint} size={16} />
+              <TextInput
+                style={styles.input}
+                value={panelUrl}
+                onChangeText={setPanelUrl}
+                placeholder="https://panel.example.com"
+                placeholderTextColor={colors.textFaint}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                returnKeyType="go"
+              />
+            </View>
           </View>
 
           <ErrorBox error={error} />
@@ -77,20 +83,36 @@ export default function Connect() {
             disabled={!panelUrl.trim()}
             onPress={() => run(() => signIn(panelUrl))}
           />
+
           <Text style={styles.hint}>
-            Phiên đăng nhập mở trong trình duyệt bảo mật của hệ thống, sau đó tự động quay lại app.
+            Mở trình duyệt bảo mật của hệ thống để xác thực OAuth và tự động quay lại ứng dụng.
           </Text>
 
-          <Pressable onPress={() => setShowToken((v) => !v)} style={styles.tokenToggleWrap}>
-            <Text style={styles.tokenToggle}>{showToken ? "Ẩn đăng nhập bằng API token" : "Dùng API token"}</Text>
-            <Ionicons name={showToken ? "chevron-up" : "chevron-down"} color={colors.accentBright} size={15} />
+          <View style={styles.divider} />
+
+          <Pressable
+            onPress={() => {
+              tapHaptic("select");
+              setShowToken((v) => !v);
+            }}
+            style={styles.tokenToggleWrap}
+          >
+            <Text style={styles.tokenToggle}>
+              {showToken ? "Ẩn đăng nhập bằng API token" : "Đăng nhập bằng API token"}
+            </Text>
+            <Ionicons
+              name={showToken ? "chevron-up" : "chevron-down"}
+              color={colors.textDim}
+              size={15}
+            />
           </Pressable>
+
           {showToken ? (
             <View style={{ gap: spacing.md }}>
               <View style={styles.inputShell}>
-                <Ionicons name="key-outline" color={colors.textDim} size={18} />
+                <Ionicons name="key-outline" color={colors.textFaint} size={16} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { fontFamily: monoFont, fontSize: 13 }]}
                   value={token}
                   onChangeText={setToken}
                   placeholder="dymini_panel_token_…"
@@ -101,7 +123,7 @@ export default function Connect() {
                 />
               </View>
               <Button
-                title="Đăng nhập bằng token"
+                title="Kết nối bằng token"
                 tone="ghost"
                 loading={busy}
                 disabled={!panelUrl.trim() || !token.trim()}
@@ -119,59 +141,41 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     justifyContent: "center",
-    padding: spacing.xl,
-    gap: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xxl,
+    gap: spacing.xl,
   },
-  heroGlow: {
-    position: "absolute",
-    top: 30,
-    alignSelf: "center",
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: colors.accentDim,
-    opacity: 0.42,
+  brandBlock: {
+    gap: spacing.sm,
   },
-  brandOrbit: {
-    alignSelf: "center",
-    width: 104,
-    height: 104,
-    borderRadius: 52,
-    borderWidth: 1,
-    borderColor: colors.accent + "44",
-    alignItems: "center",
-    justifyContent: "center",
+  title: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: "700",
+    letterSpacing: -0.7,
+    marginTop: spacing.xs,
   },
-  brandBadge: {
-    width: 76,
-    height: 76,
-    borderRadius: 26,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.cardSoft,
-    borderWidth: 1,
-    borderColor: colors.accent + "66",
-    shadowColor: colors.accent,
-    shadowOpacity: 0.35,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 8 },
+  subtitle: {
+    color: colors.textDim,
+    fontSize: 14.5,
+    lineHeight: 21,
   },
-  title: { color: colors.text, fontSize: 38, fontWeight: "800", letterSpacing: -1, textAlign: "center" },
-  subtitle: { color: colors.textDim, fontSize: 15, lineHeight: 22, textAlign: "center", marginHorizontal: spacing.lg },
   formCard: {
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    borderRadius: 26,
-    padding: spacing.xl,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
     gap: spacing.md,
-    shadowColor: "#000",
-    shadowOpacity: 0.32,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 8,
   },
-  label: { color: colors.textDim, fontSize: 13, fontWeight: "700" },
+  fieldGroup: {
+    gap: 6,
+  },
+  label: {
+    color: colors.textSoft,
+    fontSize: 12.5,
+    fontWeight: "600",
+  },
   inputShell: {
     flexDirection: "row",
     alignItems: "center",
@@ -179,16 +183,34 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgElevated,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    borderRadius: 16,
+    borderRadius: radius.md,
     paddingHorizontal: spacing.md,
   },
   input: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
     color: colors.text,
-    fontSize: 15,
+    fontSize: 14.5,
   },
-  hint: { color: colors.textDim, fontSize: 12, lineHeight: 17, textAlign: "center" },
-  tokenToggleWrap: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: spacing.xs },
-  tokenToggle: { color: colors.accentBright, fontSize: 14, fontWeight: "700", textAlign: "center" },
+  hint: {
+    color: colors.textFaint,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  divider: {
+    height: hairline,
+    backgroundColor: colors.cardBorder,
+    marginVertical: 2,
+  },
+  tokenToggleWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 2,
+  },
+  tokenToggle: {
+    color: colors.textSoft,
+    fontSize: 13.5,
+    fontWeight: "500",
+  },
 });
