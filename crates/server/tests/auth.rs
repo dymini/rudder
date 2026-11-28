@@ -944,7 +944,7 @@ async fn cli_auth_start_is_rate_limited(pool: PgPool) {
     )
     .await;
     assert_eq!(limited.status, StatusCode::TOO_MANY_REQUESTS);
-    assert_eq!(limited.body["error"], "rate_limited");
+    assert_eq!(limited.body["error"]["code"], "rate_limited");
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -969,5 +969,5 @@ async fn cli_auth_start_caps_pending_requests(pool: PgPool) {
     )
     .await;
     assert_eq!(capped.status, StatusCode::TOO_MANY_REQUESTS);
-    assert_eq!(capped.body["error"], "too_many_pending");
+    assert_eq!(capped.body["error"]["code"], "too_many_pending");
 }
