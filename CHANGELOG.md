@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Security
+- **Dependency review no longer keeps repository credentials after checkout.** The pull-request dependency scan now uses a read-only checkout without persisted GitHub token credentials.
+
 ## [0.16.0] - 2026-11-28
 
 ### Changed

@@ -41,3 +41,14 @@ fn releases_publish_the_changelog_as_their_notes() {
         "CHANGELOG.md needs an [Unreleased] section"
     );
 }
+
+#[test]
+fn dependency_review_does_not_persist_checkout_credentials() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let workflow = std::fs::read_to_string(root.join(".github/workflows/dependency-review.yml"))
+        .expect("read dependency review workflow");
+    assert!(
+        workflow.contains("persist-credentials: false"),
+        "dependency review checkout must not leave token credentials on disk"
+    );
+}
