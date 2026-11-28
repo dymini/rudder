@@ -444,17 +444,30 @@ export function DashboardPage() {
         />
       </div>
 
-      {/* 4. Primary Telemetry & Fleet Row */}
+      {/* 4. Primary Operations & Telemetry Grid (balanced two-column flow with zero dead vertical space) */}
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px]">
-        <TelemetryPanel
-          servers={serverList}
-          selectedServerId={selectedServerId}
-          onSelectServer={setSelectedServerId}
-          range={range}
-          paused={paused}
-          stats={stats.data}
-          statsLoading={stats.isLoading}
-        />
+        <div className="grid min-w-0 gap-5">
+          <TelemetryPanel
+            servers={serverList}
+            selectedServerId={selectedServerId}
+            onSelectServer={setSelectedServerId}
+            range={range}
+            paused={paused}
+            stats={stats.data}
+            statsLoading={stats.isLoading}
+          />
+          <div ref={servicesRef} className="min-w-0 scroll-mt-20">
+            <UnifiedServicesCard
+              services={serviceList}
+              usageList={overview.data?.services ?? []}
+              servers={serverList}
+              loading={services.isLoading}
+              isAdmin={isAdmin}
+              filter={filter}
+              onFilter={setFilter}
+            />
+          </div>
+        </div>
         <div className="grid min-w-0 gap-5">
           <FleetPanel
             servers={serverList}
@@ -464,23 +477,6 @@ export function DashboardPage() {
             onSelectServer={setSelectedServerId}
           />
           <PanelLoadCard />
-        </div>
-      </div>
-
-      {/* 5. Operations Workspace Row */}
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px]">
-        <div ref={servicesRef} className="min-w-0 scroll-mt-20">
-          <UnifiedServicesCard
-            services={serviceList}
-            usageList={overview.data?.services ?? []}
-            servers={serverList}
-            loading={services.isLoading}
-            isAdmin={isAdmin}
-            filter={filter}
-            onFilter={setFilter}
-          />
-        </div>
-        <div className="grid min-w-0 gap-5">
           <ActivityFeedCard
             events={events.data ?? []}
             loading={events.isLoading}
