@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Fixed
+- **Installers verify signed releases properly.** Fixed `install.sh` and `install-agent.sh` rejecting valid release signatures when the release workflow substituted the minisign public key placeholder into both the key assignment and the unreplaced-placeholder guard check.
+
 ### Security
 - **The panel server process now runs as a dedicated non-root user.** The container entrypoint performs ownership migration once, grants Docker access through the socket's numeric group instead of root, shares only the cache control files needed by the panel, and then drops to uid/gid 10001 before starting `dymini-panel-server`.
 - **Notification egress now blocks internal-network SSRF by default.** Webhook and custom Telegram endpoints may not resolve to loopback, private, link-local, metadata, multicast, or other non-public addresses unless the operator explicitly sets `DYMINI_PANEL_NOTIFICATION_ALLOW_PRIVATE=true` for a trusted internal endpoint.

@@ -184,7 +184,7 @@ verify() {
 
 verify_minisign() {
 	# verify_minisign MESSAGE_FILE SIGNATURE_FILE; the trusted public key is embedded at release time.
-	[ -n "$UPDATE_PUBKEY" ] && [ "$UPDATE_PUBKEY" != "__DYMINI_PANEL_UPDATE_PUBKEY__" ] || return 1
+	case "$UPDATE_PUBKEY" in "" | __DYMINI_PANEL_*__) return 1 ;; esac
 	command -v python3 >/dev/null 2>&1 || return 1
 	printf '%s\n' "$UPDATE_PUBKEY" >"$tmp/release.pub"
 	python3 - "$tmp/release.pub" "$1" "$2" <<'DYMINI_PANEL_MINISIGN_PY'

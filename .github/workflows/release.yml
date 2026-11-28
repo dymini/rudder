@@ -271,12 +271,14 @@ jobs:
           import os
           from pathlib import Path
           key = os.environ["DYMINI_PANEL_UPDATE_PUBKEY"]
+          placeholder = "__DYMINI_PANEL_UPDATE_PUBKEY__"
           for name in ("install.sh", "install-agent.sh"):
               path = Path("dist") / name
               text = path.read_text()
-              if "__DYMINI_PANEL_UPDATE_PUBKEY__" not in text:
-                  raise SystemExit(f"{name} is missing the signing-key placeholder")
-              path.write_text(text.replace("__DYMINI_PANEL_UPDATE_PUBKEY__", key))
+              count = text.count(placeholder)
+              if count != 1:
+                  raise SystemExit(f"{name} must contain exactly 1 signing-key placeholder, found {count}")
+              path.write_text(text.replace(placeholder, key, 1))
           PY
           sh deploy/release/make-release.sh "$version" dist \
             "ghcr.io/$owner/panel:$version@$PANEL_DIGEST" \
