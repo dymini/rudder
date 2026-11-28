@@ -14,6 +14,7 @@ import {
   useLoad,
   type LoadView,
 } from "../components/load";
+import { LiveControlBar } from "../components/ops-ui";
 import {
   Alert,
   Badge,
@@ -41,8 +42,10 @@ const roleLabel: Record<string, string> = {
 export function LoadPage() {
   const t = useT();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [paused, setPaused] = useState(false);
   const isAdmin = user?.role === "admin";
-  const load = useLoad();
+  const load = useLoad(paused);
   const view = load.data;
 
   return (
@@ -52,7 +55,21 @@ export function LoadPage() {
         description={t(
           "Keeps the panel reachable when builds or traffic overload the server: new builds wait while it is busy, and builds stop before memory runs out.",
         )}
-        actions={view ? <BuildActions view={view} /> : null}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <LiveControlBar
+              paused={paused}
+              onTogglePause={() => setPaused((p) => !p)}
+              onRefresh={() => {
+                void queryClient.invalidateQueries({ queryKey: ["load"] });
+                void queryClient.invalidateQueries({ queryKey: ["metrics-overview"] });
+              }}
+              refreshing={load.isFetching}
+              updatedAt={load.dataUpdatedAt}
+            />
+            {view ? <BuildActions view={view} size="sm" /> : null}
+          </div>
+        }
       />
 
       {load.error && !view ? (

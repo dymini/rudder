@@ -22,11 +22,11 @@ type Usage = Schemas["ServiceUsage"];
 /** The load guard samples every 3 seconds; the panel asks a little less often. */
 export const LOAD_REFRESH = 5_000;
 
-export function useLoad() {
+export function useLoad(paused = false) {
   return useQuery({
     queryKey: ["load"],
     queryFn: () => api<LoadView>("/api/v1/load"),
-    refetchInterval: LOAD_REFRESH,
+    refetchInterval: paused ? false : LOAD_REFRESH,
   });
 }
 

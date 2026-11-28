@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -12,9 +12,9 @@ import {
 } from "recharts";
 import { api } from "../api";
 import { formatBytes } from "../format";
-import type { Schemas } from "../types";
-import { Empty, Segmented } from "./ui";
 import { msg, useT } from "../i18n";
+import type { Schemas } from "../types";
+import { Empty, Segmented, Skeleton } from "./ui";
 
 export const RANGES = ["15m", "1h", "6h", "24h", "7d", "30d"] as const;
 export type Range = (typeof RANGES)[number];
@@ -30,8 +30,13 @@ export interface ChartSpec {
   colors?: string[];
 }
 
-// Series colours follow the theme: pine first, then amber and slate; red is kept for errors.
-export const COLORS = ["var(--pine)", "var(--amber)", "#5b7fa6", "var(--danger)"];
+// Series colours follow the theme: pine first, then amber, slate-blue, and danger.
+export const COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+];
 
 // Recharts paints its own white tooltip and grey ticks; route them through the theme tokens
 // so text stays readable in both light and dark mode.
@@ -80,36 +85,47 @@ function MetricChart({
   spec,
   range,
   target,
+  paused = false,
 }: {
   spec: ChartSpec;
   range: Range;
   target: { server_id?: string; service_id?: string };
+  paused?: boolean;
 }) {
   const t = useT();
+  const baseId = useId();
   const params = new URLSearchParams({ metrics: spec.metrics.join(","), range });
   if (target.server_id) params.set("server_id", target.server_id);
   if (target.service_id) params.set("service_id", target.service_id);
   const data = useQuery({
     queryKey: ["metrics", target, spec.metrics, range],
     queryFn: () => api<Schemas["MetricsView"]>(`/api/v1/metrics?${params.toString()}`),
-    refetchInterval: 10_000,
+    refetchInterval: paused ? false : 10_000,
   });
 
-  const rows = new Map<number, { t: number } & Record<string, number>>();
-  for (const series of data.data?.series ?? []) {
-    for (const point of series.points) {
-      const time = new Date(point.t).getTime();
-      const row = rows.get(time) ?? ({ t: time } as { t: number } & Record<string, number>);
-      row[series.metric] = point.avg;
-      rows.set(time, row);
+  const points = useMemo(() => {
+    const rows = new Map<number, { t: number } & Record<string, number>>();
+    for (const series of data.data?.series ?? []) {
+      for (const point of series.points) {
+        const time = new Date(point.t).getTime();
+        const row = rows.get(time) ?? ({ t: time } as { t: number } & Record<string, number>);
+        row[series.metric] = point.avg;
+        rows.set(time, row);
+      }
     }
-  }
-  const points = [...rows.values()].sort((a, b) => a.t - b.t);
+    return [...rows.values()].sort((a, b) => a.t - b.t);
+  }, [data.data]);
+
   const colors = spec.colors ?? COLORS;
-  const latest = points.length ? points[points.length - 1]?.[spec.metrics[0] ?? ""] : undefined;
+  const primaryMetric = spec.metrics[0] ?? "";
+  const primaryValues = points
+    .map((p) => p[primaryMetric])
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const latest = primaryValues.length ? primaryValues[primaryValues.length - 1] : undefined;
+  const peak = primaryValues.length ? Math.max(...primaryValues) : undefined;
 
   return (
-    <div className="min-w-0 rounded-card border border-line bg-surface p-4 sm:p-5">
+    <div className="min-w-0 rounded-card border border-line bg-surface p-4 shadow-card sm:p-5">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-ink">{t(spec.title)}</h3>
@@ -120,21 +136,52 @@ function MetricChart({
           ) : null}
         </div>
         {latest != null ? (
-          <p className="text-right">
-            <span className="block text-lg leading-tight font-semibold text-ink tabular-nums">
-              {formatValue(latest, spec.unit)}
-            </span>
-            <span className="text-xs text-muted">{t("latest")}</span>
-          </p>
+          <div className="flex items-baseline gap-4 text-right tabular-nums">
+            {peak != null ? (
+              <p className="hidden sm:block">
+                <span className="block text-xs font-medium text-ink-soft">
+                  {formatValue(peak, spec.unit)}
+                </span>
+                <span className="text-[11px] text-faint">{t("peak")}</span>
+              </p>
+            ) : null}
+            <p>
+              <span className="block text-lg leading-tight font-semibold text-ink">
+                {formatValue(latest, spec.unit)}
+              </span>
+              <span className="text-[11px] text-muted">{t("latest")}</span>
+            </p>
+          </div>
         ) : null}
       </div>
-      {points.length === 0 ? (
+
+      {data.isLoading && points.length === 0 ? (
+        <Skeleton className="h-44 w-full rounded-control" />
+      ) : points.length === 0 ? (
         <div className="flex h-44 items-center justify-center">
-          <Empty>{data.isLoading ? t("Loading…") : t("No samples in this range yet.")}</Empty>
+          <Empty>{t("No samples in this range yet.")}</Empty>
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={176}>
-          <AreaChart data={points} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+        <ResponsiveContainer width="100%" height={184}>
+          <AreaChart data={points} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+            <defs>
+              {spec.metrics.map((metric, index) => {
+                const stroke = colors[index % colors.length];
+                return (
+                  <linearGradient
+                    key={metric}
+                    id={`${baseId}-${index}`}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop offset="5%" stopColor={stroke} stopOpacity={0.22} />
+                    <stop offset="95%" stopColor={stroke} stopOpacity={0.01} />
+                  </linearGradient>
+                );
+              })}
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
             <XAxis
               dataKey="t"
@@ -148,7 +195,7 @@ function MetricChart({
               minTickGap={32}
             />
             <YAxis
-              width={78}
+              width={72}
               tick={TICK}
               axisLine={false}
               tickLine={false}
@@ -175,9 +222,8 @@ function MetricChart({
                 type="monotone"
                 dataKey={metric}
                 stroke={colors[index % colors.length]}
-                fill={colors[index % colors.length]}
-                fillOpacity={0.1}
-                strokeWidth={1.75}
+                fill={`url(#${baseId}-${index})`}
+                strokeWidth={1.85}
                 isAnimationActive={false}
                 connectNulls
               />
@@ -192,28 +238,45 @@ function MetricChart({
 export function MetricsGrid({
   charts,
   target,
+  range: controlledRange,
+  onRange,
+  paused = false,
 }: {
   charts: ChartSpec[];
   target: { server_id?: string; service_id?: string };
+  range?: Range;
+  onRange?: (range: Range) => void;
+  paused?: boolean;
 }) {
   const t = useT();
-  const [range, setRange] = useState<Range>("1h");
+  const [internalRange, setInternalRange] = useState<Range>("1h");
+  const range = controlledRange ?? internalRange;
+  const setRange = onRange ?? setInternalRange;
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted">{t("Averages over the selected time range.")}</p>
-        <div className="max-w-full overflow-x-auto">
-          <Segmented<Range>
-            label={t("Time range")}
-            value={range}
-            onChange={setRange}
-            options={RANGES.map((value) => [value, value] as const)}
-          />
+      {controlledRange ? null : (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-muted">{t("Averages over the selected time range.")}</p>
+          <div className="max-w-full overflow-x-auto">
+            <Segmented<Range>
+              label={t("Time range")}
+              value={range}
+              onChange={setRange}
+              options={RANGES.map((value) => [value, value] as const)}
+            />
+          </div>
         </div>
-      </div>
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         {charts.map((spec) => (
-          <MetricChart key={spec.title} spec={spec} range={range} target={target} />
+          <MetricChart
+            key={spec.title}
+            spec={spec}
+            range={range}
+            target={target}
+            paused={paused}
+          />
         ))}
       </div>
     </div>
@@ -247,6 +310,6 @@ export const SERVICE_CHARTS: ChartSpec[] = [
     metrics: ["requests", "http_5xx"],
     labels: { requests: msg("requests"), http_5xx: "5xx" },
     unit: "count",
-    colors: ["var(--pine)", "var(--danger)"],
+    colors: ["var(--chart-1)", "var(--chart-4)"],
   },
 ];
