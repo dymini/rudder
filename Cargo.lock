@@ -1260,7 +1260,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
 name = "dymini-panel-agent"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1290,7 +1290,7 @@ dependencies = [
 
 [[package]]
 name = "dymini-panel-cache"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1314,7 +1314,7 @@ dependencies = [
 
 [[package]]
 name = "dymini-panel-cli"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -1334,7 +1334,7 @@ dependencies = [
 
 [[package]]
 name = "dymini-panel-core"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -1368,7 +1368,7 @@ dependencies = [
 
 [[package]]
 name = "dymini-panel-node"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "async-trait",
  "bollard",
@@ -1387,7 +1387,7 @@ dependencies = [
 
 [[package]]
 name = "dymini-panel-proto"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "prost",
  "protoc-bin-vendored",
@@ -1399,7 +1399,7 @@ dependencies = [
 
 [[package]]
 name = "dymini-panel-server"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "argon2",
