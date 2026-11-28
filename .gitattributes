@@ -1,0 +1,10 @@
+# Default to LF line endings for text files.
+* text=auto eol=lf
+
+# Generated/vendored files — exclude from GitHub language stats.
+.sqlx/** linguist-generated=true
+web/src/api-types.ts linguist-generated=true
+web/openapi.json linguist-generated=true
+Cargo.lock linguist-generated=true
+web/pnpm-lock.yaml linguist-generated=true
+app/bun.lock linguist-generated=true
