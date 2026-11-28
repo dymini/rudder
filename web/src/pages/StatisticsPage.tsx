@@ -14,7 +14,7 @@ import {
 import { api } from "../api";
 import { ThresholdMeter } from "../components/load";
 import { AXIS_LINE, COLORS, TICK, TOOLTIP_STYLES } from "../components/metrics";
-import { KpiCard, LiveControlBar, SectionHeading } from "../components/ops-ui";
+import { LiveControlBar, MetricCell, MetricStrip, SectionHeading } from "../components/ops-ui";
 import { PanelBackupStatus } from "../components/panel-backups";
 import { Badge, Button, Card, Empty, Skeleton } from "../components/ui";
 import { formatBytes, formatDuration, formatTime } from "../format";
@@ -262,68 +262,51 @@ export function StatisticsPage() {
           </p>
 
           {/* Group 1: Traffic & Edge */}
-          <section className="space-y-3">
+          <section className="space-y-2.5">
             <SectionHeading title={t("Traffic & edge")} />
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
-              <KpiCard icon="globe" label={t("Proxy requests")} value={number(totals.requests)} />
-              <KpiCard
-                icon="alert"
+            <MetricStrip columns={5}>
+              <MetricCell label={t("Proxy requests")} value={number(totals.requests)} />
+              <MetricCell
                 label={t("Proxy 5xx")}
                 value={number(totals.http_5xx)}
                 tone={(totals.http_5xx ?? 0) > 0 ? "danger" : "default"}
               />
-              <KpiCard
-                icon="activity"
+              <MetricCell
                 label={t("Proxy 5xx rate")}
                 value={rate(totals.http_5xx_rate)}
                 tone={(totals.http_5xx_rate ?? 0) > 0.01 ? "danger" : "default"}
               />
-              <KpiCard
-                icon="download"
-                label={t("Network received")}
-                value={formatBytes(totals.rx_bytes)}
-              />
-              <KpiCard
-                icon="arrowRight"
-                label={t("Network sent")}
-                value={formatBytes(totals.tx_bytes)}
-              />
-            </div>
+              <MetricCell label={t("Network received")} value={formatBytes(totals.rx_bytes)} />
+              <MetricCell label={t("Network sent")} value={formatBytes(totals.tx_bytes)} />
+            </MetricStrip>
           </section>
 
           {/* Group 2: Compute Fleet */}
-          <section className="space-y-3">
+          <section className="space-y-2.5">
             <SectionHeading title={t("Compute fleet")} />
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-              <KpiCard icon="cpu" label={t("Average server CPU")} value={percent(totals.cpu_avg)} />
-              <KpiCard
-                icon="cpu"
+            <MetricStrip columns={4}>
+              <MetricCell label={t("Average server CPU")} value={percent(totals.cpu_avg)} />
+              <MetricCell
                 label={t("Peak server CPU")}
                 value={percent(totals.cpu_peak)}
                 tone={(totals.cpu_peak ?? 0) >= 90 ? "warning" : "default"}
               />
-              <KpiCard
-                icon="memory"
-                label={t("Average server memory")}
-                value={percent(totals.memory_avg)}
-              />
-              <KpiCard
-                icon="memory"
+              <MetricCell label={t("Average server memory")} value={percent(totals.memory_avg)} />
+              <MetricCell
                 label={t("Peak server memory")}
                 value={percent(totals.memory_peak)}
                 tone={(totals.memory_peak ?? 0) >= 90 ? "warning" : "default"}
               />
-            </div>
+            </MetricStrip>
           </section>
 
-          {/* Group 3: Deployments, Operations & MCP */}
-          <div className="grid gap-6 xl:grid-cols-2">
-            <section className="space-y-3">
+          {/* Group 3: Deployments & Operations */}
+          <div className="grid gap-5 xl:grid-cols-2">
+            <section className="space-y-2.5">
               <SectionHeading title={t("Deployments & reliability")} />
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                <KpiCard icon="rocket" label={t("Deploys in range")} value={number(ops.deploys)} />
-                <KpiCard
-                  icon="check"
+              <MetricStrip columns={2}>
+                <MetricCell label={t("Deploys in range")} value={number(ops.deploys)} />
+                <MetricCell
                   label={t("Deploy success rate")}
                   value={rate(ops.deploy_success_rate)}
                   tone={
@@ -332,8 +315,7 @@ export function StatisticsPage() {
                       : "pine"
                   }
                 />
-                <KpiCard
-                  icon="clock"
+                <MetricCell
                   label={t("Average deploy duration")}
                   value={formatDuration(
                     ops.deploy_avg_duration_seconds == null
@@ -341,20 +323,18 @@ export function StatisticsPage() {
                       : ops.deploy_avg_duration_seconds * 1000,
                   )}
                 />
-                <KpiCard
-                  icon="refresh"
+                <MetricCell
                   label={t("Observed restart increases")}
                   value={number(metrics.container_restarts)}
                   tone={(metrics.container_restarts ?? 0) > 0 ? "warning" : "default"}
                 />
-              </div>
+              </MetricStrip>
             </section>
 
-            <section className="space-y-3">
+            <section className="space-y-2.5">
               <SectionHeading title={t("Backups, alerts & AI agents")} />
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                <KpiCard
-                  icon="archive"
+              <MetricStrip columns={2}>
+                <MetricCell
                   label={t("Backup runs in range")}
                   value={number(ops.backup_runs)}
                   caption={
@@ -364,8 +344,7 @@ export function StatisticsPage() {
                   }
                   tone={ops.backup_failures > 0 ? "danger" : "default"}
                 />
-                <KpiCard
-                  icon="bell"
+                <MetricCell
                   label={t("Alerts fired in range")}
                   value={number(ops.alerts_fired)}
                   tone={ops.alerts_fired > 0 ? "warning" : "default"}
@@ -375,19 +354,17 @@ export function StatisticsPage() {
                     domains: ops.counts.domains,
                   })}
                 />
-                <KpiCard
-                  icon="command"
+                <MetricCell
                   label={t("MCP calls")}
                   value={number(ops.mcp_calls)}
                   caption={t("Error rate {rate}", { rate: rate(ops.mcp_error_rate) })}
                 />
-                <KpiCard
-                  icon="shield"
+                <MetricCell
                   label={t("Denied MCP calls")}
                   value={number(ops.mcp_denied)}
                   tone={ops.mcp_denied > 0 ? "warning" : "default"}
                 />
-              </div>
+              </MetricStrip>
             </section>
           </div>
 

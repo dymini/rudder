@@ -12,7 +12,7 @@ import {
   SERVER_CHARTS,
   type Range,
 } from "../components/metrics";
-import { KpiCard, LiveControlBar } from "../components/ops-ui";
+import { LiveControlBar, MetricCell, MetricStrip } from "../components/ops-ui";
 import {
   Badge,
   Button,
@@ -185,38 +185,34 @@ export function MonitoringPage() {
         />
       </div>
 
-      {/* Fleet KPI Summary */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <KpiCard
-          icon="server"
+      {/* Fleet KPI Ledger */}
+      <MetricStrip columns={4}>
+        <MetricCell
           label={t("Servers online")}
           loading={overview.isLoading}
           value={onlineServers.length}
-          suffix={t("of {total}", { total: servers.length })}
-          tone={onlineServers.length < servers.length ? "danger" : "pine"}
+          suffix={`/ ${servers.length}`}
+          tone={onlineServers.length < servers.length ? "danger" : "default"}
         />
-        <KpiCard
-          icon="cpu"
+        <MetricCell
           label={t("Fleet CPU")}
           loading={overview.isLoading}
           value={avgCpu == null ? "—" : `${avgCpu.toFixed(1)}%`}
           tone={avgCpu != null && avgCpu >= 85 ? "danger" : avgCpu != null && avgCpu >= 70 ? "warning" : "default"}
         />
-        <KpiCard
-          icon="memory"
+        <MetricCell
           label={t("Fleet memory")}
           loading={overview.isLoading}
           value={avgMem == null ? "—" : `${avgMem.toFixed(1)}%`}
           tone={avgMem != null && avgMem >= 85 ? "danger" : avgMem != null && avgMem >= 75 ? "warning" : "default"}
         />
-        <KpiCard
-          icon="archive"
+        <MetricCell
           label={t("Highest disk")}
           loading={overview.isLoading}
           value={peakDisk == null ? "—" : `${peakDisk.toFixed(1)}%`}
           tone={peakDisk != null && peakDisk >= 90 ? "danger" : peakDisk != null && peakDisk >= 80 ? "warning" : "default"}
         />
-      </div>
+      </MetricStrip>
 
       <Card
         title={t("Servers")}

@@ -2,29 +2,41 @@ import { useId, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { formatRelative, formatTime } from "../format";
 import { useT } from "../i18n";
-import { Icon, type IconName } from "./icons";
+import { Icon } from "./icons";
 import { Segmented, Skeleton } from "./ui";
 
-export type KpiTone = "default" | "pine" | "warning" | "danger";
+export type MetricTone = "default" | "pine" | "warning" | "danger";
 
-const toneIconStyle: Record<KpiTone, string> = {
-  default: "bg-sunken text-ink-soft",
-  pine: "bg-pine-soft text-pine",
-  warning: "bg-amber-soft text-amber",
-  danger: "bg-danger-soft text-danger",
-};
+/**
+ * Cohesive hairline-divided Swiss metric strip.
+ * Replaces repetitive floating icon-box cards with one unified instrument bar.
+ */
+export function MetricStrip({
+  columns = 4,
+  children,
+}: {
+  columns?: 2 | 3 | 4 | 5;
+  children: ReactNode;
+}) {
+  const gridCols: Record<2 | 3 | 4 | 5, string> = {
+    2: "grid-cols-1 sm:grid-cols-2",
+    3: "grid-cols-1 sm:grid-cols-3",
+    4: "grid-cols-2 lg:grid-cols-4",
+    5: "grid-cols-2 md:grid-cols-3 lg:grid-cols-5",
+  };
+  return (
+    <div className="overflow-hidden rounded-card border border-line bg-line">
+      <div className={`grid gap-px ${gridCols[columns]}`}>{children}</div>
+    </div>
+  );
+}
 
-const toneBorderStyle: Record<KpiTone, string> = {
-  default: "border-line",
-  pine: "border-pine-line/80",
-  warning: "border-amber-line",
-  danger: "border-danger-line",
-};
-
-/** Compact, production-grade Bento KPI card used across Dashboard and Observe pages. */
-export function KpiCard({
+/**
+ * Single instrument cell inside a MetricStrip.
+ * Typography, tabular numerals, and micro-telemetry carry the hierarchy — no decorative icon badges.
+ */
+export function MetricCell({
   to,
-  icon,
   label,
   value,
   suffix,
@@ -32,53 +44,56 @@ export function KpiCard({
   loading = false,
   tone = "default",
   visual,
-  badge,
 }: {
   to?: string;
-  icon?: IconName;
   label: string;
   value: ReactNode;
   suffix?: ReactNode;
   caption?: ReactNode;
   loading?: boolean;
-  tone?: KpiTone;
+  tone?: MetricTone;
   visual?: ReactNode;
-  badge?: ReactNode;
 }) {
-  const inner = (
+  const accentColor =
+    tone === "danger"
+      ? "text-danger"
+      : tone === "warning"
+        ? "text-amber"
+        : tone === "pine"
+          ? "text-pine"
+          : "text-muted";
+
+  const content = (
     <>
-      <div className="flex items-center justify-between gap-2 text-[13px] font-medium text-muted">
-        <span className="flex min-w-0 items-center gap-2">
-          {icon ? (
-            <span
-              className={`inline-flex size-7 shrink-0 items-center justify-center rounded-alert ${toneIconStyle[tone]}`}
-            >
-              <Icon name={icon} size={15} />
-            </span>
-          ) : null}
-          <span className="truncate">{label}</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-[12px] font-medium tracking-[0.005em] text-muted">
+          {label}
         </span>
-        {badge ? (
-          <span className="shrink-0">{badge}</span>
-        ) : to ? (
+        {to ? (
           <Icon
             name="arrowRight"
-            size={14}
+            size={13}
             className="shrink-0 -translate-x-1 text-faint opacity-0 transition group-hover:translate-x-0 group-hover:opacity-100"
           />
         ) : null}
       </div>
 
-      <div className="mt-3.5 flex items-end justify-between gap-3">
+      <div className="mt-2.5 flex items-end justify-between gap-3">
         <div className="min-w-0">
           {loading ? (
             <Skeleton className="h-7 w-20" />
           ) : (
             <p className="flex items-baseline gap-1.5 tabular-nums">
-              <span className="text-[26px] leading-none font-semibold tracking-[-0.02em] text-ink">
+              <span
+                className={`text-[26px] leading-none font-semibold tracking-[-0.03em] ${
+                  tone === "danger" ? "text-danger" : "text-ink"
+                }`}
+              >
                 {value}
               </span>
-              {suffix ? <span className="text-xs font-medium text-muted">{suffix}</span> : null}
+              {suffix ? (
+                <span className="text-xs font-normal text-muted">{suffix}</span>
+              ) : null}
             </p>
           )}
         </div>
@@ -86,46 +101,32 @@ export function KpiCard({
       </div>
 
       {caption != null ? (
-        <div
-          className={`mt-2.5 flex items-center gap-1.5 truncate text-[12.5px] ${
-            tone === "danger"
-              ? "font-medium text-danger"
-              : tone === "warning"
-                ? "font-medium text-amber"
-                : "text-muted"
-          }`}
-        >
-          {tone === "danger" || tone === "warning" ? (
-            <Icon name="alert" size={13} className="shrink-0" />
-          ) : null}
-          <span className="truncate">{loading ? " " : caption}</span>
-        </div>
+        <p className={`mt-2 truncate text-[12px] tabular-nums ${accentColor}`}>
+          {loading ? " " : caption}
+        </p>
       ) : null}
     </>
   );
 
-  const baseClass = `group flex min-w-0 flex-col justify-between rounded-card border bg-surface p-4 shadow-card transition-[border-color,box-shadow,background-color] sm:p-4.5 ${toneBorderStyle[tone]}`;
+  const cellClass =
+    "group flex min-w-0 flex-col justify-between bg-surface px-4 py-3.5 transition-colors sm:px-5 sm:py-4";
 
   if (to) {
     return (
-      <Link
-        to={to}
-        className={`${baseClass} hover:border-line-strong hover:bg-surface-raised hover:shadow-raised`}
-      >
-        {inner}
+      <Link to={to} className={`${cellClass} hover:bg-paper`}>
+        {content}
       </Link>
     );
   }
-
-  return <div className={baseClass}>{inner}</div>;
+  return <div className={cellClass}>{content}</div>;
 }
 
-/** Lightweight SVG sparkline with soft gradient fill — smooth and jitter-free under live polling. */
+/** Precision SVG sparkline with clean thin stroke and subtle gradient tint. */
 export function Sparkline({
   values,
   color = "var(--chart-1)",
-  width = 88,
-  height = 28,
+  width = 84,
+  height = 26,
   label,
 }: {
   values: number[];
@@ -148,11 +149,11 @@ export function Sparkline({
       >
         <line
           x1={2}
-          y1={height - 6}
+          y1={height - 5}
           x2={width - 2}
-          y2={height - 6}
+          y2={height - 5}
           stroke="var(--line-strong)"
-          strokeWidth={1.5}
+          strokeWidth={1.25}
           strokeDasharray="2 3"
         />
       </svg>
@@ -189,7 +190,7 @@ export function Sparkline({
     >
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+          <stop offset="0%" stopColor={color} stopOpacity={0.2} />
           <stop offset="100%" stopColor={color} stopOpacity={0} />
         </linearGradient>
       </defs>
@@ -198,16 +199,19 @@ export function Sparkline({
         d={linePath}
         fill="none"
         stroke={color}
-        strokeWidth={1.75}
+        strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx={lastX} cy={lastY} r={2.2} fill={color} />
+      <circle cx={lastX} cy={lastY} r={2} fill={color} />
     </svg>
   );
 }
 
-/** Shared live-sync control bar: time range selector + live/paused polling toggle + manual refresh. */
+/**
+ * Quiet, precision live-sync bar: time-range selector + pause/resume + manual refresh.
+ * Avoids repeating "Live" text that already lives in the global topbar.
+ */
 export function LiveControlBar<R extends string>({
   ranges,
   range,
@@ -239,23 +243,19 @@ export function LiveControlBar<R extends string>({
         />
       ) : null}
 
-      <div className="inline-flex items-center rounded-control border border-line bg-surface p-0.5 shadow-card">
+      <div className="inline-flex h-8 items-center rounded-control border border-line bg-surface p-0.5">
         <button
           type="button"
           onClick={onTogglePause}
           aria-pressed={!paused}
+          aria-label={paused ? t("Resume live updates") : t("Pause live updates")}
           title={paused ? t("Resume live updates") : t("Pause live updates")}
-          className="inline-flex h-7 items-center gap-1.5 rounded-[4px] px-2 text-xs font-medium text-ink-soft transition-colors hover:bg-sunken hover:text-ink"
+          className="inline-flex h-full items-center gap-1.5 rounded-[4px] px-2 text-xs font-medium text-ink-soft transition-colors hover:bg-sunken hover:text-ink"
         >
-          <span
-            className={`size-2 rounded-full ${
-              paused ? "bg-faint" : "bg-pine animate-live"
-            }`}
-            aria-hidden="true"
-          />
-          <span>{paused ? t("Paused") : t("Live")}</span>
+          <Icon name={paused ? "play" : "pause"} size={12} className={paused ? "text-amber" : "text-pine"} />
+          {paused ? <span className="text-amber">{t("Paused")}</span> : null}
         </button>
-        <span className="h-4 w-px bg-line" aria-hidden="true" />
+        <span className="h-3.5 w-px bg-line" aria-hidden="true" />
         <button
           type="button"
           onClick={onRefresh}
@@ -266,15 +266,11 @@ export function LiveControlBar<R extends string>({
               ? `${t("Refresh now")} · ${formatTime(new Date(updatedAt).toISOString())}`
               : t("Refresh now")
           }
-          className="inline-flex h-7 items-center gap-1 rounded-[4px] px-2 text-xs font-medium text-muted transition-colors hover:bg-sunken hover:text-ink disabled:opacity-55"
+          className="inline-flex h-full items-center gap-1.5 rounded-[4px] px-2 text-xs text-muted transition-colors hover:bg-sunken hover:text-ink disabled:opacity-55"
         >
-          <Icon
-            name="refresh"
-            size={13}
-            className={refreshing ? "animate-spin text-pine" : ""}
-          />
+          <Icon name="refresh" size={13} className={refreshing ? "animate-spin text-pine" : ""} />
           {updatedAt ? (
-            <span className="hidden tabular-nums sm:inline">
+            <span className="hidden font-mono text-[11px] tabular-nums sm:inline">
               {formatRelative(new Date(updatedAt).toISOString())}
             </span>
           ) : null}
@@ -284,7 +280,7 @@ export function LiveControlBar<R extends string>({
   );
 }
 
-/** Crisp section heading for grouping Bento rows on Observe & Statistics pages. */
+/** Architectural section divider heading for Statistics & Observe groups. */
 export function SectionHeading({
   title,
   description,
@@ -295,12 +291,12 @@ export function SectionHeading({
   actions?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="flex flex-wrap items-baseline justify-between gap-2">
       <div className="min-w-0">
-        <h2 className="text-[13px] font-semibold tracking-[0.02em] text-ink-soft uppercase">
+        <h2 className="text-[11.5px] font-semibold tracking-[0.06em] text-muted uppercase">
           {title}
         </h2>
-        {description ? <p className="mt-0.5 text-xs text-muted">{description}</p> : null}
+        {description ? <p className="mt-0.5 text-xs text-faint">{description}</p> : null}
       </div>
       {actions ? <div className="shrink-0">{actions}</div> : null}
     </div>

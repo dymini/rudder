@@ -34,8 +34,8 @@ const PAGE = 10;
 
 /**
  * Unified Services Operations Table:
- * Combines service status inventory and Top Consumers live resource usage
- * into a single searchable, filterable, sortable table with quick actions.
+ * Proper columnar headers, generous breathing room for service/project identity,
+ * inline CPU/RAM telemetry, and quiet hover-revealed operational actions.
  */
 export function UnifiedServicesCard({
   services,
@@ -144,15 +144,14 @@ export function UnifiedServicesCard({
     <>
       <Card
         title={t("Services & workloads")}
-        description={t("Live status, CPU and memory across every project.")}
         flush
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <select
               aria-label={t("Filter by kind")}
               value={kind}
               onChange={(e) => setKind(e.target.value as KindFilter)}
-              className="h-8 rounded-control border border-line-strong bg-surface px-2 text-xs font-medium text-ink-soft outline-none focus:border-pine"
+              className="h-7 cursor-pointer rounded-control border border-transparent bg-sunken/70 px-2 text-xs font-medium text-ink-soft outline-none transition-colors hover:border-line-strong focus:border-pine"
             >
               <option value="all">{t("All kinds")}</option>
               <option value="application">{t("Applications")}</option>
@@ -163,7 +162,7 @@ export function UnifiedServicesCard({
               aria-label={t("Sort services by")}
               value={sort}
               onChange={(e) => setSort(e.target.value as ServiceSort)}
-              className="h-8 rounded-control border border-line-strong bg-surface px-2 text-xs font-medium text-ink-soft outline-none focus:border-pine"
+              className="h-7 cursor-pointer rounded-control border border-transparent bg-sunken/70 px-2 text-xs font-medium text-ink-soft outline-none transition-colors hover:border-line-strong focus:border-pine"
             >
               <option value="priority">{t("Sort: Priority")}</option>
               <option value="cpu">{t("Sort: CPU")}</option>
@@ -174,7 +173,7 @@ export function UnifiedServicesCard({
         }
         footer={
           <>
-            <span>
+            <span className="tabular-nums">
               {loading
                 ? t("Loading…")
                 : visible.length !== services.length
@@ -210,6 +209,7 @@ export function UnifiedServicesCard({
             <span className="sr-only">{t("Search services")}</span>
             <Icon
               name="search"
+              size={14}
               className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-faint"
             />
             <input
@@ -217,7 +217,7 @@ export function UnifiedServicesCard({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t("Search by name, project, server or kind")}
-              className="h-8 w-full rounded-control border border-line-strong bg-surface pr-3 pl-8 text-sm text-ink outline-none placeholder:text-faint focus:border-pine focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--pine)_14%,transparent)]"
+              className="h-8 w-full rounded-control border border-line bg-paper/60 pr-3 pl-8 text-[13px] text-ink outline-none placeholder:text-faint focus:border-pine focus:bg-surface"
             />
           </label>
           <div className="max-w-full overflow-x-auto">
@@ -234,6 +234,20 @@ export function UnifiedServicesCard({
             />
           </div>
         </div>
+
+        {/* Crisp columnar header bar on wide screens */}
+        {!loading && visible.length > 0 ? (
+          <div
+            aria-hidden="true"
+            className="hidden border-b border-line bg-paper/45 px-6 py-2 text-[11px] font-medium tracking-[0.04em] text-faint uppercase xl:grid xl:grid-cols-[minmax(0,1fr)_104px_92px_100px_76px] xl:items-center xl:gap-x-4"
+          >
+            <span>{t("Service")}</span>
+            <span>{t("CPU")}</span>
+            <span className="text-right">{t("Memory")}</span>
+            <span className="text-right">{t("Status")}</span>
+            <span />
+          </div>
+        ) : null}
 
         {loading ? (
           <ul className="divide-y divide-line">
@@ -267,62 +281,57 @@ export function UnifiedServicesCard({
               return (
                 <li
                   key={service.id}
-                  className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-5 py-3 transition-colors hover:bg-paper sm:px-6 xl:grid-cols-[auto_minmax(0,1fr)_120px_96px_104px_auto]"
+                  className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-5 py-2.5 transition-colors hover:bg-paper/70 sm:px-6 xl:grid-cols-[minmax(0,1fr)_104px_92px_100px_76px]"
                 >
-                  <span className="relative">
-                    <KindTile kind={service.kind} size={32} />
-                    <span className="absolute -right-0.5 -bottom-0.5 inline-flex rounded-full bg-surface p-[2px]">
-                      <StatusDot status={service.status} />
+                  <Link to={`/services/${service.id}`} className="flex min-w-0 items-center gap-3">
+                    <span className="relative shrink-0">
+                      <KindTile kind={service.kind} size={30} />
+                      <span className="absolute -right-0.5 -bottom-0.5 inline-flex rounded-full bg-surface p-[1.5px]">
+                        <StatusDot status={service.status} />
+                      </span>
                     </span>
-                  </span>
-
-                  <Link to={`/services/${service.id}`} className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-ink group-hover:text-pine">
-                      {service.name}
-                    </span>
-                    <span className="block truncate text-xs text-muted">
-                      {service.project_name}
-                      <span className="px-1 text-faint">/</span>
-                      {service.environment_name}
-                      {server ? (
-                        <>
-                          <span className="px-1 text-faint">·</span>
-                          <span>{server.name}</span>
-                        </>
-                      ) : null}
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13.5px] font-medium text-ink group-hover:text-pine">
+                        {service.name}
+                      </span>
+                      <span className="block truncate text-[12px] text-muted">
+                        {service.project_name}
+                        <span className="px-1 text-faint">/</span>
+                        {service.environment_name}
+                        {server ? (
+                          <span className="font-mono text-[11px] text-faint">
+                            {" "}
+                            · {server.name}
+                          </span>
+                        ) : null}
+                      </span>
                     </span>
                   </Link>
 
-                  {/* Inline CPU meter */}
+                  {/* Inline CPU */}
                   <div className="hidden min-w-0 xl:block">
-                    <div className="flex items-baseline justify-between text-[11.5px]">
-                      <span className="text-muted">{t("CPU")}</span>
-                      <span className="font-medium text-ink-soft tabular-nums">
+                    <div className="mb-1 flex items-baseline justify-between font-mono text-[11.5px] tabular-nums">
+                      <span className="text-ink-soft">
                         {cpu == null ? "—" : `${cpu.toFixed(cpu < 10 ? 1 : 0)}%`}
                       </span>
                     </div>
-                    <div className="mt-1">
-                      <ThresholdMeter
-                        value={cpu}
-                        warn={60}
-                        danger={85}
-                        marks={false}
-                        label={t("CPU usage")}
-                      />
-                    </div>
+                    <ThresholdMeter
+                      value={cpu}
+                      warn={60}
+                      danger={85}
+                      marks={false}
+                      label={t("CPU usage")}
+                    />
                   </div>
 
                   {/* Inline Memory */}
-                  <div className="hidden min-w-0 text-right xl:block">
-                    <p className="text-[11.5px] text-muted">{t("Memory")}</p>
-                    <p className="text-xs font-medium text-ink-soft tabular-nums">
+                  <div className="hidden min-w-0 text-right font-mono tabular-nums xl:block">
+                    <p className="text-[12px] font-medium text-ink-soft">
                       {memBytes == null ? "—" : formatBytes(memBytes)}
-                      {memShare != null ? (
-                        <span className="ml-1 text-[11px] font-normal text-faint">
-                          {Math.round(memShare)}%
-                        </span>
-                      ) : null}
                     </p>
+                    {memShare != null ? (
+                      <p className="text-[10.5px] text-faint">{Math.round(memShare)}%</p>
+                    ) : null}
                   </div>
 
                   {/* Status Badge */}
@@ -330,16 +339,16 @@ export function UnifiedServicesCard({
                     <Badge value={service.status} />
                   </div>
 
-                  {/* Quick Actions */}
-                  <div className="flex items-center justify-end gap-1.5">
-                    <span className="xl:hidden">
+                  {/* Quiet Quick Actions */}
+                  <div className="flex items-center justify-end gap-1">
+                    <span className="mr-1 xl:hidden">
                       <Badge value={service.status} />
                     </span>
                     <Link
                       to="/logs"
                       title={t("Logs")}
                       aria-label={t("Logs")}
-                      className="inline-flex size-7 items-center justify-center rounded-control text-muted transition-colors hover:bg-sunken hover:text-ink"
+                      className="inline-flex size-7 items-center justify-center rounded-control text-faint transition-colors hover:bg-sunken hover:text-ink group-hover:text-muted"
                     >
                       <Icon name="logs" size={14} />
                     </Link>
@@ -349,9 +358,9 @@ export function UnifiedServicesCard({
                         title={t("Stop")}
                         aria-label={t("Stop {name}?", { name: service.name })}
                         onClick={() => setStopping(service)}
-                        className="inline-flex size-7 items-center justify-center rounded-control text-muted transition-colors hover:bg-danger-soft hover:text-danger"
+                        className="inline-flex size-7 items-center justify-center rounded-control text-faint transition-colors hover:bg-danger-soft hover:text-danger group-hover:text-muted"
                       >
-                        <Icon name="stop" size={13} />
+                        <Icon name="stop" size={12} />
                       </button>
                     ) : null}
                     <Link

@@ -11,67 +11,67 @@
 .ansi-text { color: var(--ansi-light, inherit); }
 .dark .ansi-text, .ansi-console .ansi-text { color: var(--ansi-dark, inherit); }
 
-/* Dymini Panel design system: warm paper neutrals, one deep-pine accent. */
+/* Dymini Panel design system: warm architectural paper, crisp hairlines, deep-pine accent. */
 :root {
   color-scheme: light;
-  --paper: #f6f5f2;
-  --surface: #fffdfa;
+  --paper: #f5f4f0;
+  --surface: #ffffff;
   --surface-raised: #ffffff;
-  --sunken: #efede8;
-  --ink: #1c1917;
-  --ink-soft: #3a3632;
-  --muted: #6b6560;
-  --faint: #9a948d;
-  --line: #e4e0d8;
-  --line-strong: #d3cec4;
-  --pine: #1f3d32;
-  --pine-hover: #183228;
-  --pine-soft: #e6ede9;
-  --pine-line: #c3d3cb;
+  --sunken: #eeece6;
+  --ink: #171512;
+  --ink-soft: #38342f;
+  --muted: #6c665e;
+  --faint: #9b958c;
+  --line: #e6e3db;
+  --line-strong: #d4cfc5;
+  --pine: #1a3a2f;
+  --pine-hover: #142f26;
+  --pine-soft: #e7f0eb;
+  --pine-line: #bfd4c9;
   --pine-ink: #ffffff;
-  --danger: #8f2d2d;
-  --danger-hover: #7a2525;
-  --danger-soft: #f7ecea;
-  --danger-line: #e8c9c4;
-  --amber: #8a5a12;
-  --amber-soft: #f8f0df;
-  --amber-line: #ead7ae;
-  --chart-1: #1f5c45;
-  --chart-2: #b57614;
-  --chart-3: #4b7399;
-  --chart-4: #a63434;
-  --shadow-color: 28 25 23;
+  --danger: #9c2b2b;
+  --danger-hover: #822222;
+  --danger-soft: #f9ecea;
+  --danger-line: #e9c6c1;
+  --amber: #8f5c0c;
+  --amber-soft: #f9f1df;
+  --amber-line: #e8d3a5;
+  --chart-1: #1d5c45;
+  --chart-2: #b87814;
+  --chart-3: #3e6b94;
+  --chart-4: #b33636;
+  --shadow-color: 23 21 18;
 }
 
-/* Dark theme derived from the same ledger: warm charcoal, pine lifted for contrast. */
+/* Dark theme: warm obsidian canvas, elevated charcoal cards, lifted sage-pine accent. */
 .dark {
   color-scheme: dark;
-  --paper: #121110;
-  --surface: #1a1917;
-  --surface-raised: #201e1b;
-  --sunken: #23211e;
+  --paper: #0d0c0b;
+  --surface: #151412;
+  --surface-raised: #1b1917;
+  --sunken: #1f1d1a;
   --ink: #f3efe8;
-  --ink-soft: #d8d2c8;
-  --muted: #a69f95;
-  --faint: #766f67;
-  --line: #2c2a26;
-  --line-strong: #3b3833;
-  --pine: #8cc4a9;
-  --pine-hover: #a3d1ba;
-  --pine-soft: #1a2a23;
-  --pine-line: #2d473b;
-  --pine-ink: #0d1813;
-  --danger: #f0a39b;
-  --danger-hover: #f5bab3;
-  --danger-soft: #2c1917;
-  --danger-line: #52302b;
-  --amber: #e5bd72;
-  --amber-soft: #2a2213;
-  --amber-line: #4d3c1c;
+  --ink-soft: #d6d0c6;
+  --muted: #9c958b;
+  --faint: #6b655d;
+  --line: #25231f;
+  --line-strong: #34312c;
+  --pine: #7ec4a4;
+  --pine-hover: #96d1b6;
+  --pine-soft: #15241e;
+  --pine-line: #264035;
+  --pine-ink: #0a1410;
+  --danger: #e6867c;
+  --danger-hover: #f0a198;
+  --danger-soft: #281615;
+  --danger-line: #4d2a26;
+  --amber: #e2b564;
+  --amber-soft: #261e11;
+  --amber-line: #49381a;
   --chart-1: #7ec4a4;
-  --chart-2: #e5bd72;
-  --chart-3: #7ca7cf;
-  --chart-4: #f0958c;
+  --chart-2: #e2b564;
+  --chart-3: #78a6cf;
+  --chart-4: #e6867c;
   --shadow-color: 0 0 0;
 }
 
@@ -114,9 +114,9 @@
   --radius-dialog: 12px;
   --radius-auth: 14px;
 
-  --shadow-card: 0 1px 0 rgb(var(--shadow-color) / 0.03), 0 1px 2px rgb(var(--shadow-color) / 0.04);
-  --shadow-raised: 0 1px 2px rgb(var(--shadow-color) / 0.05),
-    0 8px 24px -8px rgb(var(--shadow-color) / 0.12);
+  --shadow-card: 0 1px 1px rgb(var(--shadow-color) / 0.025);
+  --shadow-raised: 0 1px 2px rgb(var(--shadow-color) / 0.04),
+    0 6px 20px -8px rgb(var(--shadow-color) / 0.1);
   --shadow-overlay: 0 2px 6px rgb(var(--shadow-color) / 0.06),
     0 24px 48px -12px rgb(var(--shadow-color) / 0.24);
 

@@ -5,7 +5,6 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -17,7 +16,7 @@ import { useT } from "../../i18n";
 import type { Schemas } from "../../types";
 import { Icon } from "../icons";
 import { AXIS_LINE, formatValue, TICK, TOOLTIP_STYLES, type Range } from "../metrics";
-import { buttonClass, Empty, Segmented, Skeleton } from "../ui";
+import { Empty, Skeleton } from "../ui";
 
 type Tab = "compute" | "traffic" | "network";
 type Server = Schemas["ServerView"];
@@ -30,9 +29,10 @@ function tickTime(value: number, range: Range): string {
 }
 
 /**
- * Interactive centerpiece telemetry chart on the Dashboard.
- * Supports switching between Compute (CPU/RAM), Traffic & HTTP 5xx, and Network I/O,
- * cross-filtered by the selected server and synced with the global time range & live polling.
+ * Surgical, zero-bloat Telemetry Panel:
+ * - Single-row header with inline underline tabs + subtle server selector.
+ * - Inline metric readout bar acts as the live legend (eliminating duplicate bottom legends).
+ * - Smooth area gradient with subtle horizontal hairlines.
  */
 export function TelemetryPanel({
   servers,
@@ -61,7 +61,8 @@ export function TelemetryPanel({
     [servers, selectedServerId],
   );
 
-  const metricsList = tab === "compute" ? ["cpu_percent", "memory_percent"] : ["net_rx_bps", "net_tx_bps"];
+  const metricsList =
+    tab === "compute" ? ["cpu_percent", "memory_percent"] : ["net_rx_bps", "net_tx_bps"];
 
   const serverMetrics = useQuery({
     queryKey: ["metrics", { server_id: activeServer?.id }, metricsList, range],
@@ -107,18 +108,49 @@ export function TelemetryPanel({
   const loading = tab === "traffic" ? statsLoading : serverMetrics.isLoading;
   const points = tab === "traffic" ? trafficPoints : serverPoints;
 
+  const tabs: [Tab, string][] = [
+    ["compute", t("Compute")],
+    ["traffic", t("Traffic & 5xx")],
+    ["network", t("Network")],
+  ];
+
+  const resolution =
+    tab === "traffic" ? stats?.resolution : serverMetrics.data?.resolution;
+
   return (
-    <section className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3.5 sm:px-5">
-        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-          <h2 className="text-[15px] leading-snug font-semibold text-ink">{t("Live telemetry")}</h2>
+    <section className="overflow-hidden rounded-card border border-line bg-surface">
+      {/* Single-row architectural header with underline tabs */}
+      <header className="flex flex-wrap items-center justify-between gap-x-4 border-b border-line px-4 sm:px-5">
+        <div role="tablist" aria-label={t("Telemetry view")} className="-mb-px flex items-center gap-5">
+          {tabs.map(([key, label]) => {
+            const active = tab === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(key)}
+                className={`relative py-3 text-[13.5px] font-medium transition-colors ${
+                  active
+                    ? "text-ink after:absolute after:right-0 after:bottom-0 after:left-0 after:h-[2px] after:bg-pine"
+                    : "text-muted hover:text-ink"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-3 py-2">
           {tab !== "traffic" && activeServer ? (
             servers.length > 1 ? (
               <select
                 aria-label={t("Select server")}
                 value={activeServer.id}
                 onChange={(e) => onSelectServer(e.target.value)}
-                className="h-7 rounded-control border border-line-strong bg-paper px-2 text-xs font-medium text-ink outline-none focus:border-pine"
+                className="h-7 cursor-pointer rounded-control border border-transparent bg-sunken/70 px-2 font-mono text-xs text-ink-soft outline-none transition-colors hover:border-line-strong focus:border-pine"
               >
                 {servers.map((server) => (
                   <option key={server.id} value={server.id}>
@@ -127,125 +159,92 @@ export function TelemetryPanel({
                 ))}
               </select>
             ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-2.5 py-0.5 text-xs font-medium text-ink-soft">
-                <Icon name="server" size={12} className="text-faint" />
-                {activeServer.name}
-              </span>
+              <span className="font-mono text-xs text-muted">{activeServer.name}</span>
             )
           ) : tab === "traffic" ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-2.5 py-0.5 text-xs font-medium text-ink-soft">
-              <Icon name="globe" size={12} className="text-faint" />
-              {t("All edge proxies")}
-            </span>
+            <span className="text-xs text-muted">{t("All edge proxies")}</span>
           ) : null}
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Segmented<Tab>
-            label={t("Telemetry view")}
-            value={tab}
-            onChange={setTab}
-            options={[
-              ["compute", t("Compute")],
-              ["traffic", t("Traffic & 5xx")],
-              ["network", t("Network")],
-            ]}
-          />
           <Link
             to={tab === "traffic" ? "/statistics" : "/monitoring"}
-            className={buttonClass({ variant: "ghost", size: "sm" })}
+            className="inline-flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-ink"
           >
             <span className="hidden sm:inline">{t("Explore")}</span>
-            <Icon name="arrowRight" size={14} />
+            <Icon name="arrowRight" size={13} />
           </Link>
         </div>
       </header>
 
-      {/* Summary strip inside chart card */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line/70 bg-paper/45 px-4 py-2 text-xs sm:px-5">
+      {/* Inline live readout bar — serves as both live KPI and chart legend */}
+      <div className="flex flex-wrap items-baseline justify-between gap-4 px-4 pt-4 pb-1 sm:px-5">
         {tab === "compute" ? (
-          <div className="flex flex-wrap items-center gap-4 tabular-nums">
-            <span className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-[var(--chart-1)]" />
-              <span className="text-muted">{t("CPU")}:</span>
-              <span className="font-semibold text-ink">
-                {formatValue(latestCompute?.cpu_percent, "percent")}
-              </span>
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-[var(--chart-2)]" />
-              <span className="text-muted">{t("Memory")}:</span>
-              <span className="font-semibold text-ink">
-                {formatValue(latestCompute?.memory_percent, "percent")}
-              </span>
-            </span>
+          <div className="flex flex-wrap items-baseline gap-6 tabular-nums">
+            <LegendReadout
+              color="var(--chart-1)"
+              label={t("CPU")}
+              value={formatValue(latestCompute?.cpu_percent, "percent")}
+            />
+            <LegendReadout
+              color="var(--chart-2)"
+              label={t("Memory")}
+              value={formatValue(latestCompute?.memory_percent, "percent")}
+            />
           </div>
         ) : tab === "traffic" ? (
-          <div className="flex flex-wrap items-center gap-4 tabular-nums">
-            <span className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-[var(--chart-1)]" />
-              <span className="text-muted">{t("Requests")}:</span>
-              <span className="font-semibold text-ink">
-                {formatValue(stats?.metrics?.totals.requests, "count")}
-              </span>
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-[var(--chart-4)]" />
-              <span className="text-muted">{t("HTTP 5xx")}:</span>
-              <span className="font-semibold text-ink">
-                {formatValue(stats?.metrics?.totals.http_5xx, "count")}
-              </span>
-            </span>
+          <div className="flex flex-wrap items-baseline gap-6 tabular-nums">
+            <LegendReadout
+              color="var(--chart-1)"
+              label={t("Requests")}
+              value={formatValue(stats?.metrics?.totals.requests, "count")}
+            />
+            <LegendReadout
+              color="var(--chart-4)"
+              label={t("HTTP 5xx")}
+              value={formatValue(stats?.metrics?.totals.http_5xx, "count")}
+            />
           </div>
         ) : (
-          <div className="flex flex-wrap items-center gap-4 tabular-nums">
-            <span className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-[var(--chart-1)]" />
-              <span className="text-muted">{t("Received")}:</span>
-              <span className="font-semibold text-ink">
-                {formatValue(latestNet?.net_rx_bps, "bps")}
-              </span>
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-[var(--chart-3)]" />
-              <span className="text-muted">{t("Sent")}:</span>
-              <span className="font-semibold text-ink">
-                {formatValue(latestNet?.net_tx_bps, "bps")}
-              </span>
-            </span>
+          <div className="flex flex-wrap items-baseline gap-6 tabular-nums">
+            <LegendReadout
+              color="var(--chart-1)"
+              label={t("Received")}
+              value={formatValue(latestNet?.net_rx_bps, "bps")}
+            />
+            <LegendReadout
+              color="var(--chart-3)"
+              label={t("Sent")}
+              value={formatValue(latestNet?.net_tx_bps, "bps")}
+            />
           </div>
         )}
-        <span className="text-faint tabular-nums">
-          {tab === "traffic"
-            ? stats?.resolution
-              ? t("resolution {value}", { value: stats.resolution })
-              : range
-            : serverMetrics.data?.resolution
-              ? t("resolution {value}", { value: serverMetrics.data.resolution })
-              : range}
+        <span className="font-mono text-[11px] text-faint tabular-nums">
+          {resolution ? `${range} · ${resolution}` : range}
         </span>
       </div>
 
-      <div className="px-3 pt-4 pb-3 sm:px-4">
+      {/* Chart Canvas */}
+      <div className="px-2 pt-2 pb-3 sm:px-4">
         {loading && points.length === 0 ? (
-          <Skeleton className="h-[250px] w-full rounded-control" />
+          <div className="px-2 py-2">
+            <Skeleton className="h-[244px] w-full rounded-control" />
+          </div>
         ) : points.length === 0 ? (
-          <div className="flex h-[250px] items-center justify-center">
+          <div className="flex h-[244px] items-center justify-center">
             <Empty icon="activity" title={t("No samples in this range yet.")}>
               {t("Telemetry samples appear automatically every 10 seconds.")}
             </Empty>
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={250}>
-            <AreaChart data={points} margin={{ top: 6, right: 10, bottom: 0, left: 0 }}>
+          <ResponsiveContainer width="100%" height={244}>
+            <AreaChart data={points} margin={{ top: 8, right: 12, bottom: 2, left: 0 }}>
               <defs>
                 <linearGradient id={grad1} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.24} />
-                  <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0.01} />
+                  <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.18} />
+                  <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id={grad2} x1="0" y1="0" x2="0" y2="1">
                   <stop
-                    offset="5%"
+                    offset="0%"
                     stopColor={
                       tab === "traffic"
                         ? "var(--chart-4)"
@@ -253,10 +252,10 @@ export function TelemetryPanel({
                           ? "var(--chart-3)"
                           : "var(--chart-2)"
                     }
-                    stopOpacity={0.22}
+                    stopOpacity={0.16}
                   />
                   <stop
-                    offset="95%"
+                    offset="100%"
                     stopColor={
                       tab === "traffic"
                         ? "var(--chart-4)"
@@ -264,11 +263,16 @@ export function TelemetryPanel({
                           ? "var(--chart-3)"
                           : "var(--chart-2)"
                     }
-                    stopOpacity={0.01}
+                    stopOpacity={0}
                   />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+              <CartesianGrid
+                strokeDasharray="2 4"
+                stroke="var(--line)"
+                strokeOpacity={0.85}
+                vertical={false}
+              />
               <XAxis
                 dataKey="t"
                 type="number"
@@ -278,10 +282,10 @@ export function TelemetryPanel({
                 tick={TICK}
                 axisLine={AXIS_LINE}
                 tickLine={false}
-                minTickGap={36}
+                minTickGap={42}
               />
               <YAxis
-                width={68}
+                width={54}
                 tick={TICK}
                 axisLine={false}
                 tickLine={false}
@@ -317,18 +321,6 @@ export function TelemetryPanel({
                   ];
                 }}
               />
-              <Legend
-                formatter={(value: string) => {
-                  if (value === "cpu_percent") return t("CPU");
-                  if (value === "memory_percent") return t("Memory");
-                  if (value === "requests") return t("Requests");
-                  if (value === "http_5xx") return t("HTTP 5xx");
-                  if (value === "net_rx_bps") return t("Received");
-                  if (value === "net_tx_bps") return t("Sent");
-                  return value;
-                }}
-                wrapperStyle={{ fontSize: 12, color: "var(--ink-soft)" }}
-              />
               {tab === "compute" ? (
                 <>
                   <Area
@@ -336,7 +328,7 @@ export function TelemetryPanel({
                     dataKey="cpu_percent"
                     stroke="var(--chart-1)"
                     fill={`url(#${grad1})`}
-                    strokeWidth={1.9}
+                    strokeWidth={1.75}
                     isAnimationActive={false}
                     connectNulls
                   />
@@ -345,7 +337,7 @@ export function TelemetryPanel({
                     dataKey="memory_percent"
                     stroke="var(--chart-2)"
                     fill={`url(#${grad2})`}
-                    strokeWidth={1.9}
+                    strokeWidth={1.75}
                     isAnimationActive={false}
                     connectNulls
                   />
@@ -357,7 +349,7 @@ export function TelemetryPanel({
                     dataKey="requests"
                     stroke="var(--chart-1)"
                     fill={`url(#${grad1})`}
-                    strokeWidth={1.9}
+                    strokeWidth={1.75}
                     isAnimationActive={false}
                     connectNulls
                   />
@@ -366,7 +358,7 @@ export function TelemetryPanel({
                     dataKey="http_5xx"
                     stroke="var(--chart-4)"
                     fill={`url(#${grad2})`}
-                    strokeWidth={1.9}
+                    strokeWidth={1.75}
                     isAnimationActive={false}
                     connectNulls
                   />
@@ -378,7 +370,7 @@ export function TelemetryPanel({
                     dataKey="net_rx_bps"
                     stroke="var(--chart-1)"
                     fill={`url(#${grad1})`}
-                    strokeWidth={1.9}
+                    strokeWidth={1.75}
                     isAnimationActive={false}
                     connectNulls
                   />
@@ -387,7 +379,7 @@ export function TelemetryPanel({
                     dataKey="net_tx_bps"
                     stroke="var(--chart-3)"
                     fill={`url(#${grad2})`}
-                    strokeWidth={1.9}
+                    strokeWidth={1.75}
                     isAnimationActive={false}
                     connectNulls
                   />
@@ -398,5 +390,23 @@ export function TelemetryPanel({
         )}
       </div>
     </section>
+  );
+}
+
+function LegendReadout({
+  color,
+  label,
+  value,
+}: {
+  color: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="h-3.5 w-[3px] rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
+      <span className="text-xs text-muted">{label}</span>
+      <span className="text-[15px] font-semibold tracking-[-0.02em] text-ink">{value}</span>
+    </div>
   );
 }

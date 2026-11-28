@@ -305,11 +305,11 @@ function Sidebar({
                       end={to === "/"}
                       title={collapsed ? t(label) : undefined}
                       className={({ isActive }) =>
-                        `group relative flex h-9 items-center rounded-control text-sm transition-colors ${
+                        `group relative flex h-8.5 items-center rounded-control text-[13.5px] transition-colors ${
                           collapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
                         } ${
                           isActive
-                            ? "bg-sunken font-medium text-ink"
+                            ? "bg-sunken font-medium text-ink before:absolute before:top-1.5 before:bottom-1.5 before:left-0 before:w-[2.5px] before:rounded-full before:bg-pine"
                             : "text-ink-soft hover:bg-sunken/60 hover:text-ink"
                         }`
                       }

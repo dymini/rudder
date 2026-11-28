@@ -4,14 +4,14 @@ import { useT } from "../../i18n";
 import type { Schemas } from "../../types";
 import { Icon } from "../icons";
 import { ThresholdMeter } from "../load";
-import { Badge, buttonClass, Card, Empty, Skeleton, StatusDot } from "../ui";
+import { Badge, Card, Empty, Skeleton, StatusDot } from "../ui";
 
 type Server = Schemas["ServerView"];
 type Usage = Schemas["ServerUsage"];
 
 /**
  * Interactive Fleet Matrix card.
- * Clicking a server selects it to cross-filter the TelemetryPanel chart.
+ * Clicking a server selects it to cross-filter the TelemetryPanel chart, marked with a clean left-edge indicator.
  */
 export function FleetPanel({
   servers,
@@ -34,9 +34,12 @@ export function FleetPanel({
       title={t("Server fleet")}
       flush
       actions={
-        <Link to="/servers" className={buttonClass({ variant: "ghost", size: "sm" })}>
+        <Link
+          to="/servers"
+          className="inline-flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-ink"
+        >
           {t("Manage")}
-          <Icon name="arrowRight" size={14} />
+          <Icon name="arrowRight" size={13} />
         </Link>
       }
     >
@@ -60,10 +63,10 @@ export function FleetPanel({
                   type="button"
                   onClick={() => onSelectServer(server.id)}
                   aria-pressed={selected}
-                  className={`block w-full px-4 py-3.5 text-left transition-colors sm:px-5 ${
+                  className={`relative block w-full px-4 py-3.5 text-left transition-colors sm:px-5 ${
                     selected
-                      ? "bg-pine-soft/45 ring-1 ring-pine-line/70 ring-inset"
-                      : "hover:bg-paper"
+                      ? "bg-paper/80 before:absolute before:top-0 before:bottom-0 before:left-0 before:w-[2.5px] before:bg-pine"
+                      : "hover:bg-paper/50"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2.5">
@@ -72,12 +75,10 @@ export function FleetPanel({
                         <StatusDot status={server.status} />
                         <span className="truncate">{server.name}</span>
                         {server.kind === "local" ? (
-                          <span className="rounded bg-sunken px-1.5 py-0.5 text-[10.5px] font-medium text-muted">
-                            {t("panel")}
-                          </span>
+                          <span className="font-mono text-[10.5px] text-faint">{t("panel")}</span>
                         ) : null}
                       </p>
-                      <p className="mt-0.5 truncate pl-4 font-mono text-[11.5px] text-muted">
+                      <p className="mt-0.5 truncate pl-4 font-mono text-[11px] text-faint">
                         {[server.public_ip, server.hostname].filter(Boolean).join(" · ") ||
                           server.kind}
                       </p>
@@ -86,7 +87,7 @@ export function FleetPanel({
                   </div>
 
                   {row && server.status === "online" ? (
-                    <dl className="mt-3 grid grid-cols-3 gap-2.5 pl-4">
+                    <dl className="mt-2.5 grid grid-cols-3 gap-3 pl-4">
                       <MiniGauge label={t("CPU")} value={row.cpu_percent} />
                       <MiniGauge label={t("RAM")} value={row.memory_percent} />
                       <MiniGauge label={t("Disk")} value={row.disk_percent} />
@@ -114,9 +115,9 @@ function MiniGauge({ label, value }: { label: string; value: number | null | und
   const t = useT();
   return (
     <div className="min-w-0">
-      <div className="flex items-baseline justify-between gap-1 text-[11.5px]">
+      <div className="flex items-baseline justify-between gap-1 text-[11px]">
         <dt className="text-muted">{label}</dt>
-        <dd className="font-medium text-ink-soft tabular-nums">
+        <dd className="font-mono font-medium text-ink-soft tabular-nums">
           {value == null ? "—" : `${Math.round(value)}%`}
         </dd>
       </div>

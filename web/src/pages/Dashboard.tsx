@@ -17,7 +17,7 @@ import {
 import { Icon } from "../components/icons";
 import { ImageStatusCard } from "../components/image-status";
 import { holdText, PanelLoadCard, reasonText, useLoad, useLoadActions } from "../components/load";
-import { KpiCard, LiveControlBar, Sparkline } from "../components/ops-ui";
+import { LiveControlBar, MetricCell, MetricStrip, Sparkline } from "../components/ops-ui";
 import { buttonClass, Meter } from "../components/ui";
 import { formatRelative } from "../format";
 import { isIssue } from "../health";
@@ -84,7 +84,7 @@ export function DashboardPage() {
     queryFn: () => api<Event[]>("/api/v1/events?limit=12"),
     refetchInterval: pollSlow,
   });
-  const load = useLoad();
+  const load = useLoad(paused);
   const { pause: pauseBuilds } = useLoadActions();
 
   const serverList = servers.data ?? [];
@@ -126,7 +126,6 @@ export function DashboardPage() {
     servicesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  // Prioritize incidents: critical infrastructure/load first, then failing workloads, then warnings.
   const issues: DashboardIssue[] = [];
   const view = load.data;
   if (view?.guard.level === "critical") {
@@ -224,7 +223,6 @@ export function DashboardPage() {
     });
   }
 
-  // Sparkline series from stats overview
   const cpuSpark = useMemo(
     () =>
       (stats.data?.metrics?.series ?? [])
@@ -245,17 +243,36 @@ export function DashboardPage() {
   const http5xxRate = totals?.http_5xx_rate;
   const activeBuilds = view ? view.builds.running + view.builds.stack_builds : 0;
   const buildHold = view ? holdText(t, view.builds.hold) : null;
+  const allHealthy = !loading && issues.length === 0 && !services.error && !servers.error;
 
   return (
     <>
-      {/* 1. Compact Production Ops Header */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+      {/* 1. Quiet, authoritative page header — healthy status folds inline */}
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
-          <h1 className="text-xl leading-tight font-semibold tracking-[-0.015em] text-ink sm:text-2xl">
+          <h1 className="text-[22px] leading-tight font-semibold tracking-[-0.02em] text-ink">
             {t("Overview")}
           </h1>
-          <p className="mt-0.5 text-sm text-muted">
-            {t("Real-time infrastructure health, telemetry and workloads.")}
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-muted">
+            {allHealthy ? (
+              <>
+                <span className="inline-flex items-center gap-1.5 font-medium text-pine">
+                  <span className="size-1.5 rounded-full bg-pine" aria-hidden="true" />
+                  {t("All systems operational")}
+                </span>
+                <span className="text-faint">·</span>
+                <span className="tabular-nums">
+                  {t("{online}/{servers} servers online · {running}/{services} services running", {
+                    online,
+                    servers: serverList.length,
+                    running,
+                    services: serviceList.length,
+                  })}
+                </span>
+              </>
+            ) : (
+              <span>{t("Real-time infrastructure health, telemetry and workloads.")}</span>
+            )}
           </p>
         </div>
 
@@ -271,13 +288,12 @@ export function DashboardPage() {
             updatedAt={services.dataUpdatedAt}
           />
           {isAdmin ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <Link
                 to="/templates"
                 className={buttonClass({ variant: "secondary", size: "sm" })}
               >
-                <Icon name="layers" size={14} />
-                <span className="hidden sm:inline">{t("Templates")}</span>
+                {t("Templates")}
               </Link>
               <Link to="/projects" className={buttonClass({ size: "sm" })}>
                 <Icon name="plus" size={14} />
@@ -288,28 +304,23 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* 2. Adaptive Health Strip */}
+      {/* 2. Incident Triage (only mounts when issues/errors exist) */}
       <AdaptiveHealthStrip
         issues={issues}
         loading={loading}
         error={services.error ?? servers.error}
         updatedAt={services.dataUpdatedAt}
-        onlineServers={online}
-        totalServers={serverList.length}
-        runningServices={running}
-        totalServices={serviceList.length}
       />
 
-      {/* 3. Executive KPI Bento Row */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
-        <KpiCard
+      {/* 3. Unified Swiss Hairline Metric Strip (zero floating icon-box clutter) */}
+      <MetricStrip columns={4}>
+        <MetricCell
           to="/servers"
-          icon="server"
           label={t("Servers online")}
           loading={servers.isLoading}
           value={online}
-          suffix={t("of {total}", { total: serverList.length })}
-          tone={offline.length > 0 ? "danger" : "pine"}
+          suffix={`/ ${serverList.length}`}
+          tone={offline.length > 0 ? "danger" : "default"}
           visual={
             cpuSpark.length > 1 ? (
               <Sparkline
@@ -333,17 +344,16 @@ export function DashboardPage() {
           }
         />
 
-        <KpiCard
+        <MetricCell
           to="/projects"
-          icon="rocket"
           label={t("Services running")}
           loading={services.isLoading}
           value={running}
-          suffix={t("of {total}", { total: serviceList.length })}
+          suffix={`/ ${serviceList.length}`}
           tone={failing.length > 0 ? "danger" : "default"}
           visual={
             serviceList.length > 0 ? (
-              <div className="w-20">
+              <div className="w-16">
                 <Meter
                   value={(running / serviceList.length) * 100}
                   label={t("Services running")}
@@ -363,9 +373,8 @@ export function DashboardPage() {
           }
         />
 
-        <KpiCard
+        <MetricCell
           to="/statistics"
-          icon="globe"
           label={t("Proxy requests ({range})", { range: statsRange })}
           loading={stats.isLoading}
           value={totals?.requests != null ? Math.round(totals.requests).toLocaleString() : "—"}
@@ -393,9 +402,8 @@ export function DashboardPage() {
           }
         />
 
-        <KpiCard
+        <MetricCell
           to={firing.length > 0 ? "/alerts" : "/load"}
-          icon={firing.length > 0 ? "bell" : "zap"}
           label={firing.length > 0 ? t("Alerts firing") : t("Builds & alerts")}
           loading={alerts.isLoading && load.isLoading}
           value={firing.length > 0 ? firing.length : activeBuilds}
@@ -408,7 +416,7 @@ export function DashboardPage() {
           }
           tone={firing.length > 0 ? "danger" : buildHold ? "warning" : "default"}
           visual={
-            <div className="flex h-2 w-20 gap-0.5" aria-hidden="true">
+            <div className="flex h-1.5 w-16 gap-1" aria-hidden="true">
               {Array.from({ length: Math.max(view?.builds.concurrency ?? 1, 1) }, (_, index) => (
                 <span
                   key={index}
@@ -442,10 +450,10 @@ export function DashboardPage() {
                   : t("Queue is empty")
           }
         />
-      </div>
+      </MetricStrip>
 
-      {/* 4. Primary Operations & Telemetry Grid (balanced two-column flow with zero dead vertical space) */}
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px]">
+      {/* 4. Balanced Two-Column Operations Grid */}
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_350px] xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="grid min-w-0 gap-5">
           <TelemetryPanel
             servers={serverList}
