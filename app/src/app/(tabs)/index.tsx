@@ -1,38 +1,49 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
-import { Badge, Card, Empty, ErrorBox, ListItem, Loading, Row, Screen, SectionTitle } from "../../components/ui";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Badge,
+  Empty,
+  ErrorBox,
+  GroupedRow,
+  HairlineBar,
+  InsetGroup,
+  Loading,
+  MetricLedger,
+  Screen,
+  SectionTitle,
+} from "../../components/ui";
 import { useAuth } from "../../lib/auth";
-import { colors, spacing, statusTone } from "../../lib/theme";
-import { timeAgo, type EventView, type MetricsOverview, type ServerView, type ServiceSummary, type SystemInfo } from "../../lib/types";
+import { colors, monoFont, radius, spacing, statusTone, tapHaptic } from "../../lib/theme";
+import {
+  timeAgo,
+  type EventView,
+  type MetricsOverview,
+  type ServerView,
+  type ServiceSummary,
+  type SystemInfo,
+} from "../../lib/types";
 
-function MetricPill({ icon, label, value, tone }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; tone: string }) {
+function MiniMeter({ label, value }: { label: string; value: number }) {
+  const pct = Math.max(0, Math.min(100, value));
   return (
-    <View style={styles.metricPill}>
-      <View style={[styles.metricIcon, { backgroundColor: tone + "22" }]}> 
-        <Ionicons name={icon} color={tone} size={17} />
+    <View style={styles.miniMeter}>
+      <View style={styles.miniMeterHead}>
+        <Text style={styles.miniMeterLabel}>{label}</Text>
+        <Text style={styles.miniMeterVal}>{Math.round(pct)}%</Text>
       </View>
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
+      <HairlineBar value={pct} />
     </View>
   );
 }
 
-function UsageBar({ label, value, tone }: { label: string; value: number; tone: string }) {
-  const percent = Math.max(0, Math.min(100, value));
-  return (
-    <View style={styles.usageBlock}>
-      <View style={styles.usageHeader}>
-        <Text style={styles.usageLabel}>{label}</Text>
-        <Text style={styles.usageValue}>{Math.round(percent)}%</Text>
-      </View>
-      <View style={styles.usageTrack}>
-        <View style={[styles.usageFill, { width: `${percent}%`, backgroundColor: tone }]} />
-      </View>
-    </View>
-  );
-}
+const QUICK_NAV: { label: string; icon: keyof typeof Ionicons.glyphMap; route: string }[] = [
+  { label: "Tải hệ thống", icon: "speedometer-outline", route: "/load" },
+  { label: "Thống kê", icon: "stats-chart-outline", route: "/statistics" },
+  { label: "Nhật ký", icon: "terminal-outline", route: "/logs" },
+  { label: "Máy chủ", icon: "server-outline", route: "/servers" },
+];
 
 export default function Dashboard() {
   const { api } = useAuth();
@@ -40,7 +51,7 @@ export default function Dashboard() {
   const services = useQuery({ queryKey: ["services"], queryFn: () => api<ServiceSummary[]>("/api/v1/services") });
   const servers = useQuery({ queryKey: ["servers"], queryFn: () => api<ServerView[]>("/api/v1/servers") });
   const metrics = useQuery({ queryKey: ["metrics-overview"], queryFn: () => api<MetricsOverview>("/api/v1/metrics/overview") });
-  const events = useQuery({ queryKey: ["events"], queryFn: () => api<EventView[]>("/api/v1/events?limit=5") });
+  const events = useQuery({ queryKey: ["events"], queryFn: () => api<EventView[]>("/api/v1/events?limit=6") });
 
   function refetch() {
     system.refetch();
@@ -59,151 +70,340 @@ export default function Dashboard() {
   }
 
   const list = services.data ?? [];
+  const serverList = servers.data ?? [];
   const running = list.filter((s) => (s.status ?? "").toLowerCase().includes("running")).length;
   const trouble = list.filter((s) => {
     const v = (s.status ?? "").toLowerCase();
     return v.includes("error") || v.includes("fail") || v.includes("exited");
   });
-  const online = (servers.data ?? []).filter((s) => (s.status ?? "").toLowerCase().includes("online")).length;
+  const online = serverList.filter((s) => (s.status ?? "").toLowerCase().includes("online")).length;
+  const offlineCount = serverList.length - online;
+  const incidentCount = trouble.length + offlineCount;
+  const healthy = incidentCount === 0;
 
   return (
     <Screen refreshing={system.isRefetching} onRefresh={refetch}>
       <ErrorBox error={system.error ?? services.error} />
 
-      <Card style={styles.heroCard}>
-        <View style={styles.heroGlow} />
-        <View style={styles.heroTitleRow}>
-          <View style={styles.heroIcon}>
-            <Ionicons name="compass" color={colors.accentBright} size={30} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.heroKicker}>Dymini Panel Control</Text>
-            <Text style={styles.heroTitle}>Hạm đội của bạn</Text>
-          </View>
-          <Badge label={`v${system.data?.version ?? "—"}`} tone="busy" />
+      {/* Quiet Operational Status Header */}
+      <View style={styles.statusHeader}>
+        <View style={styles.statusLeft}>
+          <View
+            style={[
+              styles.statusDot,
+              { backgroundColor: healthy ? colors.ok : colors.danger },
+            ]}
+          />
+          <Text style={styles.statusText} numberOfLines={1}>
+            {healthy
+              ? "Mọi hệ thống ổn định"
+              : `${incidentCount} vấn đề cần kiểm tra`}
+          </Text>
         </View>
-        <View style={styles.metricsRow}>
-          <MetricPill icon="cube" label="đang chạy" value={`${running}/${list.length}`} tone={colors.ok} />
-          <MetricPill icon="server" label="máy chủ" value={`${online || servers.data?.length || 0}`} tone={colors.accentBright} />
-          <MetricPill icon="alert-circle" label="cần xử lý" value={`${trouble.length}`} tone={trouble.length ? colors.danger : colors.ok} />
-        </View>
-      </Card>
+        {system.data?.version ? (
+          <Text style={styles.versionTag}>v{system.data.version}</Text>
+        ) : null}
+      </View>
 
-      {servers.data?.map((server) => {
-        const usage = metrics.data?.servers?.find((s) => s.server_id === server.id);
-        return (
-          <Card key={server.id}>
-            <View style={styles.serverHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.serverName}>{server.name || server.hostname || "Máy chủ"}</Text>
-                <Text style={styles.serverMeta}>Docker {server.docker_version ?? "—"}</Text>
-              </View>
-              <Badge label={server.status} tone={statusTone(server.status)} />
-            </View>
-            {usage ? (
-              <View style={{ gap: spacing.md, marginTop: spacing.sm }}>
-                <UsageBar label="CPU" value={usage.cpu_percent ?? 0} tone={colors.accentBright} />
-                <UsageBar label="Bộ nhớ" value={usage.memory_percent ?? 0} tone={colors.busy} />
-                <UsageBar label="Đĩa" value={usage.disk_percent ?? 0} tone={(usage.disk_percent ?? 0) > 85 ? colors.danger : colors.ok} />
-              </View>
-            ) : (
-              <Row label="Số liệu" value="Đang chờ agent báo cáo" dim />
-            )}
-          </Card>
-        );
-      })}
+      {/* Hairline-divided 3-Column Metric Ledger */}
+      <MetricLedger
+        items={[
+          {
+            label: "Dịch vụ",
+            value: String(running),
+            suffix: `/ ${list.length}`,
+            caption: list.length - running > 0 ? `${list.length - running} dừng` : "đang chạy",
+            tone: trouble.length > 0 ? "danger" : "ok",
+            onPress: () => router.push("/(tabs)/services"),
+          },
+          {
+            label: "Máy chủ",
+            value: String(online),
+            suffix: `/ ${serverList.length}`,
+            caption: offlineCount > 0 ? `${offlineCount} ngoại tuyến` : "trực tuyến",
+            tone: offlineCount > 0 ? "danger" : "ok",
+            onPress: () => router.push("/servers"),
+          },
+          {
+            label: "Sự cố",
+            value: String(incidentCount),
+            caption: healthy ? "không có" : "cần xử lý",
+            tone: healthy ? "dim" : "danger",
+            onPress: () => router.push(trouble.length > 0 ? "/(tabs)/services" : "/load"),
+          },
+        ]}
+      />
 
+      {/* Quick Ops Rail */}
+      <View style={styles.quickRow}>
+        {QUICK_NAV.map((item) => (
+          <Pressable
+            key={item.route}
+            onPress={() => {
+              tapHaptic("select");
+              router.push(item.route as never);
+            }}
+            style={({ pressed }) => [
+              styles.quickChip,
+              pressed && { backgroundColor: colors.cardSoft },
+            ]}
+          >
+            <Ionicons name={item.icon} size={15} color={colors.accent} />
+            <Text style={styles.quickLabel} numberOfLines={1}>
+              {item.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Priority Attention Queue — only rendered when needed */}
       {trouble.length > 0 ? (
         <>
           <SectionTitle>Cần chú ý</SectionTitle>
-          {trouble.map((service) => (
-            <ListItem
-              key={service.id}
-              title={service.name}
-              subtitle={`${service.project_name} · ${service.environment_name}`}
-              right={<Badge label={service.status} tone={statusTone(service.status)} />}
-              onPress={() => router.push(`/service/${service.id}`)}
-            />
-          ))}
+          <InsetGroup style={{ borderColor: colors.danger + "44" }}>
+            {trouble.map((service) => (
+              <GroupedRow
+                key={service.id}
+                icon="alert-circle-outline"
+                tone="danger"
+                title={service.name}
+                subtitle={`${service.project_name} / ${service.environment_name}`}
+                right={<Badge label={service.status} tone={statusTone(service.status)} />}
+                onPress={() => router.push(`/service/${service.id}`)}
+              />
+            ))}
+          </InsetGroup>
         </>
       ) : null}
 
-      <SectionTitle>Sự kiện gần đây</SectionTitle>
+      {/* Fleet Telemetry Matrix */}
+      <SectionTitle>Cụm máy chủ</SectionTitle>
+      {serverList.length === 0 ? (
+        <Empty text="Chưa có máy chủ nào." />
+      ) : (
+        <InsetGroup>
+          {serverList.map((server) => {
+            const usage = metrics.data?.servers?.find((s) => s.server_id === server.id);
+            const isOnline = (server.status ?? "").toLowerCase().includes("online");
+            return (
+              <Pressable
+                key={server.id}
+                onPress={() => {
+                  tapHaptic("select");
+                  router.push("/servers");
+                }}
+                style={({ pressed }) => [
+                  styles.serverRow,
+                  pressed && { backgroundColor: colors.cardSoft },
+                ]}
+              >
+                <View style={styles.serverTop}>
+                  <View style={styles.serverIdentity}>
+                    <View
+                      style={[
+                        styles.serverDot,
+                        { backgroundColor: isOnline ? colors.ok : colors.danger },
+                      ]}
+                    />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.serverName} numberOfLines={1}>
+                        {server.name || server.hostname || "Máy chủ"}
+                      </Text>
+                      <Text style={styles.serverMeta} numberOfLines={1}>
+                        {server.public_ip || server.hostname || `Docker ${server.docker_version ?? "—"}`}
+                      </Text>
+                    </View>
+                  </View>
+                  <Badge label={server.status} tone={statusTone(server.status)} />
+                </View>
+
+                {usage ? (
+                  <View style={styles.metersRow}>
+                    <MiniMeter label="CPU" value={usage.cpu_percent ?? 0} />
+                    <MiniMeter label="RAM" value={usage.memory_percent ?? 0} />
+                    <MiniMeter label="Đĩa" value={usage.disk_percent ?? 0} />
+                  </View>
+                ) : (
+                  <Text style={styles.waitingText}>Đang chờ agent báo cáo…</Text>
+                )}
+              </Pressable>
+            );
+          })}
+        </InsetGroup>
+      )}
+
+      {/* Recent Activity Timeline */}
+      <SectionTitle>Hoạt động gần đây</SectionTitle>
       {events.isLoading ? (
         <Loading />
       ) : (events.data ?? []).length === 0 ? (
         <Empty text="Chưa có sự kiện nào." />
       ) : (
-        (events.data ?? []).slice(0, 5).map((event) => (
-          <Card key={event.id} style={styles.eventCard}>
-            <View style={styles.eventHeader}>
-              <Text style={styles.eventTitle} numberOfLines={1}>
-                {event.title}
-              </Text>
-              <Text style={styles.eventTime}>{timeAgo(event.created_at)}</Text>
+        <InsetGroup>
+          {(events.data ?? []).slice(0, 6).map((event) => (
+            <View key={event.id} style={styles.eventRow}>
+              <View style={styles.eventHead}>
+                <Text style={styles.eventTitle} numberOfLines={1}>
+                  {event.title}
+                </Text>
+                <Text style={styles.eventTime}>{timeAgo(event.created_at)}</Text>
+              </View>
+              {event.message ? (
+                <Text style={styles.eventMessage} numberOfLines={2}>
+                  {event.message}
+                </Text>
+              ) : null}
             </View>
-            {event.message ? (
-              <Text style={styles.eventMessage} numberOfLines={2}>
-                {event.message}
-              </Text>
-            ) : null}
-          </Card>
-        ))
+          ))}
+        </InsetGroup>
       )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  heroCard: { overflow: "hidden", backgroundColor: colors.bgElevated, gap: spacing.lg },
-  heroGlow: {
-    position: "absolute",
-    top: -90,
-    right: -70,
-    width: 210,
-    height: 210,
-    borderRadius: 105,
-    backgroundColor: colors.accentDim,
-    opacity: 0.55,
+  statusHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    paddingHorizontal: 2,
   },
-  heroTitleRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  heroIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
+  statusLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  statusText: {
+    color: colors.textSoft,
+    fontSize: 13.5,
+    fontWeight: "600",
+  },
+  versionTag: {
+    color: colors.textFaint,
+    fontFamily: monoFont,
+    fontSize: 11.5,
+  },
+  quickRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  quickChip: {
+    flex: 1,
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.accentDim,
-    borderWidth: 1,
-    borderColor: colors.accent + "55",
-  },
-  heroKicker: { color: colors.accentBright, fontSize: 12, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
-  heroTitle: { color: colors.text, fontSize: 28, fontWeight: "800", letterSpacing: -0.7, marginTop: 2 },
-  metricsRow: { flexDirection: "row", gap: spacing.sm },
-  metricPill: {
-    flex: 1,
-    borderRadius: 18,
-    padding: spacing.md,
-    backgroundColor: colors.cardSoft,
+    gap: 5,
+    backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.cardBorder,
+    borderRadius: radius.md,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  quickLabel: {
+    color: colors.textSoft,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  serverRow: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  serverTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  serverIdentity: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  serverDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  serverName: {
+    color: colors.text,
+    fontSize: 14.5,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+  },
+  serverMeta: {
+    color: colors.textFaint,
+    fontFamily: monoFont,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  metersRow: {
+    flexDirection: "row",
+    gap: 12,
+    paddingLeft: 17,
+  },
+  miniMeter: {
+    flex: 1,
+    gap: 5,
+  },
+  miniMeterHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+  },
+  miniMeterLabel: {
+    color: colors.textDim,
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  miniMeterVal: {
+    color: colors.textSoft,
+    fontFamily: monoFont,
+    fontSize: 11,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
+  waitingText: {
+    color: colors.textFaint,
+    fontSize: 12,
+    paddingLeft: 17,
+  },
+  eventRow: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 11,
     gap: 3,
   },
-  metricIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 4 },
-  metricValue: { color: colors.text, fontSize: 19, fontWeight: "800" },
-  metricLabel: { color: colors.textDim, fontSize: 11, fontWeight: "600" },
-  serverHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
-  serverName: { color: colors.text, fontSize: 18, fontWeight: "800", letterSpacing: -0.3 },
-  serverMeta: { color: colors.textDim, fontSize: 12, marginTop: 3 },
-  usageBlock: { gap: 6 },
-  usageHeader: { flexDirection: "row", justifyContent: "space-between" },
-  usageLabel: { color: colors.textDim, fontSize: 12, fontWeight: "600" },
-  usageValue: { color: colors.text, fontSize: 12, fontWeight: "700" },
-  usageTrack: { height: 8, borderRadius: 4, overflow: "hidden", backgroundColor: colors.bg },
-  usageFill: { height: 8, borderRadius: 4 },
-  eventCard: { paddingVertical: spacing.md },
-  eventHeader: { flexDirection: "row", justifyContent: "space-between", gap: spacing.sm },
-  eventTitle: { color: colors.text, fontWeight: "700", flex: 1 },
-  eventTime: { color: colors.textDim, fontSize: 11 },
-  eventMessage: { color: colors.textDim, fontSize: 12, lineHeight: 17 },
+  eventHead: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  eventTitle: {
+    color: colors.text,
+    fontSize: 13.5,
+    fontWeight: "600",
+    flex: 1,
+  },
+  eventTime: {
+    color: colors.textFaint,
+    fontFamily: monoFont,
+    fontSize: 11,
+  },
+  eventMessage: {
+    color: colors.textDim,
+    fontSize: 12,
+    lineHeight: 17,
+  },
 });

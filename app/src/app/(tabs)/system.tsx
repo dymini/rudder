@@ -1,11 +1,31 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { router } from "expo-router";
 import { useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
-import { Badge, Button, Card, CardTitle, ErrorBox, ListItem, Loading, Row, Screen, SectionTitle } from "../../components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardTitle,
+  ErrorBox,
+  GroupedRow,
+  InsetGroup,
+  Loading,
+  Row,
+  Screen,
+  SectionTitle,
+} from "../../components/ui";
 import { useAuth } from "../../lib/auth";
 import { colors, spacing, statusTone } from "../../lib/theme";
-import { formatTime, timeAgo, type AlertView, type McpGrantView, type TokenView, type UpdateOverview, type UserView } from "../../lib/types";
+import {
+  formatTime,
+  timeAgo,
+  type AlertView,
+  type McpGrantView,
+  type TokenView,
+  type UpdateOverview,
+  type UserView,
+} from "../../lib/types";
 
 interface SessionResponse {
   user: UserView;
@@ -17,10 +37,22 @@ export default function System() {
   const [error, setError] = useState<unknown>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<SessionResponse>("/api/v1/me") });
-  const updates = useQuery({ queryKey: ["updates"], queryFn: () => api<UpdateOverview>("/api/v1/system/updates") });
-  const alerts = useQuery({ queryKey: ["alerts"], queryFn: () => api<AlertView[]>("/api/v1/alerts") });
-  const agents = useQuery({ queryKey: ["mcp-grants"], queryFn: () => api<McpGrantView[]>("/api/v1/mcp/grants") });
-  const tokens = useQuery({ queryKey: ["tokens"], queryFn: () => api<TokenView[]>("/api/v1/tokens") });
+  const updates = useQuery({
+    queryKey: ["updates"],
+    queryFn: () => api<UpdateOverview>("/api/v1/system/updates"),
+  });
+  const alerts = useQuery({
+    queryKey: ["alerts"],
+    queryFn: () => api<AlertView[]>("/api/v1/alerts"),
+  });
+  const agents = useQuery({
+    queryKey: ["mcp-grants"],
+    queryFn: () => api<McpGrantView[]>("/api/v1/mcp/grants"),
+  });
+  const tokens = useQuery({
+    queryKey: ["tokens"],
+    queryFn: () => api<TokenView[]>("/api/v1/tokens"),
+  });
 
   const check = useMutation({
     mutationFn: () => api("/api/v1/system/updates/check", { method: "POST", body: "{}" }),
@@ -69,49 +101,91 @@ export default function System() {
     >
       <ErrorBox error={error ?? updates.error} />
 
-      <SectionTitle>Quản trị</SectionTitle>
-      <ListItem title="Projects" subtitle="Project và môi trường" onPress={() => router.push("/projects")} />
-      <ListItem title="Servers" subtitle="Máy chủ chạy dịch vụ" onPress={() => router.push("/servers")} />
-      <ListItem title="Builders" subtitle="Builder và build cache" onPress={() => router.push("/builders")} />
-      <ListItem title="Tải hệ thống" subtitle="Load guard và hàng đợi build" onPress={() => router.push("/load")} />
-      <ListItem title="Thống kê" subtitle="Lưu lượng và vận hành" onPress={() => router.push("/statistics")} />
-      <ListItem title="Logs panel" subtitle="Nhật ký của panel" onPress={() => router.push("/logs")} />
-      <ListItem title="Tên miền" subtitle="Domains và routing" onPress={() => router.push("/domains")} />
-      <ListItem title="Chứng chỉ TLS" subtitle="Certificates" onPress={() => router.push("/certificates")} />
-      <ListItem title="Registries" subtitle="Docker registries" onPress={() => router.push("/registries")} />
-      <ListItem title="Git providers" subtitle="GitHub/GitLab đã kết nối" onPress={() => router.push("/git-providers")} />
-      <ListItem title="Dymini Panel Image" subtitle="Kho image nội bộ" onPress={() => router.push("/image-store")} />
-      <ListItem title="Cache edge" subtitle="Cache policies" onPress={() => router.push("/cache-policies")} />
-      <ListItem title="S3 destinations" subtitle="Nơi lưu backup" onPress={() => router.push("/s3-destinations")} />
-      <ListItem title="Templates" subtitle="Template một chạm" onPress={() => router.push("/templates")} />
-      <ListItem title="Plugins" subtitle="Plugin cộng đồng" onPress={() => router.push("/plugins")} />
-      <ListItem title="Người dùng" subtitle="Tài khoản panel" onPress={() => router.push("/users")} />
-      <ListItem title="Dymini Panel Access" subtitle="Định danh và phân quyền" onPress={() => router.push("/access")} />
-      <ListItem title="Bảo mật" subtitle="Findings và SSL" onPress={() => router.push("/security")} />
-      <ListItem title="Cloudflare" subtitle="Tunnel và edge" onPress={() => router.push("/cloudflare")} />
-      <ListItem title="Nhật ký audit" subtitle="Ai đã làm gì" onPress={() => router.push("/audit")} />
+      {/* Surface firing alerts at the very top */}
+      {firingAlerts.length > 0 ? (
+        <>
+          <SectionTitle>Cảnh báo đang kích hoạt</SectionTitle>
+          <InsetGroup style={{ borderColor: colors.danger + "44" }}>
+            {firingAlerts.map((alert) => (
+              <GroupedRow
+                key={alert.id}
+                icon="notifications-outline"
+                tone="danger"
+                title={alert.name}
+                subtitle={`Từ ${formatTime(alert.state_since)}`}
+                right={<Badge label={alert.state} tone={statusTone(alert.state)} />}
+              />
+            ))}
+          </InsetGroup>
+        </>
+      ) : null}
 
+      {/* Group 1: Infrastructure */}
+      <SectionTitle>Hạ tầng & triển khai</SectionTitle>
+      <InsetGroup>
+        <GroupedRow icon="folder-outline" title="Dự án" subtitle="Project và môi trường" onPress={() => router.push("/projects")} />
+        <GroupedRow icon="server-outline" title="Máy chủ" subtitle="Máy chủ chạy dịch vụ" onPress={() => router.push("/servers")} />
+        <GroupedRow icon="hammer-outline" title="Builders" subtitle="Build host và bộ nhớ đệm" onPress={() => router.push("/builders")} />
+        <GroupedRow icon="layers-outline" title="Templates" subtitle="Triển khai mẫu một chạm" onPress={() => router.push("/templates")} />
+        <GroupedRow icon="extension-puzzle-outline" title="Plugins" subtitle="Tiện ích mở rộng cộng đồng" onPress={() => router.push("/plugins")} />
+      </InsetGroup>
 
+      {/* Group 2: Observability */}
+      <SectionTitle>Giám sát & nhật ký</SectionTitle>
+      <InsetGroup>
+        <GroupedRow icon="speedometer-outline" title="Tải hệ thống" subtitle="Load guard và hàng đợi build" onPress={() => router.push("/load")} />
+        <GroupedRow icon="stats-chart-outline" title="Thống kê" subtitle="Lưu lượng, tài nguyên và vận hành" onPress={() => router.push("/statistics")} />
+        <GroupedRow icon="terminal-outline" title="Nhật ký panel" subtitle="Logs ứng dụng và proxy" onPress={() => router.push("/logs")} />
+        <GroupedRow icon="time-outline" title="Nhật ký kiểm toán" subtitle="Lịch sử thao tác hệ thống" onPress={() => router.push("/audit")} />
+      </InsetGroup>
+
+      {/* Group 3: Network & Storage */}
+      <SectionTitle>Mạng, bảo mật & lưu trữ</SectionTitle>
+      <InsetGroup>
+        <GroupedRow icon="globe-outline" title="Tên miền" subtitle="Domains và định tuyến" onPress={() => router.push("/domains")} />
+        <GroupedRow icon="lock-closed-outline" title="Chứng chỉ TLS" subtitle="Certificates và gia hạn" onPress={() => router.push("/certificates")} />
+        <GroupedRow icon="flash-outline" title="Cache edge" subtitle="Chính sách bộ nhớ đệm" onPress={() => router.push("/cache-policies")} />
+        <GroupedRow icon="cloud-outline" title="Cloudflare" subtitle="Tunnel và DNS zones" onPress={() => router.push("/cloudflare")} />
+        <GroupedRow icon="shield-checkmark-outline" title="Bảo mật" subtitle="Findings và kiểm tra SSL" onPress={() => router.push("/security")} />
+        <GroupedRow icon="archive-outline" title="S3 destinations" subtitle="Kho lưu trữ sao lưu" onPress={() => router.push("/s3-destinations")} />
+        <GroupedRow icon="cube-outline" title="Dymini Panel Image" subtitle="Kho image nội bộ" onPress={() => router.push("/image-store")} />
+      </InsetGroup>
+
+      {/* Group 4: Integrations & Admin */}
+      <SectionTitle>Tích hợp & quản trị</SectionTitle>
+      <InsetGroup>
+        <GroupedRow icon="git-branch-outline" title="Git providers" subtitle="GitHub / GitLab đã kết nối" onPress={() => router.push("/git-providers")} />
+        <GroupedRow icon="albums-outline" title="Registries" subtitle="Docker registries" onPress={() => router.push("/registries")} />
+        <GroupedRow icon="people-outline" title="Người dùng" subtitle="Tài khoản quản trị panel" onPress={() => router.push("/users")} />
+        <GroupedRow icon="key-outline" title="Dymini Panel Access" subtitle="Định danh và phân quyền" onPress={() => router.push("/access")} />
+      </InsetGroup>
+
+      {/* Account & Panel Updates */}
+      <SectionTitle>Phiên đăng nhập & cập nhật</SectionTitle>
       <Card>
         <CardTitle>Tài khoản</CardTitle>
         <Row label="Email" value={me.data?.user.email ?? "—"} />
         <Row label="Quyền" value={me.data?.user.role ?? "—"} dim />
-        <Row label="Panel" value={panelUrl ?? "—"} dim />
+        <Row label="Panel" value={panelUrl ?? "—"} dim mono />
       </Card>
 
       {updates.isLoading ? (
         <Loading />
       ) : updates.data ? (
         <Card>
-          <CardTitle>Cập nhật</CardTitle>
-          <Row label="Đang chạy" value={updates.data.current_version} />
+          <CardTitle>Cập nhật hệ thống</CardTitle>
+          <Row label="Đang chạy" value={updates.data.current_version} mono />
           {updates.data.last_check?.latest ? (
             <Row
               label="Bản mới nhất"
               value={
                 <Badge
                   label={updates.data.last_check.latest.version}
-                  tone={updates.data.last_check.latest.version !== updates.data.current_version ? "warn" : "ok"}
+                  tone={
+                    updates.data.last_check.latest.version !== updates.data.current_version
+                      ? "warn"
+                      : "ok"
+                  }
                 />
               }
             />
@@ -119,9 +193,17 @@ export default function System() {
           {updates.data.last_check?.checked_at ? (
             <Row label="Kiểm tra lúc" value={timeAgo(updates.data.last_check.checked_at)} dim />
           ) : null}
-          {updates.data.apply_blocker ? <Row label="Bị chặn" value={updates.data.apply_blocker} /> : null}
+          {updates.data.apply_blocker ? (
+            <Row label="Bị chặn" value={updates.data.apply_blocker} />
+          ) : null}
           <View style={styles.actions}>
-            <Button title="Kiểm tra" small tone="ghost" loading={check.isPending} onPress={() => check.mutate()} />
+            <Button
+              title="Kiểm tra"
+              small
+              tone="ghost"
+              loading={check.isPending}
+              onPress={() => check.mutate()}
+            />
             <Button
               title="Cập nhật ngay"
               small
@@ -133,52 +215,51 @@ export default function System() {
         </Card>
       ) : null}
 
-      {firingAlerts.length > 0 ? (
-        <>
-          <SectionTitle>Cảnh báo đang kích hoạt</SectionTitle>
-          {firingAlerts.map((alert) => (
-            <Card key={alert.id}>
-              <Row label="Tên" value={alert.name} />
-              <Row label="Từ" value={formatTime(alert.state_since)} dim />
-              <Row label="Trạng thái" value={<Badge label={alert.state} tone={statusTone(alert.state)} />} />
-            </Card>
-          ))}
-        </>
-      ) : null}
-
       <SectionTitle>AI agents đã duyệt</SectionTitle>
       {(agents.data ?? []).length === 0 ? (
         <Text style={styles.dim}>Chưa có agent nào.</Text>
       ) : (
-        (agents.data ?? []).map((grant) => (
-          <Card key={grant.id}>
-            <Row label="Tên" value={grant.name || grant.client_name} />
-            <Row label="Template" value={grant.template} dim />
-            {grant.last_used_at ? <Row label="Dùng cuối" value={timeAgo(grant.last_used_at)} dim /> : null}
-          </Card>
-        ))
+        <InsetGroup>
+          {(agents.data ?? []).map((grant) => (
+            <GroupedRow
+              key={grant.id}
+              title={grant.name || grant.client_name}
+              subtitle={`${grant.template}${grant.last_used_at ? ` · ${timeAgo(grant.last_used_at)}` : ""}`}
+            />
+          ))}
+        </InsetGroup>
       )}
 
       <SectionTitle>API tokens</SectionTitle>
       {(tokens.data ?? []).length === 0 ? (
         <Text style={styles.dim}>Chưa có token nào.</Text>
       ) : (
-        (tokens.data ?? []).map((token) => (
-          <Card key={token.id}>
-            <Row label="Tên" value={token.name} />
-            {token.last_used_at ? <Row label="Dùng cuối" value={timeAgo(token.last_used_at)} dim /> : null}
-            {token.expires_at ? <Row label="Hết hạn" value={formatTime(token.expires_at)} dim /> : null}
-          </Card>
-        ))
+        <InsetGroup>
+          {(tokens.data ?? []).map((token) => (
+            <GroupedRow
+              key={token.id}
+              title={token.name}
+              subtitle={
+                [
+                  token.last_used_at ? `Dùng cuối ${timeAgo(token.last_used_at)}` : null,
+                  token.expires_at ? `Hết hạn ${formatTime(token.expires_at)}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "Hoạt động"
+              }
+            />
+          ))}
+        </InsetGroup>
       )}
 
-      <SectionTitle> </SectionTitle>
-      <Button title="Đăng xuất" tone="danger" onPress={confirmSignOut} />
+      <View style={{ marginTop: spacing.sm }}>
+        <Button title="Đăng xuất" tone="danger" onPress={confirmSignOut} />
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
-  dim: { color: colors.textDim, fontSize: 13 },
+  dim: { color: colors.textDim, fontSize: 13, marginLeft: 4 },
 });
