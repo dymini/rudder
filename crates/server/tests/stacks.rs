@@ -261,10 +261,7 @@ async fn plugin_catalog_install_and_update_without_docker(pool: PgPool) {
     client
         .expect(StatusCode::CONFLICT, "POST", &uri, Some(body.clone()))
         .await;
-    let image = format!(
-        "ghcr.io/dymini/dockside-server@sha256:{}",
-        "a".repeat(64)
-    );
+    let image = format!("ghcr.io/dymini/dockside-server@sha256:{}", "a".repeat(64));
     sqlx::query("INSERT INTO plugin_release_checks (plugin,latest_version,releases) VALUES ('dockside','0.2.0',$1)")
         .bind(json!([{"version":"0.2.0","image":image,"notes":"notes","published_at":null,"html_url":null}]))
         .execute(&pool).await.unwrap();

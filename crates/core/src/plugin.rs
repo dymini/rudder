@@ -177,10 +177,7 @@ mod tests {
             schema: 1,
             plugin: "dockside".into(),
             version: "0.2.0".into(),
-            image: format!(
-                "ghcr.io/dymini/dockside-server@sha256:{}",
-                "a".repeat(64)
-            ),
+            image: format!("ghcr.io/dymini/dockside-server@sha256:{}", "a".repeat(64)),
             health_path: "/v1/health".into(),
             port: 7420,
         };
