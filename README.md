@@ -76,6 +76,8 @@ The table does not include Postgres, Traefik, or your apps.
 
 ## Documentation
 
+Read the guides online, for each release and in English or Vietnamese, at [developers.dymini.com/panel](https://developers.dymini.com/panel).
+
 | Topic | Document |
 | --- | --- |
 | Remote servers and the agent protocol | [docs/agent.md](docs/agent.md) |

@@ -6,7 +6,8 @@ Thanks for your interest in contributing! This document explains how to set up t
 
 - **Report bugs** — open a [bug report](https://github.com/dymini/panel/issues/new?template=bug_report.yml). Include the panel version, how you installed it, and what you expected versus what happened.
 - **Suggest features** — open a [feature request](https://github.com/dymini/panel/issues/new?template=feature_request.yml) or start a [discussion](https://github.com/dymini/panel/discussions) first for anything large.
-- **Improve docs** — everything under `docs/` and the guides there are fair game; small fixes can go straight to a PR.
+- **Improve docs** — everything under `docs/` and the guides there are fair game; small fixes can go straight to a PR. The guides listed in `developers.yml` are published to [developers.dymini.com/panel](https://developers.dymini.com/panel) for every release (see [Docs site](#docs-site)).
+- **Translate docs** — put a translation at `docs/i18n/<language>/<same file name>` (for example `docs/i18n/vi/cli.md`); see [Docs site](#docs-site).
 - **Write code** — read the rest of this document first.
 
 For security issues, **do not open public issues** — see [SECURITY.md](SECURITY.md).
@@ -21,6 +22,8 @@ For security issues, **do not open public issues** — see [SECURITY.md](SECURIT
 | `deploy/` | Installer scripts, Dockerfiles, release packaging |
 | `templates/` | One-click app templates shipped with the panel |
 | `docs/` | Operator and developer documentation |
+| `docs/i18n/<language>/` | Translations of the guides for developers.dymini.com |
+| `developers.yml` | Which guides developers.dymini.com publishes, in which order and languages |
 | `docs/stories`, `docs/decisions`, `docs/intakes` | Durable project history managed by the [5harness](docs/HARNESS.md) CLI — **do not hand-edit** |
 
 ## Development setup
@@ -48,6 +51,25 @@ For security issues, **do not open public issues** — see [SECURITY.md](SECURIT
 4. **Tests.** Rust changes should come with unit or integration tests under `crates/server/tests/`. Web changes should keep `pnpm test` green.
 5. **Green CI.** Formatting, clippy, tests, web build, and the changelog check all run in CI.
 6. **Small and focused.** One thing per PR. Large features are easier to land as a series of small PRs — open a discussion first so we can agree on the direction.
+
+## Docs site
+
+The guides are published to [developers.dymini.com/panel](https://developers.dymini.com/panel): every release tag
+publishes its own version (older versions stay readable), and the `main` branch is not published until it is
+released. Only pages listed in `developers.yml` appear there; design notes and project history stay in the repository.
+
+- **Check locally:** `npx --yes https://cdn.dymini.com/lib/dymini-docs@1.0.1/dymini-docs.tgz dev` serves the site at
+  http://localhost:4321 and rebuilds on save; `… build --strict` is what CI runs (broken links, missing pages,
+  unsupported MDX).
+- **Pull requests** from branches of this repository get a preview at
+  `https://developers.dymini.com/_preview/panel/pr-<number>` for 14 days.
+- **Translations:** copy a guide to `docs/i18n/<language>/` and translate it, keeping links and file paths as in the
+  original. Put the hash of the original you translated from in its frontmatter (`translatedFrom: …`);
+  `… i18n status --locale vi` prints it and lists missing or out-of-date translations. A page whose original changed
+  after translation shows a note until `translatedFrom` is updated. Languages are listed under `locales` in
+  `developers.yml`.
+- **New guide:** add it to `nav` in `developers.yml`. The built-in guides served by the panel itself
+  (`/api/v1/docs`) are the top-level `docs/*.md` files and do not include translations.
 
 ## Commit style
 

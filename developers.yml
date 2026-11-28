@@ -1,0 +1,34 @@
+# Docs of Dymini Panel on https://developers.dymini.com, published by this repository.
+# Every tag vX.Y.Z publishes that version from the Release workflow; pull requests build the docs and, for branches
+# of this repository, publish a 14-day preview. Only the pages listed in `nav` are published.
+# Format and components: https://cdn.dymini.com/lib/dymini-docs@1.0.0/dymini-docs.tgz (README) or
+# `npx --yes https://cdn.dymini.com/lib/dymini-docs@1.0.0/dymini-docs.tgz help`.
+format: 1
+product: panel
+title: Dymini Panel
+description:
+  en: Self-hosted deployment panel. Services, stacks, domains, cache, backups and AI agents over MCP.
+  vi: Panel triển khai tự host. Dịch vụ, stack, tên miền, cache, sao lưu và AI Agent qua MCP.
+repo: dymini/panel
+editRef: main
+docsDir: docs
+home: README.md
+defaultLocale: en
+locales:
+  - { code: en, label: English }
+  - { code: vi, label: Tiếng Việt }
+# docs/i18n/vi/cli.md translates docs/cli.md; `dymini-docs i18n status` lists what is missing or out of date
+translations: docs/i18n
+nav:
+  - group: { en: Get started, vi: Bắt đầu }
+    pages: [cli.md, panel-https.md, names.md]
+  - group: { en: Deploy, vi: Triển khai }
+    pages: [stacks.md, github-app.md, build-hosts.md, agent.md, domains.md, cache.md]
+  - group: { en: Operate, vi: Vận hành }
+    pages: [logs.md, monitoring.md, load-guard.md, backups.md, disaster-recovery.md, updates.md]
+  - group: { en: Access and security, vi: Truy cập và bảo mật }
+    pages: [access.md, cloudflare.md, security.md, security-scanning.md]
+  - group: { en: Extend, vi: Mở rộng }
+    pages: [mcp.md, plugins.md, ios-app.md]
+api: web/openapi.json
+changelog: CHANGELOG.md

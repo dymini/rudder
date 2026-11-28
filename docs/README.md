@@ -1,6 +1,7 @@
 # Docs
 
-Operating and product documentation for this repository.
+Operating and product documentation for this repository. The guides listed in `../developers.yml` are published to
+[developers.dymini.com/panel](https://developers.dymini.com/panel) for every release.
 
 | Path | Role |
 | --- | --- |
@@ -17,6 +18,7 @@ Operating and product documentation for this repository.
 | `names.md` | Naming rules and understanding validation errors |
 | `access.md` | Dymini Panel Access sign-in for internal apps |
 | `security.md` | SSL, exposure checks, and shared rate limits |
+| `i18n/<language>/` | Translations of the guides published to developers.dymini.com (`developers.yml` at the repository root) |
 | `product/` | Product contracts |
 | `stories/` | Story packets |
 | `decisions/` | Architecture and product decisions |
