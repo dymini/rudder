@@ -27,7 +27,7 @@ futures-util = "0.3.34"
 rcgen = { version = "0.14.10", default-features = false, features = ["pem", "aws_lc_rs"] }
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json"] }
 tokio-stream = "0.1"
-tokio-tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 tower = { version = "0.5", features = ["util"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
