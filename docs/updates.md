@@ -34,7 +34,7 @@ sha256sum -c SHA256SUMS
 
 ## Updating from the panel
 
-Open **System → Updates**. **Check now** reads the releases of the repository set in panel settings (`vantanminh/rudder` by default). The panel shows the newest release and whether it verified, and under **What this update installs** the notes of every release between your version and the newest one, newest first, so you can see what is about to be installed before you press the button. An admin with write access can then click **Update to …**.
+Open **System → Updates**. **Check now** reads the releases of the repository set in panel settings (`dymini/panel` by default). The panel shows the newest release and whether it verified, and under **What this update installs** the notes of every release between your version and the newest one, newest first, so you can see what is about to be installed before you press the button. An admin with write access can then click **Update to …**.
 
 The panel then does the following:
 
@@ -58,7 +58,7 @@ The panel can only replace itself when it runs as a Docker container named `dymi
 A panel still running Rudder cannot update itself into Dymini Panel: the rebranded releases carry a new manifest format, and the old build refuses them. Cross the boundary once by hand:
 
 ```sh
-curl -fsSL https://github.com/vantanminh/rudder/releases/latest/download/install.sh -o install.sh
+curl -fsSL https://github.com/dymini/panel/releases/latest/download/install.sh -o install.sh
 sudo sh install.sh
 ```
 

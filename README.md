@@ -16,7 +16,7 @@ What you get:
 On a fresh Linux VPS with ports 80, 443, 3000, and 7443 open:
 
 ```sh
-curl -fsSL https://github.com/vantanminh/rudder/releases/latest/download/install.sh | sudo sh
+curl -fsSL https://github.com/dymini/panel/releases/latest/download/install.sh | sudo sh
 ```
 
 The installer sets up Docker if it is missing. It starts Postgres, Traefik, `dymini-panel-cache`, and the panel as containers, and prints a setup link with a one-time setup token (also saved in `/var/lib/dymini-panel/setup-token`). Open it and create the owner account. Pass `--domain panel.example.com --email you@example.com` to serve the panel over HTTPS. See `install.sh --help` for backup and restore options, and [disaster recovery](docs/disaster-recovery.md) for moving to a new host.
@@ -29,7 +29,7 @@ curl -fsSL http://<panel>:3000/install-agent.sh | sudo sh -s -- --server http://
 
 The agent enrolls with a one-time token, then keeps an outbound gRPC session (mutual TLS) to the panel on port 7443. The server needs no inbound port except 80/443 for its own apps. Every page in the panel can then target that server. See [the agent](docs/agent.md).
 
-From your laptop or CI — install the native `dymini-panel` CLI on macOS/Linux (`curl -fsSL https://github.com/vantanminh/rudder/releases/latest/download/install-cli.sh | sh`) or Windows PowerShell (`irm https://github.com/vantanminh/rudder/releases/latest/download/install-cli.ps1 | iex`), sign in via API key, browser, or 8-character device code, and run local CI/CD builds pushed to Cloudflare R2 (see [docs/cli.md](docs/cli.md)):
+From your laptop or CI — install the native `dymini-panel` CLI on macOS/Linux (`curl -fsSL https://github.com/dymini/panel/releases/latest/download/install-cli.sh | sh`) or Windows PowerShell (`irm https://github.com/dymini/panel/releases/latest/download/install-cli.ps1 | iex`), sign in via API key, browser, or 8-character device code, and run local CI/CD builds pushed to Cloudflare R2 (see [docs/cli.md](docs/cli.md)):
 
 ```sh
 dymini-panel login --url https://panel.example.com --device  # or --browser, or paste an API token

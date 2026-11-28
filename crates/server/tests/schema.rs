@@ -104,7 +104,7 @@ async fn migration_creates_required_tables(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(settings.github_repo, "vantanminh/rudder");
+    assert_eq!(settings.github_repo, "dymini/panel");
     assert!(!settings.auto_update);
 
     dymini_panel_server::ensure_partitions(&pool).await.unwrap();

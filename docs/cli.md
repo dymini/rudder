@@ -11,7 +11,7 @@ In addition to managing services, logs, and cache purges, `dymini-panel` provide
 ### macOS & Linux
 
 ```sh
-curl -fsSL https://github.com/vantanminh/rudder/releases/latest/download/install-cli.sh | sh
+curl -fsSL https://github.com/dymini/panel/releases/latest/download/install-cli.sh | sh
 ```
 
 Options for `install-cli.sh`:
@@ -21,7 +21,7 @@ Options for `install-cli.sh`:
 ### Windows (PowerShell)
 
 ```powershell
-irm https://github.com/vantanminh/rudder/releases/latest/download/install-cli.ps1 | iex
+irm https://github.com/dymini/panel/releases/latest/download/install-cli.ps1 | iex
 ```
 
 The installer verifies `SHA256SUMS`, places `dymini-panel.exe` in `$HOME\.dymini-panel\bin`, and adds it to your user `PATH`.

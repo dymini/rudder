@@ -371,7 +371,7 @@ export function BuildersPage() {
         )}{" "}
         <a
           className="underline"
-          href="https://github.com/vantanminh/rudder/blob/main/docs/build-hosts.md"
+          href="https://github.com/dymini/panel/blob/main/docs/build-hosts.md"
           target="_blank"
           rel="noreferrer"
         >

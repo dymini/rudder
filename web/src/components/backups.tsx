@@ -922,7 +922,7 @@ export function PanelRestoreHint() {
         )}
       </p>
       <pre className="overflow-auto rounded-alert border border-line bg-paper p-3 font-mono text-xs">
-        curl -fsSL https://github.com/vantanminh/rudder/releases/latest/download/install.sh -o
+        curl -fsSL https://github.com/dymini/panel/releases/latest/download/install.sh -o
         install.sh
         {"\n"}sudo sh install.sh --restore dymini-panel-….tar.zst.enc
       </pre>

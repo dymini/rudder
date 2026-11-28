@@ -44,7 +44,7 @@ impl ProjectConfig {
     pub fn render_toml(&self) -> String {
         let mut out = String::new();
         out.push_str(
-            "# Dymini Panel project configuration (https://github.com/vantanminh/rudder)\n",
+            "# Dymini Panel project configuration (https://github.com/dymini/panel)\n",
         );
         out.push_str(&format!("service = {}\n", quote_str(&self.service)));
         out.push_str(&format!("dockerfile = {}\n", quote_str(&self.dockerfile)));

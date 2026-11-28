@@ -395,8 +395,8 @@ mod tests {
             format: RELEASE_FORMAT.into(),
             version: version.into(),
             images: ReleaseImages {
-                panel: format!("ghcr.io/vantanminh/dymini-panel:{version}@sha256:{digest}"),
-                cache: format!("ghcr.io/vantanminh/dymini-panel-cache@sha256:{digest}"),
+                panel: format!("ghcr.io/dymini/panel:{version}@sha256:{digest}"),
+                cache: format!("ghcr.io/dymini/panel-cache@sha256:{digest}"),
             },
             agents: BTreeMap::from([("x86_64-unknown-linux-musl".into(), "c".repeat(64))]),
         }
@@ -406,7 +406,7 @@ mod tests {
     fn manifests_must_pin_images_by_digest() {
         assert!(manifest("0.2.0").validate().is_ok());
         let mut tag_only = manifest("0.2.0");
-        tag_only.images.cache = "ghcr.io/vantanminh/dymini-panel-cache:0.2.0".into();
+        tag_only.images.cache = "ghcr.io/dymini/panel-cache:0.2.0".into();
         assert!(tag_only.validate().is_err());
         let mut odd_target = manifest("0.2.0");
         odd_target

@@ -17,14 +17,14 @@
 # Every value is passed to programs as its own argument; nothing is evaluated.
 set -eu
 
-REPO="${DYMINI_PANEL_GITHUB_REPO:-vantanminh/rudder}"
+REPO="${DYMINI_PANEL_GITHUB_REPO:-dymini/panel}"
 UPDATE_PUBKEY="${DYMINI_PANEL_UPDATE_PUBKEY:-__DYMINI_PANEL_UPDATE_PUBKEY__}"
 BIN_DIR="/usr/local/bin"
 AGENT_DATA="/var/lib/dymini-panel-agent"
 NODE_DATA="/var/lib/dymini-panel"
 UNIT="/etc/systemd/system/dymini-panel-agent.service"
 TRAEFIK_IMAGE="${DYMINI_PANEL_TRAEFIK_IMAGE:-traefik:v3.3}"
-CACHE_IMAGE="${DYMINI_PANEL_CACHE_IMAGE:-ghcr.io/vantanminh/dymini-panel-cache:latest}"
+CACHE_IMAGE="${DYMINI_PANEL_CACHE_IMAGE:-ghcr.io/dymini/panel-cache:latest}"
 
 server=""
 token=""

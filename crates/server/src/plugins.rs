@@ -160,9 +160,9 @@ mod tests {
             {"tag_name":"v0.4.0", "assets":[{"name":"dymini-panel-plugin.json","browser_download_url": format!("{base}/bad")}]},
             {"tag_name":"v0.5.0", "draft":true, "assets":[]}
         ]);
-        let descriptor = json!({"schema":1,"plugin":"dockside","version":"0.2.0","image":format!("ghcr.io/vantanminh/dockside-server@sha256:{}", "a".repeat(64)),"health_path":"/v1/health","port":7420});
+        let descriptor = json!({"schema":1,"plugin":"dockside","version":"0.2.0","image":format!("ghcr.io/dymini/dockside-server@sha256:{}", "a".repeat(64)),"health_path":"/v1/health","port":7420});
         let router = Router::new()
-            .route("/repos/vantanminh/dockside/releases", get(move || async move { Json(releases) }))
+            .route("/repos/dymini/dockside/releases", get(move || async move { Json(releases) }))
             .route("/good", get(move || async move { Json(descriptor) }))
             .route("/bad", get(|| async { Json(json!({"schema":1,"plugin":"other","version":"0.4.0","image":"nginx:latest","health_path":"/v1/health","port":7420})) }));
         let server = tokio::spawn(async move {

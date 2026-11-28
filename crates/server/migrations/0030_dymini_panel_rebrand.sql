@@ -13,3 +13,6 @@ ALTER TABLE cli_auth_requests ALTER COLUMN client_name SET DEFAULT 'dymini-panel
 
 ALTER TABLE image_store_settings ALTER COLUMN path_prefix SET DEFAULT 'dymini-panel-images';
 UPDATE image_store_settings SET path_prefix = 'dymini-panel-images' WHERE path_prefix = 'rudder-images';
+
+ALTER TABLE panel_settings ALTER COLUMN github_repo SET DEFAULT 'dymini/panel';
+UPDATE panel_settings SET github_repo = 'dymini/panel' WHERE github_repo = 'vantanminh/rudder';

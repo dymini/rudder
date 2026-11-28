@@ -178,7 +178,7 @@ mod tests {
             plugin: "dockside".into(),
             version: "0.2.0".into(),
             image: format!(
-                "ghcr.io/vantanminh/dockside-server@sha256:{}",
+                "ghcr.io/dymini/dockside-server@sha256:{}",
                 "a".repeat(64)
             ),
             health_path: "/v1/health".into(),

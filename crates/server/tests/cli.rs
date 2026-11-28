@@ -770,7 +770,7 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
     let bin_for_route = new_binary.clone();
     let gh_router = axum::Router::new()
         .route(
-            "/repos/vantanminh/rudder/releases/latest",
+            "/repos/dymini/panel/releases/latest",
             axum::routing::get(move || {
                 let base = gh_base_for_route.clone();
                 let asset = asset_for_route.clone();

@@ -154,8 +154,8 @@ jobs:
         run: |
           owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
           version="${GITHUB_REF_NAME#v}"
-          echo "panel=ghcr.io/$owner/dymini-panel" >> "$GITHUB_OUTPUT"
-          echo "cache=ghcr.io/$owner/dymini-panel-cache" >> "$GITHUB_OUTPUT"
+          echo "panel=ghcr.io/$owner/panel" >> "$GITHUB_OUTPUT"
+          echo "cache=ghcr.io/$owner/panel-cache" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           case "$version" in *-*) echo "latest=false" >> "$GITHUB_OUTPUT" ;; *) echo "latest=true" >> "$GITHUB_OUTPUT" ;; esac
 
@@ -278,8 +278,8 @@ jobs:
               path.write_text(text.replace("__DYMINI_PANEL_UPDATE_PUBKEY__", key))
           PY
           sh deploy/release/make-release.sh "$version" dist \
-            "ghcr.io/$owner/dymini-panel:$version@$PANEL_DIGEST" \
-            "ghcr.io/$owner/dymini-panel-cache:$version@$CACHE_DIGEST"
+            "ghcr.io/$owner/panel:$version@$PANEL_DIGEST" \
+            "ghcr.io/$owner/panel-cache:$version@$CACHE_DIGEST"
           rm -rf dist/agents
           cat dist/release.json
 

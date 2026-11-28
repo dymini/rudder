@@ -7,7 +7,7 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Context as _};
 use dymini_panel_core::{parse_sha256sums, parse_version, verify_minisign, VERSION};
 
-const DEFAULT_GITHUB_REPO: &str = "vantanminh/rudder";
+const DEFAULT_GITHUB_REPO: &str = "dymini/panel";
 
 fn is_newer(current: &str, latest: &str) -> Result<bool, dymini_panel_core::Error> {
     Ok(parse_version(latest)? > parse_version(current)?)

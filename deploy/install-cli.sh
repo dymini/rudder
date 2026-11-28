@@ -1,14 +1,14 @@
 #!/bin/sh
 # Install the native `dymini-panel` CLI on macOS or Linux.
 #
-#   curl -fsSL https://github.com/vantanminh/rudder/releases/latest/download/install-cli.sh | sh
+#   curl -fsSL https://github.com/dymini/panel/releases/latest/download/install-cli.sh | sh
 #
 # Options:
 #   --version VERSION  Release tag to install (default: latest)
 #   --bin-dir DIR      Directory to install `dymini-panel` into (default: /usr/local/bin as root, ~/.local/bin otherwise)
 set -eu
 
-REPO="${DYMINI_PANEL_GITHUB_REPO:-vantanminh/rudder}"
+REPO="${DYMINI_PANEL_GITHUB_REPO:-dymini/panel}"
 version="latest"
 bin_dir=""
 

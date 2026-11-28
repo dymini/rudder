@@ -13,7 +13,7 @@ use thiserror::Error;
 
 const DEFAULT_BIND: &str = "0.0.0.0:3000";
 const DEFAULT_DATA_DIR: &str = "/var/lib/dymini-panel";
-const DEFAULT_GITHUB_REPO: &str = "vantanminh/rudder";
+const DEFAULT_GITHUB_REPO: &str = "dymini/panel";
 const DEFAULT_AGENT_BIND: &str = "0.0.0.0:7443";
 const DEFAULT_DIST_DIR: &str = "/usr/share/dymini-panel/dist";
 /// Loopback and private networks: Traefik on the Docker networks, a local reverse proxy.

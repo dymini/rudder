@@ -142,7 +142,7 @@ Do them in order. The page shows what each step did and what is still missing.
 6. **Close the public ports.** The page runs a preflight: tunnel connected, replicas running, domains published, Access enforced, and SSH confirmed when it was set up. When every required check passes it shows the installer command:
 
    ```sh
-   curl -fsSL https://raw.githubusercontent.com/vantanminh/rudder/main/deploy/install.sh | sudo sh -s -- --close-ports
+   curl -fsSL https://raw.githubusercontent.com/dymini/panel/main/deploy/install.sh | sudo sh -s -- --close-ports
    ```
 
    `--close-ports` refuses to run unless a tunnel replica is running. It stops publishing ports 80 and 443 on Traefik and publishes the panel on `127.0.0.1:3000` only; port 7443 stays open for agents on remote servers that were enrolled before this change. Agents and build hosts that cannot reach it fall back to a WebSocket on the panel's HTTPS address, so you may also close 7443 at your provider's firewall once every agent runs this version. The choice is remembered in `/etc/dymini-panel/ports.closed`, so upgrading later does not reopen anything. Run the installer with `--open-ports` to undo it.

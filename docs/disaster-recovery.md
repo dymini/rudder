@@ -111,7 +111,7 @@ configuration.
 2. Run the installer with `--restore`:
 
    ```bash
-   curl -fsSL https://github.com/vantanminh/rudder/releases/latest/download/install.sh -o install.sh
+   curl -fsSL https://github.com/dymini/panel/releases/latest/download/install.sh -o install.sh
    sudo sh install.sh --restore dymini-panel-20261011-084801.tar.zst.enc
    ```
 

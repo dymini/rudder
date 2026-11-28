@@ -665,7 +665,7 @@ function Ready({ status }: { status: Status }) {
             )}
           </p>
           <CodeBlock copy>
-            {"curl -fsSL https://raw.githubusercontent.com/vantanminh/rudder/main/deploy/install.sh | sudo sh -s -- --close-ports"}
+            {"curl -fsSL https://raw.githubusercontent.com/dymini/panel/main/deploy/install.sh | sudo sh -s -- --close-ports"}
           </CodeBlock>
         </div>
       ) : null}

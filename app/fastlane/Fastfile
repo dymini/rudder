@@ -5,7 +5,7 @@
 default_platform(:ios)
 
 APPLE_TEAM_ID = "M5J76DW97F"
-BUNDLE_ID = "com.vantanminh.dyminipanel"
+BUNDLE_ID = "com.dymini.panel"
 
 platform :ios do
   lane :beta do

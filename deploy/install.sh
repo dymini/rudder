@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install, restore, or back up the Dymini Panel on one Docker host.
 #
-#   curl -fsSL https://github.com/vantanminh/rudder/releases/latest/download/install.sh | sudo sh
+#   curl -fsSL https://github.com/dymini/panel/releases/latest/download/install.sh | sudo sh
 #
 # Options:
 #   --version VERSION    Release tag of the images, such as v0.2.0 (default: latest)
@@ -20,9 +20,9 @@
 # Every value is passed to programs as its own argument; nothing is evaluated.
 set -eu
 
-REPO="${DYMINI_PANEL_GITHUB_REPO:-vantanminh/rudder}"
+REPO="${DYMINI_PANEL_GITHUB_REPO:-dymini/panel}"
 UPDATE_PUBKEY="${DYMINI_PANEL_UPDATE_PUBKEY:-__DYMINI_PANEL_UPDATE_PUBKEY__}"
-REGISTRY="${DYMINI_PANEL_REGISTRY:-ghcr.io/vantanminh}"
+REGISTRY="${DYMINI_PANEL_REGISTRY:-ghcr.io/dymini}"
 TRAEFIK_IMAGE="${DYMINI_PANEL_TRAEFIK_IMAGE:-traefik:v3.3}"
 POSTGRES_IMAGE="${DYMINI_PANEL_POSTGRES_IMAGE:-postgres:16-alpine}"
 ETC="/etc/dymini-panel"
@@ -124,8 +124,8 @@ fi
 tag="${version#v}"
 PANEL_IMAGE_OVERRIDE="${DYMINI_PANEL_IMAGE:-}"
 CACHE_IMAGE_OVERRIDE="${DYMINI_PANEL_CACHE_IMAGE:-}"
-PANEL_IMAGE="${DYMINI_PANEL_IMAGE:-$REGISTRY/dymini-panel:$tag}"
-CACHE_IMAGE="${DYMINI_PANEL_CACHE_IMAGE:-$REGISTRY/dymini-panel-cache:$tag}"
+PANEL_IMAGE="${DYMINI_PANEL_IMAGE:-$REGISTRY/panel:$tag}"
+CACHE_IMAGE="${DYMINI_PANEL_CACHE_IMAGE:-$REGISTRY/panel-cache:$tag}"
 
 read_secret() {
 	# read_secret CURRENT_VALUE ENV_NAME PROMPT -> prints the value

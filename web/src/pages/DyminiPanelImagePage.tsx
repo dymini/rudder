@@ -738,7 +738,7 @@ function SetupTab({ overview }: { overview: Overview | undefined }) {
         )}
         actions={
           <a
-            href="https://github.com/vantanminh/rudder/releases/latest"
+            href="https://github.com/dymini/panel/releases/latest"
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink hover:underline"

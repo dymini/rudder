@@ -1,15 +1,15 @@
 # Install the native `dymini-panel` CLI on Windows.
 #
-#   irm https://github.com/vantanminh/rudder/releases/latest/download/install-cli.ps1 | iex
+#   irm https://github.com/dymini/panel/releases/latest/download/install-cli.ps1 | iex
 #
 # Environment variables:
-#   $env:DYMINI_PANEL_GITHUB_REPO   GitHub repo (default: vantanminh/rudder)
+#   $env:DYMINI_PANEL_GITHUB_REPO   GitHub repo (default: dymini/panel)
 #   $env:DYMINI_PANEL_CLI_VERSION   Release tag (default: latest)
 #   $env:DYMINI_PANEL_CLI_BIN_DIR   Install directory (default: $HOME\.dymini-panel\bin)
 
 $ErrorActionPreference = "Stop"
 
-$Repo = if ($env:DYMINI_PANEL_GITHUB_REPO) { $env:DYMINI_PANEL_GITHUB_REPO } else { "vantanminh/rudder" }
+$Repo = if ($env:DYMINI_PANEL_GITHUB_REPO) { $env:DYMINI_PANEL_GITHUB_REPO } else { "dymini/panel" }
 $Version = if ($env:DYMINI_PANEL_CLI_VERSION) { $env:DYMINI_PANEL_CLI_VERSION } else { "latest" }
 $BinDir = if ($env:DYMINI_PANEL_CLI_BIN_DIR) { $env:DYMINI_PANEL_CLI_BIN_DIR } else { Join-Path $HOME ".dymini-panel\bin" }
 

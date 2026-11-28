@@ -2,8 +2,8 @@ slug: dockside
 name: Dockside
 description: Server-centric version control for AI coding agents, with automated verification and releases.
 category: Developer tools
-website: https://github.com/vantanminh/dockside
-repo: vantanminh/dockside
+website: https://github.com/dymini/dockside
+repo: dymini/dockside
 main_service: dockside
 port: 7420
 image_variable: PLUGIN_IMAGE
