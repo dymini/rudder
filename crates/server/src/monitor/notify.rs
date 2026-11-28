@@ -228,6 +228,7 @@ impl ChannelConfig {
         }
     }
 
+    #[cfg(test)]
     pub fn validate(&self) -> Result<(), Error> {
         self.validate_with_policy(false)
     }
@@ -811,10 +812,8 @@ mod tests {
         assert!(!ipv4_blocked(Ipv4Addr::new(8, 8, 8, 8)));
         assert!(ipv6_blocked("::1".parse().unwrap()));
         assert!(ipv6_blocked("fd00::1".parse().unwrap()));
-        assert!(
-            ipv6_blocked("ffff::1".parse().unwrap_or_else(|_| Ipv6Addr::LOCALHOST)) == false
-                || true
-        );
+        assert!(ipv6_blocked("ff02::1".parse().unwrap()));
+        assert!(!ipv6_blocked("2606:4700:4700::1111".parse().unwrap()));
     }
 
     #[tokio::test]
