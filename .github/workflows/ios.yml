@@ -70,8 +70,8 @@ jobs:
         run: |
           cd ios
           xcodebuild \
-            -workspace "Dymini Panel.xcworkspace" \
-            -scheme "Dymini Panel" \
+            -workspace DyminiPanel.xcworkspace \
+            -scheme DyminiPanel \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
@@ -103,8 +103,8 @@ jobs:
         run: |
           cd ios
           xcodebuild \
-            -workspace "Dymini Panel.xcworkspace" \
-            -scheme "Dymini Panel" \
+            -workspace DyminiPanel.xcworkspace \
+            -scheme DyminiPanel \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath build/dymini-panel \
@@ -116,8 +116,8 @@ jobs:
         run: |
           cd ios
           xcodebuild \
-            -workspace "Dymini Panel.xcworkspace" \
-            -scheme "Dymini Panel" \
+            -workspace DyminiPanel.xcworkspace \
+            -scheme DyminiPanel \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath build/dymini-panel \
@@ -215,5 +215,5 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dymini-panel-testflight-ipa
-          path: app/ios/build/Dymini Panel.ipa
+          path: app/ios/build/DyminiPanel.ipa
           retention-days: 30
