@@ -27,7 +27,7 @@ export function ImageStatusCard({ compact = false }: { compact?: boolean }) {
     return (
       <Link
         to="/dymini-panel-image"
-        className="group flex items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-card transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-raised"
+        className="group flex min-w-0 items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-card transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-raised"
       >
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-alert bg-pine-soft text-pine">

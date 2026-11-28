@@ -118,7 +118,7 @@ export function TelemetryPanel({
     tab === "traffic" ? stats?.resolution : serverMetrics.data?.resolution;
 
   return (
-    <section className="overflow-hidden rounded-card border border-line bg-surface">
+    <section className="min-w-0 overflow-hidden rounded-card border border-line bg-surface">
       {/* Single-row architectural header with underline tabs */}
       <header className="flex flex-wrap items-center justify-between gap-x-4 border-b border-line px-4 sm:px-5">
         <div role="tablist" aria-label={t("Telemetry view")} className="-mb-px flex items-center gap-5">

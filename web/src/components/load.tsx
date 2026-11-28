@@ -513,7 +513,7 @@ export function TopConsumers({ limit = 6, title }: { limit?: number; title?: Rea
 
   const loading = overview.isLoading;
   return (
-    <section className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
+    <section className="min-w-0 overflow-hidden rounded-card border border-line bg-surface shadow-card">
       <header className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5 sm:px-6">
         <div className="min-w-0">
           <h2 className="text-[15px] leading-snug font-semibold text-ink">
@@ -679,7 +679,7 @@ export function PanelLoadCard() {
   const load = useLoad();
   const view = load.data;
   return (
-    <section className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
+    <section className="min-w-0 overflow-hidden rounded-card border border-line bg-surface shadow-card">
       <header className="flex items-start justify-between gap-3 px-5 pt-5 sm:px-6">
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-[15px] leading-snug font-semibold text-ink">
