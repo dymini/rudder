@@ -16,6 +16,7 @@
   color-scheme: light;
   --paper: #f6f5f2;
   --surface: #fffdfa;
+  --surface-raised: #ffffff;
   --sunken: #efede8;
   --ink: #1c1917;
   --ink-soft: #3a3632;
@@ -35,6 +36,10 @@
   --amber: #8a5a12;
   --amber-soft: #f8f0df;
   --amber-line: #ead7ae;
+  --chart-1: #1f5c45;
+  --chart-2: #b57614;
+  --chart-3: #4b7399;
+  --chart-4: #a63434;
   --shadow-color: 28 25 23;
 }
 
@@ -43,6 +48,7 @@
   color-scheme: dark;
   --paper: #121110;
   --surface: #1a1917;
+  --surface-raised: #201e1b;
   --sunken: #23211e;
   --ink: #f3efe8;
   --ink-soft: #d8d2c8;
@@ -62,6 +68,10 @@
   --amber: #e5bd72;
   --amber-soft: #2a2213;
   --amber-line: #4d3c1c;
+  --chart-1: #7ec4a4;
+  --chart-2: #e5bd72;
+  --chart-3: #7ca7cf;
+  --chart-4: #f0958c;
   --shadow-color: 0 0 0;
 }
 
@@ -71,6 +81,7 @@
 
   --color-paper: var(--paper);
   --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
   --color-sunken: var(--sunken);
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);

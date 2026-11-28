@@ -234,6 +234,12 @@ const paths = {
       <path d="M10 7v3.5M10 13h.01" />
     </>
   ),
+  panelLeft: (
+    <>
+      <rect x="3" y="3.5" width="14" height="13" rx="2" />
+      <path d="M8 3.5v13" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof paths;
