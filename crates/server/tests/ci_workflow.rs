@@ -52,3 +52,25 @@ fn dependency_review_does_not_persist_checkout_credentials() {
         "dependency review checkout must not leave token credentials on disk"
     );
 }
+
+#[test]
+fn panel_image_drops_privileges_before_starting_server() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let dockerfile = std::fs::read_to_string(root.join("deploy/docker/panel.Dockerfile"))
+        .expect("read panel Dockerfile");
+    let entrypoint = std::fs::read_to_string(root.join("deploy/docker/panel-entrypoint.sh"))
+        .expect("read panel entrypoint");
+    assert!(
+        dockerfile.contains("util-linux") && dockerfile.contains("panel-entrypoint"),
+        "panel image must install privilege-drop tooling and use the entrypoint"
+    );
+    assert!(
+        entrypoint.contains("--reuid=\"$PANEL_UID\"")
+            && entrypoint.contains("--regid=\"$PANEL_GID\""),
+        "entrypoint must drop the panel server to a dedicated non-root user"
+    );
+    assert!(
+        entrypoint.contains("/var/run/docker.sock") && entrypoint.contains("--groups"),
+        "docker socket access must come from a supplementary group, not root"
+    );
+}

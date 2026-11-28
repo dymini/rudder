@@ -2,7 +2,9 @@
 //!
 //! A service that opts in gets a copy for each pull request opened against its
 //! branch. The copy builds the pull request's head branch and receives a preview
-//! address. Closing the pull request removes the copy. Forks are ignored: the
+//! address. Closing the pull request removes the copy. Environment variables are
+//! not inherited: unreviewed pull-request code must not receive production secrets.
+//! Forks are ignored: the
 //! head repository must be the same one the service tracks.
 
 use dymini_panel_core::{preview_hostname, validate_branch};
@@ -197,19 +199,6 @@ async fn create_preview(
         }
         Err(error) => return Err(ApiError::database(error)),
     };
-    sqlx::query!(
-        r#"
-        INSERT INTO env_vars (service_id, key, value_enc, is_build_secret, updated_at)
-        SELECT $2, key, value_enc, is_build_secret, updated_at
-        FROM env_vars
-        WHERE service_id = $1
-        "#,
-        parent.id,
-        id
-    )
-    .execute(&state.pool)
-    .await
-    .map_err(ApiError::database)?;
     add_preview_domain(state, id, &name, parent.id).await?;
     Ok(id)
 }

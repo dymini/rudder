@@ -236,6 +236,7 @@ pub fn start_monitoring(state: &AppState) {
     tokio::spawn(monitor::notify::run(
         state.pool.clone(),
         state.cipher.clone(),
+        state.config.notification_allow_private,
     ));
     let pool = state.pool.clone();
     tokio::spawn(async move {

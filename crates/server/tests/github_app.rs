@@ -1038,6 +1038,17 @@ async fn pull_request_preview_is_created_and_removed(pool: PgPool) {
     .await;
     assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
     assert_eq!(saved.body["preview_pull_requests"], true);
+    for (key, build_secret) in [("DATABASE_URL", false), ("NPM_TOKEN", true)] {
+        let env = call(
+            &app,
+            "PUT",
+            &format!("/api/v1/services/{id}/env"),
+            session,
+            Some(json!({ "key": key, "value": "production-secret", "is_build_secret": build_secret })),
+        )
+        .await;
+        assert_eq!(env.status, StatusCode::NO_CONTENT, "{}", env.body);
+    }
 
     let opened = r#"{
         "action":"opened","number":7,
@@ -1071,6 +1082,21 @@ async fn pull_request_preview_is_created_and_removed(pool: PgPool) {
         .map(|service| service["name"].as_str().unwrap())
         .collect();
     assert!(names.contains(&"web-pr-7"), "{names:?}");
+    let preview_env = call(
+        &app,
+        "GET",
+        &format!("/api/v1/services/{preview_id}/env"),
+        session,
+        None,
+    )
+    .await;
+    assert_eq!(preview_env.status, StatusCode::OK);
+    assert_eq!(
+        preview_env.body.as_array().unwrap().len(),
+        0,
+        "previews must not inherit production or build secrets: {}",
+        preview_env.body
+    );
 
     let fork = r#"{
         "action":"opened","number":8,

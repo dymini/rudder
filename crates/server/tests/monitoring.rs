@@ -51,6 +51,10 @@ fn state(pool: PgPool, data_dir: &Path) -> dymini_panel_server::AppState {
             "DYMINI_PANEL_DATA_DIR".into(),
             data_dir.display().to_string(),
         ),
+        (
+            "DYMINI_PANEL_NOTIFICATION_ALLOW_PRIVATE".into(),
+            "true".into(),
+        ),
     ]);
     let config = dymini_panel_server::Config::from_map(&vars, |_| unreachable!()).unwrap();
     dymini_panel_server::AppState::new(pool, config)
@@ -626,7 +630,7 @@ async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
         .await;
 
     // Events that existed before any matching rule are marked delivered without sending.
-    dymini_panel_server::deliver_notifications(&pool, &app_state.cipher)
+    dymini_panel_server::deliver_notifications(&pool, &app_state.cipher, true)
         .await
         .unwrap();
     inbox.requests.lock().unwrap().clear();
@@ -658,7 +662,7 @@ async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
         .unwrap();
     assert_eq!(down["state"], "ok", "service not expected to run");
 
-    dymini_panel_server::deliver_notifications(&pool, &app_state.cipher)
+    dymini_panel_server::deliver_notifications(&pool, &app_state.cipher, true)
         .await
         .unwrap();
     {
@@ -698,7 +702,7 @@ async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
     assert_eq!(pending.1, 1);
     assert!(pending.2.unwrap().contains("500"));
     inbox.requests.lock().unwrap().clear();
-    dymini_panel_server::deliver_notifications(&pool, &app_state.cipher)
+    dymini_panel_server::deliver_notifications(&pool, &app_state.cipher, true)
         .await
         .unwrap();
     {
@@ -737,7 +741,7 @@ async fn alerts_fire_resolve_and_notify_every_channel_kind(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    dymini_panel_server::deliver_notifications(&pool, &app_state.cipher)
+    dymini_panel_server::deliver_notifications(&pool, &app_state.cipher, true)
         .await
         .unwrap();
     let hook_events: Vec<String> = inbox

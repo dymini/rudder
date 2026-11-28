@@ -691,7 +691,9 @@ async fn create_channel(
     auth.require_admin()?;
     auth.require_write()?;
     let config = parse_channel(&body)?;
-    config.validate().map_err(core_error)?;
+    config
+        .validate_with_policy(state.config.notification_allow_private)
+        .map_err(core_error)?;
     let sealed = config.seal(&state.cipher).map_err(core_error)?;
     let row = sqlx::query_as!(
         ChannelRow,
@@ -738,7 +740,9 @@ async fn update_channel(
     let existing = load_channel(&state, id).await?;
     let previous = ChannelConfig::open(&state.cipher, &existing.config_enc).map_err(core_error)?;
     let config = parse_channel(&body)?.merge_secrets(&previous);
-    config.validate().map_err(core_error)?;
+    config
+        .validate_with_policy(state.config.notification_allow_private)
+        .map_err(core_error)?;
     let sealed = config.seal(&state.cipher).map_err(core_error)?;
     let row = sqlx::query_as!(
         ChannelRow,
@@ -831,7 +835,7 @@ async fn test_channel(
         service_id: None,
         created_at: Utc::now(),
     };
-    let result = notify::send(&config, &notice).await;
+    let result = notify::send(&config, &notice, state.config.notification_allow_private).await;
     Ok(Json(crate::routes::backups::TestResult {
         ok: result.is_ok(),
         message: match result {

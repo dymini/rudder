@@ -28,7 +28,7 @@ A push to a branch starts a build of every application whose source uses this pr
 
 ## Pull request previews
 
-On an application's Git source, or a Git stack's source settings, turn on **Preview pull requests**. When a pull request is opened, updated, or reopened against that branch in the same repository, Dymini Panel creates a copy of the service, builds the pull request's branch, and gives it a preview address. Closing the pull request removes the copy. Pull requests from a fork are ignored. The copy uses the same environment variables as the service it came from.
+On an application's Git source, or a Git stack's source settings, turn on **Preview pull requests**. When a pull request is opened, updated, or reopened against that branch in the same repository, Dymini Panel creates a copy of the service, builds the pull request's branch, and gives it a preview address. Closing the pull request removes the copy. Pull requests from a fork are ignored. For safety, the copy starts without the parent service's environment variables; add preview-specific values on the copy after it exists if the pull-request build needs them.
 
 ## Manage
 

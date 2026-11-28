@@ -104,7 +104,7 @@ Dymini Panel recognizes `DYMINI_PANEL_IMAGE_TAG` and `DYMINI_PANEL_IMAGE_REF` (a
 
 Turn on *Deploy when I push to the branch* for a Git stack whose provider was connected with **Connect with GitHub**. The provider's webhook then runs a deploy (a rebuild when *Build images on every deploy* is on) for every push to the stack's branch. A push that arrives while another action runs is skipped.
 
-*Preview pull requests* makes a copy of the stack for each pull request opened against that branch in the same repository, deploys the pull request's branch, and gives the copy a preview address. Closing the pull request removes the copy.
+*Preview pull requests* makes a copy of the stack for each pull request opened against that branch in the same repository, deploys the pull request's branch, and gives the copy a preview address. The copy does not inherit production environment variables or build secrets. Closing the pull request removes the copy.
 
 ### Registry logins
 

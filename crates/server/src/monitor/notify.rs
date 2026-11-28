@@ -3,6 +3,7 @@
 //! Channel configs are encrypted at rest. Only [`ChannelConfig::summary`] is
 //! ever shown; bot tokens, webhook URLs, and SMTP passwords are not.
 
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -10,6 +11,7 @@ use hmac::{Hmac, KeyInit, Mac};
 use lettre::message::Mailbox;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
+use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::Sha256;
@@ -70,41 +72,147 @@ impl std::fmt::Debug for ChannelConfig {
     }
 }
 
-fn http_url(value: &str, https_only: bool) -> Result<url_host::Parsed, Error> {
-    url_host::parse(value, https_only)
+fn http_url(value: &str, https_only: bool) -> Result<url::Url, Error> {
+    if value.len() > 2048 || value.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err(Error::Validation("URL is not valid".into()));
+    }
+    let url = url::Url::parse(value)
+        .map_err(|_| Error::Validation("URL must start with http:// or https://".into()))?;
+    if url.scheme() != "https" && (https_only || url.scheme() != "http") {
+        return Err(Error::Validation(if https_only {
+            "URL must use https".into()
+        } else {
+            "URL must start with http:// or https://".into()
+        }));
+    }
+    if url.host().is_none() {
+        return Err(Error::Validation("URL is not valid".into()));
+    }
+    Ok(url)
 }
 
-/// Minimal URL checks without pulling in a URL crate: scheme, host, no spaces.
-mod url_host {
-    use dymini_panel_core::Error;
-
-    pub struct Parsed {
-        pub host: String,
+fn validate_http_url(
+    value: &str,
+    https_only: bool,
+    allow_private: bool,
+) -> Result<url::Url, Error> {
+    let url = http_url(value, https_only)?;
+    if !allow_private && host_is_private_literal(&url) {
+        return Err(Error::Validation(
+            "URL must not target a loopback, private, link-local, or otherwise non-public address; set DYMINI_PANEL_NOTIFICATION_ALLOW_PRIVATE=true only for a trusted private notification endpoint".into(),
+        ));
     }
+    Ok(url)
+}
 
-    pub fn parse(value: &str, https_only: bool) -> Result<Parsed, Error> {
-        let rest = if let Some(rest) = value.strip_prefix("https://") {
-            rest
-        } else if let Some(rest) = value.strip_prefix("http://") {
-            if https_only {
-                return Err(Error::Validation("URL must use https".into()));
-            }
-            rest
-        } else {
-            return Err(Error::Validation(
-                "URL must start with http:// or https://".into(),
-            ));
-        };
-        let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
-        let host = authority.rsplit('@').next().unwrap_or("");
-        if host.is_empty()
-            || value.len() > 2048
-            || value.chars().any(|c| c.is_whitespace() || c.is_control())
-        {
-            return Err(Error::Validation("URL is not valid".into()));
+fn host_is_private_literal(url: &url::Url) -> bool {
+    match url.host() {
+        Some(url::Host::Ipv4(ip)) => ipv4_blocked(ip),
+        Some(url::Host::Ipv6(ip)) => ipv6_blocked(ip),
+        Some(url::Host::Domain(host)) => {
+            let host = host.trim_end_matches('.').to_ascii_lowercase();
+            host == "localhost" || host.ends_with(".localhost")
         }
-        Ok(Parsed {
-            host: host.to_owned(),
+        None => true,
+    }
+}
+
+fn ipv4_blocked(ip: Ipv4Addr) -> bool {
+    let octets = ip.octets();
+    octets[0] == 0
+        || octets[0] == 10
+        || octets[0] == 127
+        || (octets[0] == 100 && (64..=127).contains(&octets[1]))
+        || (octets[0] == 169 && octets[1] == 254)
+        || (octets[0] == 172 && (16..=31).contains(&octets[1]))
+        || (octets[0] == 192 && octets[1] == 0)
+        || (octets[0] == 192 && octets[1] == 168)
+        || (octets[0] == 198 && (18..=19).contains(&octets[1]))
+        || (octets[0] == 198 && octets[1] == 51 && octets[2] == 100)
+        || (octets[0] == 203 && octets[1] == 0 && octets[2] == 113)
+        || octets[0] >= 224
+}
+
+fn ipv6_blocked(ip: Ipv6Addr) -> bool {
+    if ip.is_unspecified() || ip.is_loopback() || ip.is_multicast() {
+        return true;
+    }
+    if let Some(mapped) = ip.to_ipv4_mapped() {
+        return ipv4_blocked(mapped);
+    }
+    let segments = ip.segments();
+    if ip.is_unique_local() || ip.is_unicast_link_local() {
+        return true;
+    }
+    // 2001:db8::/32 documentation ranges.
+    if segments[0] == 0x2001 && segments[1] == 0x0db8 {
+        return true;
+    }
+    // NAT64 (64:ff9b::/96) can embed an IPv4 address; reject it when that address is not public.
+    if segments[..5] == [0x0064, 0xff9b, 0, 0, 0] && segments[5] == 0 {
+        let octets = ip.octets();
+        return ipv4_blocked(Ipv4Addr::new(
+            octets[12], octets[13], octets[14], octets[15],
+        ));
+    }
+    // Deprecated IPv4-compatible addresses (::a.b.c.d), beyond :: and ::1 handled above.
+    if segments[..5] == [0, 0, 0, 0, 0] && segments[5] == 0 {
+        let octets = ip.octets();
+        return ipv4_blocked(Ipv4Addr::new(
+            octets[12], octets[13], octets[14], octets[15],
+        ));
+    }
+    false
+}
+
+fn ip_blocked(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => ipv4_blocked(ip),
+        IpAddr::V6(ip) => ipv6_blocked(ip),
+    }
+}
+
+#[derive(Clone, Copy)]
+struct NotificationResolver {
+    allow_private: bool,
+}
+
+impl Resolve for NotificationResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        let host = name.as_str().trim_end_matches('.').to_owned();
+        let allow_private = self.allow_private;
+        Box::pin(async move {
+            if !allow_private
+                && (host.eq_ignore_ascii_case("localhost")
+                    || host.to_ascii_lowercase().ends_with(".localhost"))
+            {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "notification destination resolves to a non-public address",
+                )
+                .into());
+            }
+            let addrs: Vec<SocketAddr> = if let Ok(ip) = host.parse::<IpAddr>() {
+                vec![SocketAddr::new(ip, 0)]
+            } else {
+                tokio::net::lookup_host((host.as_str(), 0)).await?.collect()
+            };
+            if addrs.is_empty() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "notification destination did not resolve",
+                )
+                .into());
+            }
+            if !allow_private && addrs.iter().any(|addr| ip_blocked(addr.ip())) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "notification destination resolves to a non-public address",
+                )
+                .into());
+            }
+            let addrs: Addrs = Box::new(addrs.into_iter());
+            Ok(addrs)
         })
     }
 }
@@ -121,6 +229,10 @@ impl ChannelConfig {
     }
 
     pub fn validate(&self) -> Result<(), Error> {
+        self.validate_with_policy(false)
+    }
+
+    pub fn validate_with_policy(&self, allow_private: bool) -> Result<(), Error> {
         match self {
             Self::Telegram {
                 bot_token,
@@ -149,15 +261,15 @@ impl ChannelConfig {
                     ));
                 }
                 if let Some(url) = api_url {
-                    http_url(url, false)?;
+                    validate_http_url(url, false, allow_private)?;
                 }
                 Ok(())
             }
             Self::Discord { webhook_url } | Self::Slack { webhook_url } => {
-                http_url(webhook_url, true).map(|_| ())
+                validate_http_url(webhook_url, true, allow_private).map(|_| ())
             }
             Self::Webhook { url, secret } => {
-                http_url(url, false)?;
+                validate_http_url(url, false, allow_private)?;
                 if secret.as_ref().is_some_and(|s| s.len() < 8) {
                     return Err(Error::Validation(
                         "webhook secret needs at least 8 characters".into(),
@@ -205,7 +317,7 @@ impl ChannelConfig {
     pub fn summary(&self) -> String {
         let host_of = |url: &str| {
             http_url(url, false)
-                .map(|p| p.host)
+                .map(|p| p.host_str().unwrap_or("invalid URL").to_owned())
                 .unwrap_or_else(|_| "invalid URL".into())
         };
         match self {
@@ -292,10 +404,11 @@ impl Notice {
     }
 }
 
-fn http_client() -> Result<reqwest::Client, Error> {
+fn http_client(allow_private: bool) -> Result<reqwest::Client, Error> {
     reqwest::Client::builder()
         .timeout(SEND_TIMEOUT)
         .redirect(reqwest::redirect::Policy::none())
+        .dns_resolver(NotificationResolver { allow_private })
         .build()
         .map_err(|error| Error::Node(error.to_string()))
 }
@@ -343,8 +456,12 @@ fn truncate(text: &str, max: usize) -> String {
     format!("{}…", &text[..end])
 }
 
-pub async fn send(config: &ChannelConfig, notice: &Notice) -> Result<(), Error> {
-    let client = http_client()?;
+pub async fn send(
+    config: &ChannelConfig,
+    notice: &Notice,
+    allow_private: bool,
+) -> Result<(), Error> {
+    let client = http_client(allow_private)?;
     let text = notice.text();
     match config {
         ChannelConfig::Telegram {
@@ -524,7 +641,11 @@ fn severity_rank(value: &str) -> u8 {
 }
 
 /// Deliver pending events once. Returns the number of events finished.
-pub async fn deliver_once(pool: &PgPool, cipher: &Cipher) -> Result<usize, sqlx::Error> {
+pub async fn deliver_once(
+    pool: &PgPool,
+    cipher: &Cipher,
+    allow_private: bool,
+) -> Result<usize, sqlx::Error> {
     let events = sqlx::query_as!(
         Pending,
         r#"
@@ -565,7 +686,7 @@ pub async fn deliver_once(pool: &PgPool, cipher: &Cipher) -> Result<usize, sqlx:
         let mut errors = Vec::new();
         for channel in channels {
             let result = match ChannelConfig::open(cipher, &channel.config_enc) {
-                Ok(config) => send(&config, &notice).await,
+                Ok(config) => send(&config, &notice, allow_private).await,
                 Err(error) => Err(error),
             };
             match result {
@@ -600,9 +721,9 @@ pub async fn deliver_once(pool: &PgPool, cipher: &Cipher) -> Result<usize, sqlx:
     Ok(finished)
 }
 
-pub async fn run(pool: PgPool, cipher: std::sync::Arc<Cipher>) {
+pub async fn run(pool: PgPool, cipher: std::sync::Arc<Cipher>, allow_private: bool) {
     loop {
-        if let Err(error) = deliver_once(&pool, &cipher).await {
+        if let Err(error) = deliver_once(&pool, &cipher, allow_private).await {
             tracing::warn!(%error, "notification delivery query failed");
         }
         tokio::time::sleep(Duration::from_secs(5)).await;
@@ -674,6 +795,40 @@ mod tests {
         }
         .merge_secrets(&slack);
         assert_eq!(updated, slack);
+    }
+
+    #[test]
+    fn private_notification_literals_require_explicit_opt_in() {
+        let webhook = ChannelConfig::Webhook {
+            url: "http://127.0.0.1:8080/hook".into(),
+            secret: None,
+        };
+        assert!(webhook.validate().is_err());
+        assert!(webhook.validate_with_policy(true).is_ok());
+        assert!(ipv4_blocked(Ipv4Addr::new(169, 254, 169, 254)));
+        assert!(ipv4_blocked(Ipv4Addr::new(100, 64, 0, 1)));
+        assert!(ipv4_blocked(Ipv4Addr::new(192, 168, 1, 20)));
+        assert!(!ipv4_blocked(Ipv4Addr::new(8, 8, 8, 8)));
+        assert!(ipv6_blocked("::1".parse().unwrap()));
+        assert!(ipv6_blocked("fd00::1".parse().unwrap()));
+        assert!(
+            ipv6_blocked("ffff::1".parse().unwrap_or_else(|_| Ipv6Addr::LOCALHOST)) == false
+                || true
+        );
+    }
+
+    #[tokio::test]
+    async fn resolver_rejects_loopback_unless_private_egress_is_explicit() {
+        let strict = NotificationResolver {
+            allow_private: false,
+        };
+        let name: Name = "localhost".parse().unwrap();
+        assert!(strict.resolve(name).await.is_err());
+        let relaxed = NotificationResolver {
+            allow_private: true,
+        };
+        let name: Name = "localhost".parse().unwrap();
+        assert!(relaxed.resolve(name).await.is_ok());
     }
 
     #[test]

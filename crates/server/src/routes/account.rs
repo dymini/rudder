@@ -997,10 +997,26 @@ async fn delete_token(
     Ok(StatusCode::NO_CONTENT)
 }
 
+const MAX_PENDING_CLI_AUTH_REQUESTS: i64 = 1_000;
+
 async fn cli_auth_start(
     State(state): State<AppState>,
+    auth::OptionalPeer(peer): auth::OptionalPeer,
+    headers: axum::http::HeaderMap,
     Json(body): Json<CliAuthStartRequest>,
 ) -> Result<(StatusCode, Json<CliAuthStartResponse>), ApiError> {
+    let ip = request_ip(&state, &headers, peer);
+    if state
+        .login_limiter
+        .check_key(&format!("cli-auth-start:{ip}"))
+        .is_err()
+    {
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+            "too many CLI sign-in attempts",
+        ));
+    }
     let method = body.method.trim();
     if method != "browser" && method != "device_code" {
         return Err(ApiError::new(
@@ -1049,6 +1065,19 @@ async fn cli_auth_start(
     let _ = sqlx::query("DELETE FROM cli_auth_requests WHERE expires_at < now()")
         .execute(&state.pool)
         .await;
+    let pending = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM cli_auth_requests WHERE status = 'pending' AND expires_at > now()",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .map_err(ApiError::database)?;
+    if pending >= MAX_PENDING_CLI_AUTH_REQUESTS {
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "too_many_pending",
+            "too many CLI sign-in requests are waiting for approval",
+        ));
+    }
 
     let device_code = if method == "device_code" {
         Some(dymini_panel_core::generate_device_code())

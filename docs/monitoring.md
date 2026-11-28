@@ -169,6 +169,8 @@ assert hmac.compare_digest(expected, request.headers["X-Dymini-Panel-Signature"]
 | `GET`/`POST` | `/api/v1/notification-channels` | Admin. `{"name","config":{"kind":"slack","webhook_url":"…"}}` |
 | `PUT`/`DELETE` | `/api/v1/notification-channels/{id}` | Admin |
 | `POST` | `/api/v1/notification-channels/{id}/test` | Admin |
+
+Webhook and custom Telegram Bot API URLs are server-side egress destinations. They must resolve to public IP addresses by default; loopback, private, link-local, multicast, and other non-public ranges are rejected during delivery. If a trusted internal notification endpoint is required, set `DYMINI_PANEL_NOTIFICATION_ALLOW_PRIVATE=true` explicitly on the panel.
 | `POST` | `/api/v1/servers/{id}/prune` | Needs write permission |
 | `PATCH` | `/api/v1/servers/{id}` | `{"auto_prune": true}` |
 | `GET` | `/api/v1/events` | `limit` up to 1000 |

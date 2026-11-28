@@ -9,6 +9,10 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Security
+- **The panel server process now runs as a dedicated non-root user.** The container entrypoint performs ownership migration once, grants Docker access through the socket's numeric group instead of root, shares only the cache control files needed by the panel, and then drops to uid/gid 10001 before starting `dymini-panel-server`.
+- **Notification egress now blocks internal-network SSRF by default.** Webhook and custom Telegram endpoints may not resolve to loopback, private, link-local, metadata, multicast, or other non-public addresses unless the operator explicitly sets `DYMINI_PANEL_NOTIFICATION_ALLOW_PRIVATE=true` for a trusted internal endpoint.
+- **Pull-request previews no longer inherit service secrets.** Preview copies start without production environment variables or build secrets so unreviewed same-repository pull-request builds cannot exfiltrate them; add preview-specific values only when they are safe for that trust level.
+- **CLI sign-in request creation is rate limited.** Unauthenticated browser/device login starts are limited per client IP and the number of waiting requests is capped, so the panel database cannot be flooded with disposable authorization rows.
 - **Dependency review no longer keeps repository credentials after checkout.** The pull-request dependency scan now uses a read-only checkout without persisted GitHub token credentials.
 
 ## [0.16.0] - 2026-11-28

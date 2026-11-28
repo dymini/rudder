@@ -916,3 +916,58 @@ async fn parallel_setup_creates_one_owner(pool: PgPool) {
     .await;
     assert!(second_owner.is_err());
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn cli_auth_start_is_rate_limited(pool: PgPool) {
+    let app = app(pool);
+    for attempt in 0..10 {
+        let response = call(
+            &app,
+            "POST",
+            "/api/v1/cli/auth/start",
+            None,
+            None,
+            None,
+            Some(json!({ "method": "device_code", "client_name": format!("cli-{attempt}") })),
+        )
+        .await;
+        assert_eq!(response.status, StatusCode::CREATED, "attempt {attempt}");
+    }
+    let limited = call(
+        &app,
+        "POST",
+        "/api/v1/cli/auth/start",
+        None,
+        None,
+        None,
+        Some(json!({ "method": "device_code" })),
+    )
+    .await;
+    assert_eq!(limited.status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(limited.body["error"], "rate_limited");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn cli_auth_start_caps_pending_requests(pool: PgPool) {
+    sqlx::query(
+        "INSERT INTO cli_auth_requests (kind, secret_hash, expires_at)
+         SELECT 'device_code', 'seed-' || g, now() + interval '10 minutes'
+         FROM generate_series(1, 1000) AS g",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = app(pool);
+    let capped = call(
+        &app,
+        "POST",
+        "/api/v1/cli/auth/start",
+        None,
+        None,
+        None,
+        Some(json!({ "method": "browser", "callback_url": "http://127.0.0.1:4321/callback" })),
+    )
+    .await;
+    assert_eq!(capped.status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(capped.body["error"], "too_many_pending");
+}

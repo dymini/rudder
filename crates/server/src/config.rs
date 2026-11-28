@@ -135,6 +135,9 @@ pub struct Config {
     pub cloudflared_image_overridden: bool,
     /// Token first-run setup requires. `None` uses `setup-token` in the data directory.
     pub setup_token: Option<String>,
+    /// Allow notification webhooks and custom Telegram API endpoints to resolve to private networks.
+    /// Off by default because notification delivery is server-side egress.
+    pub notification_allow_private: bool,
 }
 
 /// Release signing key compiled into official builds.
@@ -390,6 +393,8 @@ impl Config {
             .get("DYMINI_PANEL_SETUP_TOKEN")
             .map(|v| v.trim().to_owned())
             .filter(|v| !v.is_empty());
+        let notification_allow_private =
+            parse_bool(vars, "DYMINI_PANEL_NOTIFICATION_ALLOW_PRIVATE", false)?;
         Ok(Self {
             database_url,
             bind,
@@ -423,6 +428,7 @@ impl Config {
             cloudflared_image,
             cloudflared_image_overridden,
             setup_token,
+            notification_allow_private,
         })
     }
 }
