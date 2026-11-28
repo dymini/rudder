@@ -8,6 +8,8 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-11-28
+
 ### Fixed
 - **Installers verify signed releases properly.** Fixed `install.sh` and `install-agent.sh` rejecting valid release signatures when the release workflow substituted the minisign public key placeholder into both the key assignment and the unreplaced-placeholder guard check.
 
