@@ -1,7 +1,8 @@
 name: Release
 
 # Builds static musl binaries for x86_64 and aarch64, multi-arch panel and cache
-# images, and a GitHub release whose SHA256SUMS is signed with minisign.
+# images, and a GitHub release whose SHA256SUMS is signed with minisign, then
+# publishes the docs of the tag to developers.dymini.com.
 #
 # Repository settings this workflow needs:
 #   - variable DYMINI_PANEL_UPDATE_PUBKEY: the minisign public key (base64 line), compiled
@@ -308,3 +309,27 @@ jobs:
           case "$GITHUB_REF_NAME" in *-*) flags="--prerelease" ;; esac
           sh deploy/release/changelog.sh "${GITHUB_REF_NAME#v}" > "$RUNNER_TEMP/notes.md"
           gh release create "$GITHUB_REF_NAME" dist/* --title "Dymini Panel $GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" $flags
+
+  # Publishes the guides of this tag to https://developers.dymini.com/panel (developers.yml). Runs after the
+  # release so a failed release never shows docs for a version nobody can install. Authenticates with the
+  # GitHub OIDC token of this run; developers.dymini.com accepts it only for dymini/panel and this tag.
+  docs:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Publish the docs of this version
+        run: npx --yes https://cdn.dymini.com/lib/dymini-docs@1.0.1/dymini-docs.tgz publish

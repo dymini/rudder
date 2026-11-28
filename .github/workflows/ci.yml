@@ -110,3 +110,34 @@ jobs:
               exit 1
             fi
           fi
+
+  # The docs published to https://developers.dymini.com/panel (developers.yml): broken links, missing pages and
+  # unsupported MDX fail here. Pull requests from branches of this repository also get a preview at
+  # https://developers.dymini.com/_preview/panel/pr-<number> for 14 days; forks only build (no OIDC token).
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Build the docs
+        run: npx --yes https://cdn.dymini.com/lib/dymini-docs@1.0.1/dymini-docs.tgz build --strict
+
+      - name: Preview the docs of this pull request
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          PR: ${{ github.event.number }}
+        run: npx --yes https://cdn.dymini.com/lib/dymini-docs@1.0.1/dymini-docs.tgz preview --pr "$PR"
