@@ -4,8 +4,8 @@
     "title": "Dymini Panel API",
     "description": "Control-plane API for the Dymini Panel deployment panel.",
     "license": {
-      "name": "MIT",
-      "identifier": "MIT"
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
     },
     "version": "0.15.0"
   },
